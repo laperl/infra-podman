@@ -1,0 +1,34 @@
+---
+# Read-only connectivity and version check (phase 0). Safe in plan and apply:
+# it changes nothing on the servers.
+- name: Check that servers are reachable and run Podman 4.9 or newer
+  hosts: servers
+  gather_facts: false
+  tasks:
+    - name: Gather minimal facts
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - distribution
+
+    - name: Read the Podman version
+      ansible.builtin.command:
+        cmd: podman --version
+      register: check_podman
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Require Podman 4.9 or newer (D5)
+      ansible.builtin.assert:
+        that:
+          - check_podman.rc == 0
+          - (check_podman.stdout | regex_search('[0-9]+\.[0-9]+(\.[0-9]+)?')) is version('4.9', '>=')
+        fail_msg: "Podman 4.9 or newer is required. Found: {{ check_podman.stdout | default('podman not installed', true) }}"
+        quiet: true
+
+    - name: Report
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }},
+          {{ check_podman.stdout }}, connected as {{ ansible_facts['user_id'] | default(ansible_user | default('?')) }}

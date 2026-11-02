@@ -93,3 +93,41 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Decisión:** el portátil descarga la imagen de Ansible con un token clásico de solo `read:packages`, guardado en KeePassXC.
 - **Motivo:** GHCR solo admite tokens clásicos. Ese token puede leer **todos** los paquetes a los que llega tu cuenta y el operador lo creó sin caducidad.
 - **Pendiente:** buscar una vía más segura antes de la fase 1, porque los servidores necesitarán lo mismo (SPEC 5.6). Está en [`ROADMAP.md`](ROADMAP.md).
+
+### R14. Inventario por entorno
+
+- **Decisión:** `inventory/dev/` e `inventory/prod/`, cada uno con su `hosts.yml`, `group_vars/` y `host_vars/`. Sustituye a `group_vars/` y `host_vars/` en la raíz (SPEC 4.1).
+- **Motivo:** Ansible solo carga `group_vars/` y `host_vars/` junto al inventario o al playbook. En la raíz no se cargarían. Además, DEV y producción necesitan valores distintos.
+- **Direcciones fuera del repo:** los hosts son alias de `~/.ssh/config` (`vmiadev`, `gx10`). La IP y el usuario viven en el portátil.
+- **Propuesta en:** PR de la fase 0c.
+
+### R15. Protecciones adicionales de `deploy.sh` en producción
+
+- **Decisión:** en `prod`:
+  - el checkout tiene que estar limpio;
+  - `secrets` también exige el tag firmado;
+  - `apply` pide escribir `prod` en un terminal interactivo.
+- **Motivo:**
+  - Un fichero sin commit se desplegaría sin estar firmado.
+  - El playbook de `secrets` recibe la contraseña maestra, así que debe ser código firmado.
+  - La confirmación evita un `apply` por error y bloquea cualquier ejecución sin persona delante (D14).
+- **Propuesta en:** PR de la fase 0c.
+
+### R16. Contenedores de Ansible con `label=disable` (supuesto pendiente de comprobar)
+
+- **Decisión:** ansible-navigator y `deploy.sh secrets` lanzan la imagen con `--security-opt label=disable`.
+- **Motivo:** ansible-runner 2.4.3 monta `~/.ssh` y el socket del agente SSH sin etiqueta SELinux (`_handle_automounts` en `config/_base.py`). En Fedora, con SELinux activo, el contenedor no podría usarlos. Reetiquetarlos (`:z`) cambiaría la etiqueta de tu `~/.ssh` en el portátil, que es peor.
+- **Coste:** SELinux no aísla ese contenedor del resto de tu usuario. Es nuestra propia imagen, lanzada por ti, y Podman sin root ya la limita a tus permisos.
+- **Estado:** supuesto. Se confirma o se retira con `deploy.sh plan check --env dev` (SPEC 7.1).
+
+### R17. La VM DEV no ve las claves del operador, y `infra-dev.kdbx` vive solo en el portátil
+
+- **Hallazgo:** el 2026-11-02 el operador vio todas sus claves con `ssh-add -l` dentro de la VM. Eso solo ocurre si la sesión SSH reenvía el agente (`ssh -A` o `ForwardAgent yes`).
+- **Riesgo:** mientras dure la sesión, cualquier proceso de la VM, incluido opencode con IA local, puede usar las claves del agente: entrar en el GX10 o firmar un tag. Contradice D14 y R2 («la VM no tiene nada de producción»).
+- **Decisión (propuesta):**
+  - `ForwardAgent no` para la VM en `~/.ssh/config` (`docs/SETUP.md`, paso 6);
+  - `-o ForwardAgent=no` en los inventarios, para las conexiones de Ansible, que no necesitan reenvío (Ansible corre en el portátil);
+  - `infra-dev.kdbx` solo existe en el portátil, sin copia en la VM y sin copia de seguridad.
+- **Motivo del kdbx:** solo tiene valores ficticios y se recrea con los nombres de `infra_secrets` en `inventory/dev/group_vars/all.yml`. La VM no es nodo de control (R2), así que no lo necesita.
+- **Salvedad:** si DEV guardara datos que dependan de un secreto de ese fichero (por ejemplo, un volumen de Postgres de DEV creado con su contraseña), perderlo obligaría a recrear ese volumen. Es DEV y es aceptable. Si DEV deja de ser desechable, se reconsidera.
+- **Propuesta en:** PR de la fase 0c.
