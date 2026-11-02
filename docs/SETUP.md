@@ -38,7 +38,7 @@ Con KeePassXC 2.8 crea `infra-dev.kdbx` **fuera del repo** (el `.gitignore` excl
 Desde la raíz del repo, con la imagen del PR (su digest está en `ansible-navigator.yml`):
 
 ```bash
-IMAGE=$(sed -n 's/^ *image: *//p' ansible-navigator.yml)
+IMAGE=$(sed -n 's/^ *image: *\([^ ]*\).*/\1/p' ansible-navigator.yml)
 KDBX=~/ruta/a/infra-dev.kdbx                      # cámbialo
 read -rs -p 'Contraseña de infra-dev.kdbx: ' P; echo
 printf '%s\n' "$P" | podman run --rm -i --user root \
