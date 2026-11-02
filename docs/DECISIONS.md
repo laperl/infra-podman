@@ -152,7 +152,7 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 ### R19. Backups con restic y copia append-only en el GX10
 
 - **Decisión:**
-  - En el portátil, cada hora, `pg_dump` de cada base y copia de los volúmenes de datos a un repositorio restic local.
+  - En el portátil, una vez al día, `pg_dump` de cada base y copia de los volúmenes de datos a un repositorio restic local. El operador lo pidió diario en vez de cada hora, para no cargar el portátil.
   - Cuando el GX10 está alcanzable, copia a un rest-server de restic en el GX10 en modo `--append-only`, desde el que se aplica la retención.
   - restic y rest-server corren como contenedores Quadlet.
 - **Motivo:**
@@ -160,7 +160,7 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
   - El GX10 no necesita disco cifrado, porque solo recibe datos cifrados.
   - En modo append-only, un portátil comprometido no puede borrar la copia externa.
   - borg necesitaría borg instalado también en el GX10.
-- **Pérdida aceptada:** lo hecho desde el último contacto con el GX10, si se pierde el portátil.
+- **Pérdida aceptada:** lo hecho desde la última copia diaria, o desde el último contacto con el GX10 si se pierde el portátil.
 - **Aprobada por:** el operador, el 2026-11-02.
 - **SPEC:** sección 4.11. Cierra la decisión abierta de backups de 7.2.
 
@@ -178,3 +178,11 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 
 - **Decisión:** Trivy (escáner de vulnerabilidades) y Dependabot (PRs de actualización de las actions y de los paquetes de Python) se añaden después de la fase 3. Las actualizaciones de digests de imágenes se deciden más adelante, porque Dependabot no las cubre en plantillas Quadlet.
 - **Aprobada por:** el operador («no es urgente»).
+
+### R22. Convención de nombres y etiquetas
+
+- **Decisión:** los contenedores, redes, volúmenes y secretos se nombran `<entorno>-<app>[-<pieza>]`. Las redes, `<entorno>-<consumidor>-<proveedor>-net`. Todos llevan las etiquetas `infra.env`, `infra.app`, `infra.component` e `infra.managed-by`. Detalle en SPEC 4.12.
+- **Motivo:** el operador quiere saber de un vistazo de quién es cada objeto, para qué sirve y de qué entorno es. El nombre lo hace legible y las etiquetas permiten filtrar con `podman … --filter label=…`, sin herramientas nuevas. Es el mismo patrón que las etiquetas recomendadas de Kubernetes.
+- **Comprobado:** `ContainerName=`, `NetworkName=`, `VolumeName=` y `Label=` existen en Quadlet 4.9. Sin los nombres explícitos, Podman antepone `systemd-`.
+- **Aprobada por:** pendiente, con este PR.
+- **SPEC:** sección 4.12.
