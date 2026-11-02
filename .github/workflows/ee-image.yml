@@ -1,0 +1,86 @@
+---
+# SPEC 5.4: build the Ansible execution environment with ansible-builder, test it and
+# publish it to GHCR (private). The digest is pinned in ansible-navigator.yml by a PR.
+# Images from PR branches are published too (tag sha-<commit>) so the same PR can pin
+# exactly the image that passed the tests. Tags are labels only; deploys use the digest.
+name: ee-image
+
+"on":
+  push:
+    paths:
+      - execution-environment.yml
+      - plugins/**
+      - tests/ee/**
+      - scripts/requirements-ee-build.txt
+      - .github/workflows/ee-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ee-image-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/infra-podman-ee
+  BASE_IMAGE: registry.fedoraproject.org/fedora-minimal@sha256:09ccb042101b6e6077e24a9eab51b73f4d98c9c99f3e13c47c5c7d3f48f25fb7
+
+jobs:
+  build-test-publish:
+    # The laptop that runs the image is x86_64.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the base image digest matches execution-environment.yml
+        run: grep -qF "${BASE_IMAGE}" execution-environment.yml
+
+      - name: Report package managers in the base image
+        run: |
+          found=$(podman run --rm "${BASE_IMAGE}" sh -c 'ls /usr/bin | grep -E "^(dnf|dnf5|microdnf)$" | tr "\n" " "')
+          echo "::notice title=Base image package managers::${found}"
+
+      - name: Install pinned ansible-builder
+        run: |
+          python3 -m venv .venv-build
+          .venv-build/bin/pip install --quiet --requirement scripts/requirements-ee-build.txt
+
+      - name: Build
+        run: .venv-build/bin/ansible-builder build --container-runtime podman --tag localhost/infra-podman-ee:ci --verbosity 2
+
+      - name: Report versions inside the image
+        run: |
+          v() { podman run --rm localhost/infra-podman-ee:ci "$@" 2>&1 | head -1; }
+          echo "::notice title=keepassxc-cli::$(v keepassxc-cli --version)"
+          echo "::notice title=ansible-core::$(v ansible --version)"
+          echo "::notice title=Python::$(v python3 --version)"
+          echo "::notice title=Image size::$(podman image inspect --format '{{.Size}}' localhost/infra-podman-ee:ci) bytes"
+
+      - name: Test (keepassxc-cli and kdbx lookup, SPEC 7.1)
+        run: podman run --rm --volume "$PWD:/work:ro" --workdir /work localhost/infra-podman-ee:ci tests/ee/run.sh
+
+      - name: Publish to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "${GHCR_TOKEN}" | podman login ghcr.io --username "${{ github.actor }}" --password-stdin
+          podman tag localhost/infra-podman-ee:ci "${IMAGE}:sha-${GITHUB_SHA}"
+          podman push --digestfile digest.txt "${IMAGE}:sha-${GITHUB_SHA}"
+          digest=$(cat digest.txt)
+          echo "::notice title=Published image::${IMAGE}@${digest}"
+          {
+            echo "### Execution environment published"
+            echo
+            echo "Pin this in \`ansible-navigator.yml\`:"
+            echo
+            echo "\`${IMAGE}@${digest}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          podman logout ghcr.io

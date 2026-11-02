@@ -1,0 +1,37 @@
+---
+# Ansible execution environment (SPEC D2, 4.1, 4.5).
+# Built and tested by .github/workflows/ee-image.yml and published to GHCR (private),
+# pinned by digest in ansible-navigator.yml. Runs on the operator's x86_64 laptop.
+version: 3
+
+images:
+  base_image:
+    # fedora-minimal:44, index digest (R5 in docs/DECISIONS.md)
+    name: registry.fedoraproject.org/fedora-minimal@sha256:09ccb042101b6e6077e24a9eab51b73f4d98c9c99f3e13c47c5c7d3f48f25fb7
+
+dependencies:
+  python_interpreter:
+    package_system: python3
+    python_path: /usr/bin/python3
+  ansible_core:
+    package_pip: ansible-core==2.21.5
+  ansible_runner:
+    package_pip: ansible-runner==2.4.3
+  galaxy:
+    collections:
+      - name: containers.podman
+        version: "1.21.2"
+      - name: ansible.posix
+        version: "2.2.2"
+  system:
+    # keepassxc ships keepassxc-cli, used by plugins/lookup/kdbx.py (SPEC 4.5)
+    - keepassxc [platform:rpm]
+    - openssh-clients [platform:rpm]
+
+additional_build_steps:
+  prepend_base:
+    # ansible-builder installs Python packages with pip; fedora-minimal does not ship it.
+    - RUN $PKGMGR install -y python3-pip && $PKGMGR clean all
+  append_final:
+    - LABEL org.opencontainers.image.source="https://github.com/laperl/infra-podman"
+    - LABEL org.opencontainers.image.description="Ansible execution environment for infra-podman"

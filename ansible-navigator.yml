@@ -1,0 +1,18 @@
+---
+# ansible-navigator settings (SPEC D2). deploy.sh (phase 0c) runs everything through this.
+ansible-navigator:
+  execution-environment:
+    enabled: true
+    container-engine: podman
+    # Pinned by digest (D6). Published by .github/workflows/ee-image.yml.
+    image: ghcr.io/laperl/infra-podman-ee@sha256:fa0ec66d8e6f742e4eaf487df8be800f0682165a4d5b80c2866cb368fa0dd760  # sha-9807470
+    pull:
+      policy: missing
+  mode: stdout
+  # Playbook artifacts store every task result in a JSON file on disk. Disabled so
+  # nothing from a run is kept outside journald and the deploy.sh log line (SPEC 4.10).
+  playbook-artifact:
+    enable: false
+  logging:
+    level: warning
+    file: ansible-navigator.log
