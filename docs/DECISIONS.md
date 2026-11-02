@@ -53,3 +53,22 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Decisión:** el escáner de vulnerabilidades en CI y las propuestas automáticas de actualización de digests no entran en la fase 0. Siguen abiertos en SPEC 7.2.
 - **Motivo:** evitar herramientas nuevas antes de que la base funcione.
 - **Aprobada por:** el operador, con la condición de no olvidarlos. Están en [`ROADMAP.md`](ROADMAP.md).
+
+### R8. Corrección: Fedora 44 trae Podman 5, no 6
+
+- **Decisión:** se corrige el SPEC. El portátil y el Lenovo (Fedora 44) tienen Podman 5. Podman 6 llega con Fedora 45.
+- **Motivo:** la propuesta de cambio de Fedora [Changes/Podman6](https://fedoraproject.org/wiki/Changes/Podman6) figura como aceptada para Fedora 45 (`ChangeAcceptedF45`). Lo señaló el operador.
+- **SPEC:** secciones 2, 7.1 y 9.
+
+### R9. Validación de plantillas con un Podman más nuevo
+
+- **Decisión:** el workflow `lint` tiene un segundo job, `quadlet-forward`, que pasa las mismas comprobaciones con el Podman de Fedora 44 (5). Cuando salga Fedora 45 se cambia su digest para validar con Podman 6. Las plantillas siguen escritas solo para 4.9 (D5).
+- **Motivo:** ver a tiempo qué dejaría de funcionar al actualizar el GX10, sin ramificar las plantillas por versión.
+- **Aprobada por:** el operador («dejarla preparada»).
+- **SPEC:** sección 5.4.
+
+### R10. Rulesets de GitHub: no se crean
+
+- **Decisión:** no se crean rulesets ni reglas de protección de rama mientras el plan sea gratuito.
+- **Motivo:** comprobado en el formulario de rulesets de este repo: «Your rulesets won't be enforced on this private repository until you move to GitHub Team organization account». Confirma SPEC 5.2: el control es el tag firmado.
+- **SPEC:** sección 7.2 (plan de GitHub).

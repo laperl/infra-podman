@@ -32,10 +32,10 @@ Eres el ingeniero que implementa esta plataforma para un operador único. Eres e
 
 | Rol | Equipo | Sistema | Podman | Notas |
 | --- | --- | --- | --- | --- |
-| Nodo de control (PRO) | Portátil, solo CPU, 16 GB RAM | Fedora Atomic Sway 44 | El de Fedora 44 (Podman 6) | Ejecuta Ansible y KeePassXC. Disco cifrado con LUKS y VeraCrypt: **no volver a preguntar**. Aloja la VM DEV |
+| Nodo de control (PRO) | Portátil, solo CPU, 16 GB RAM | Fedora Atomic Sway 44 | El de Fedora 44 (Podman 5). Podman 6 llega con Fedora 45 | Ejecuta Ansible y KeePassXC. Disco cifrado con LUKS y VeraCrypt: **no volver a preguntar**. Aloja la VM DEV |
 | DEV | VM dentro del portátil | Ubuntu Server 24.04 x86_64 | **4.9** (apt) | Misma versión de Podman y misma base que el GX10. El operador despliega a mano desde la rama del PR; opencode con IA local solo ejecuta pruebas. Sin credenciales de producción |
 | Servidor principal | ASUS Ascent GX10, ARM64, 128 GB, GPU con CUDA 13 | DGX OS 7 (Ubuntu 24.04) | **4.9** | Docker con vLLM. Se queda en Ubuntu 24.04: ASUS solo soporta DGX OS y DGX OS 8 aún no admite este equipo |
-| Servidor opcional | Lenovo x86 con GPU NVIDIA | Fedora Atomic Sway 44 | 6 | Parado. Solo se usará si hace falta. El diseño no debe depender de él |
+| Servidor opcional | Lenovo x86 con GPU NVIDIA | Fedora Atomic Sway 44 | 5 (6 con Fedora 45) | Parado. Solo se usará si hace falta. El diseño no debe depender de él |
 
 **Excepción Docker en el GX10:** vLLM corre en Docker porque Podman 4.9 no ve la GPU con CUDA 13 (comprobado por el operador). Fuera de alcance de migrar.
 
@@ -187,7 +187,7 @@ Para OpenClaw, SearXNG y el servicio de audio: `NoNewPrivileges=true`, `DropCapa
 
 | Workflow | Cuándo | Qué hace |
 | --- | --- | --- |
-| `lint` | Cada push | yamllint, ansible-lint, shellcheck de `deploy.sh` y de los scripts, y validación de las plantillas Quadlet renderizadas: política del repo (sección 8) y generador de Podman 4.9 |
+| `lint` | Cada push | yamllint, ansible-lint, shellcheck de `deploy.sh` y de los scripts, y validación de las plantillas Quadlet renderizadas: política del repo (sección 8) y generador de Podman 4.9. Un segundo job repite la validación con un Podman más nuevo (hoy el 5 de Fedora 44), sin cambiar las plantillas |
 | `lifecycle` | PR que toca un rol | En un runner `ubuntu-24.04-arm` (misma base y arquitectura que el GX10) con Podman rootless: desplegar, esperar healthcheck, reaplicar (cero cambios) y destruir conservando el volumen. Usa secretos aleatorios generados en el propio CI, nunca KeePassXC |
 | `ee-image` | Cambio en `execution-environment.yml` | Construye la imagen de Ansible con ansible-builder y la publica en GHCR privado, fijada por digest |
 
@@ -225,7 +225,7 @@ Son supuestos razonables pero no comprobados. Si alguno falla, detente y propón
 
 | Fase | Qué verificar |
 | --- | --- |
-| 0 | Cómo instalar ansible-navigator en Fedora Atomic 44 y que la imagen de Ansible funcione con Podman 6 y el reenvío del agente SSH |
+| 0 | Cómo instalar ansible-navigator en Fedora Atomic 44 y que la imagen de Ansible funcione con el Podman del portátil (5 en Fedora 44; 6 al pasar a Fedora 45) y el reenvío del agente SSH |
 | 0 | Que `keepassxc-cli` dentro de la imagen de Ansible abre un `.kdbx` guardado con KeePassXC 2.8, cómo se instala en esa imagen y qué versión trae |
 | 0 | Que `keepassxc-cli` acepta la contraseña maestra por la entrada estándar sin terminal. La documentación oficial describe `-q` (silencia la petición de contraseña) y `-s`/`-a`, pero no detalla este comportamiento |
 | 0 | Que Ansible no evalúa el lookup de KeePassXC en una tarea saltada (`when:` falso) cuando el secreto ya existe |
@@ -246,7 +246,7 @@ Son supuestos razonables pero no comprobados. Si alguno falla, detente y propón
 | Prometheus y Grafana existentes | Dónde corren exactamente y si sus objetivos se gestionan desde Ansible o a mano |
 | Escáner de vulnerabilidades en CI | Por elegir. Aplazado hasta cerrar la fase 0 (ver `ROADMAP.md`) |
 | Propuestas automáticas de actualización de digests | Herramienta por elegir. Siempre como PR, nunca aplicación automática. Aplazado hasta cerrar la fase 0 (ver `ROADMAP.md`) |
-| Plan de GitHub | Gratuito ahora. GitHub Pro activaría la protección de `main` según la documentación oficial, pero el aviso de la interfaz menciona cuentas Team; comprobar que desaparece antes de dar por hecho que funciona |
+| Plan de GitHub | Gratuito ahora. GitHub Pro activaría la protección de `main` según la documentación oficial, pero el aviso de la interfaz menciona cuentas Team; comprobar que desaparece antes de dar por hecho que funciona. Comprobado el 2026-11-02 en este repo (cuenta personal gratuita): el formulario de rulesets avisa de que no se aplicarán «until you move to GitHub Team organization account». No se crean rulesets mientras tanto |
 
 ### 7.3 Disparador para un segundo usuario de servicio
 
@@ -277,7 +277,7 @@ Verificadas en noviembre de 2026. Para cualquier detalle técnico, manda la docu
 - [Manual de Quadlet en Podman 4.9 (Ubuntu 24.04)](https://manpages.ubuntu.com/manpages/noble/man5/quadlet.5.html): validación con el generador y `QUADLET_UNIT_DIRS`.
 - [Notas de Podman 5.0](https://github.com/containers/podman/releases/tag/v5.0.0): llegada de `Notify=healthy` y ficheros `.pod`.
 - [Cambios de Podman 5.0](https://blog.podman.io/2024/03/podman-5-0-breaking-changes-in-detail/): paso de slirp4netns a pasta.
-- [Podman 6 en Fedora 44](https://fedoraproject.org/wiki/Changes/Podman6): eliminación de slirp4netns.
+- [Podman 6 en Fedora](https://fedoraproject.org/wiki/Changes/Podman6): eliminación de slirp4netns. Aceptado para Fedora 45 (`ChangeAcceptedF45`), no para la 44.
 - [podman network create](https://docs.podman.io/en/stable/markdown/podman-network-create.1.html): opción `isolate`.
 - [Opción `--secret`](https://docs.podman.io/en/v4.6.0/_sources/markdown/options/secret.md.txt): `target`, `uid`, `gid` y `mode`.
 - [Secretos de Podman](https://www.redhat.com/en/blog/new-podman-secrets-command): almacenamiento sin cifrar con el driver de ficheros.
