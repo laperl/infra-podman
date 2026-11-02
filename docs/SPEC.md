@@ -73,6 +73,7 @@ Eres el ingeniero que implementa esta plataforma para un operador único. Eres e
 (raíz del repo)/
   deploy.sh                    # plan | apply | secrets
   ansible-navigator.yml
+  ansible.cfg                  # rutas de plugins y roles
   execution-environment.yml    # imagen de Ansible (ansible-builder)
   inventory/  group_vars/  host_vars/
   plugins/lookup/kdbx.py       # lookup propio que invoca keepassxc-cli
@@ -125,6 +126,7 @@ Esta sección debe copiarse a `docs/COMPATIBILITY.md`.
 - **Lectura:** lookup propio `plugins/lookup/kdbx.py` que invoca `keepassxc-cli show -q -s -a password <base> <entrada>`, instalado en la imagen de Ansible. `deploy.sh secrets` pide la contraseña maestra con `read -s` y la pasa como variable de entorno al proceso; el lookup se la entrega a `keepassxc-cli` por la entrada estándar, **nunca como argumento** (los argumentos son visibles en la lista de procesos). Nunca se escribe en disco ni en logs. Cada consulta vuelve a descifrar la base, lo que es aceptable porque solo ocurre al crear o rotar secretos. No se usa la colección `viczem.keepass`.
 - **Sustituible:** el lookup es la única pieza que sabe cómo se leen los secretos. Si `keepassxc-cli` no convence, se cambia su implementación (por ejemplo, a la librería pykeepass) sin tocar playbooks ni roles.
 - **Creación:** `containers.podman.podman_secret` con `no_log: true`. Solo se lee KeePassXC si el secreto **no existe** en el servidor o si se pide rotarlo. Un despliegue normal no pide la contraseña.
+- **El lookup va siempre en los argumentos de la tarea, nunca en `loop:`.** Comprobado en la fase 0 (`tests/ee/`): con `when:` falso, Ansible no evalúa el lookup de los argumentos, pero `loop:` se evalúa antes que `when:` y el lookup se ejecutaría igualmente.
 - **Entrega:** como fichero (`Secret=nombre,type=mount,target=/ruta,mode=0400`). Para Postgres, `POSTGRES_PASSWORD_FILE`. Variables de entorno solo si la aplicación no admite fichero.
 - **Riesgo residual conocido:** Podman guarda los secretos en el disco del servidor sin cifrar, porque es el único driver disponible.
 - **Rotación en Postgres:** primero `ALTER ROLE` en la base, después actualizar el secreto con `force` y por último reiniciar los consumidores. Cambiar solo el secreto no cambia la contraseña guardada.
@@ -227,8 +229,8 @@ Son supuestos razonables pero no comprobados. Si alguno falla, detente y propón
 | --- | --- |
 | 0 | Cómo instalar ansible-navigator en Fedora Atomic 44 y que la imagen de Ansible funcione con el Podman del portátil (5 en Fedora 44; 6 al pasar a Fedora 45) y el reenvío del agente SSH |
 | 0 | Que `keepassxc-cli` dentro de la imagen de Ansible abre un `.kdbx` guardado con KeePassXC 2.8, cómo se instala en esa imagen y qué versión trae |
-| 0 | Que `keepassxc-cli` acepta la contraseña maestra por la entrada estándar sin terminal. La documentación oficial describe `-q` (silencia la petición de contraseña) y `-s`/`-a`, pero no detalla este comportamiento |
-| 0 | Que Ansible no evalúa el lookup de KeePassXC en una tarea saltada (`when:` falso) cuando el secreto ya existe |
+| 0 | Que `keepassxc-cli` acepta la contraseña maestra por la entrada estándar sin terminal. La documentación oficial describe `-q` (silencia la petición de contraseña) y `-s`/`-a`, pero no detalla este comportamiento. **Comprobado** con 2.7.6 y, en CI, con la versión de la imagen de Ansible (`tests/ee/run.sh`) |
+| 0 | Que Ansible no evalúa el lookup de KeePassXC en una tarea saltada (`when:` falso) cuando el secreto ya existe. **Comprobado**, salvo en `loop:` (ver 4.5) |
 | 1 | Que el runner `ubuntu-24.04-arm` permite instalar Podman 4.9 y usarlo en modo rootless para el workflow `lifecycle` |
 | 1 | Que instalar firewalld en DGX OS convive con Docker y con la pila de NVIDIA |
 | 1 | En la página oficial de facturación de GitHub, que el almacenamiento y la transferencia de imágenes en GHCR siguen siendo gratuitos |

@@ -6,7 +6,7 @@ El contenido y el criterio de hecho de cada fase están en [`SPEC.md`](SPEC.md),
 
 | Fase | Estado |
 | --- | --- |
-| 0. Base | En curso: 0a (estructura, docs, `lint`) · 0b (imagen de Ansible, lookup `kdbx.py`) · 0c (`deploy.sh`, firma SSH) |
+| 0. Base | En curso: 0a hecho (estructura, docs, `lint`) · 0b en PR (imagen de Ansible, lookup `kdbx.py`) · 0c pendiente (`deploy.sh`, firma SSH) |
 | 1. Postgres | Pendiente |
 | 2. Firefly III | Pendiente |
 | 3. Observabilidad | Pendiente |
