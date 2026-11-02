@@ -12,6 +12,7 @@ Lee `docs/SPEC.md` antes de cualquier tarea. Es la fuente de verdad: lo que no e
 - **Cero secretos** en el repo, logs, ejemplos o el chat. Solo nombres de secretos y valores ficticios.
 - **No inventes** módulos, opciones ni parámetros. Si no puedes verificarlo en la documentación oficial, dilo en el PR.
 - **Simplicidad.** El operador es una sola persona. Justifica cualquier herramienta nueva.
+- **Solo software libre y gratuito.** Ansible comunitario; nada de Automation Platform, Automation Hub ni imágenes con suscripción.
 - **Si el CI falla 5 veces por lo mismo**, para y pregunta.
 
 ## Convenciones

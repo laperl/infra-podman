@@ -28,6 +28,8 @@ Eres el ingeniero que implementa esta plataforma para un operador único. Eres e
 
 **Principio rector:** la IA propone, código determinista ejecuta y un humano aprueba lo irreversible.
 
+**Solo software libre y gratuito:** herramientas oficiales de código abierto y sin coste. En Ansible, la versión comunitaria (ansible-core, ansible-navigator, ansible-builder, ansible-runner y colecciones de Galaxy). Nada de Red Hat Ansible Automation Platform, Automation Hub ni imágenes que pidan suscripción.
+
 **Máquinas**
 
 | Rol | Equipo | Sistema | Podman | Notas |
@@ -123,7 +125,7 @@ Esta sección debe copiarse a `docs/COMPATIBILITY.md`.
 ### 4.5 Secretos
 
 - **Copia maestra:** `infra-pro.kdbx` en el portátil, con rutas `Infra_Podman/<secreto>`. En DEV, `infra-dev.kdbx` con las mismas rutas y valores ficticios. La bóveda personal nunca se toca.
-- **Lectura:** lookup propio `plugins/lookup/kdbx.py` que invoca `keepassxc-cli show -q -s -a password <base> <entrada>`, instalado en la imagen de Ansible. `deploy.sh secrets` pide la contraseña maestra con `read -s` y la pasa como variable de entorno al proceso; el lookup se la entrega a `keepassxc-cli` por la entrada estándar, **nunca como argumento** (los argumentos son visibles en la lista de procesos). Nunca se escribe en disco ni en logs. Cada consulta vuelve a descifrar la base, lo que es aceptable porque solo ocurre al crear o rotar secretos. No se usa la colección `viczem.keepass`.
+- **Lectura:** lookup propio `plugins/lookup/kdbx.py` que invoca `keepassxc-cli show -q -s -a password <base> <entrada>`, instalado en la imagen de Ansible. `deploy.sh secrets` pide la contraseña maestra con `read -s` y la pasa por la **entrada estándar** del contenedor de la imagen de Ansible, lanzado con `podman run -i` y no con ansible-navigator, que escribiría las variables de entorno en un fichero (R11 en `DECISIONS.md`). Dentro del contenedor queda como variable de entorno solo de ese proceso; el lookup se la entrega a `keepassxc-cli` por la entrada estándar, **nunca como argumento** (los argumentos son visibles en la lista de procesos). Nunca se escribe en disco ni en logs. Cada consulta vuelve a descifrar la base, lo que es aceptable porque solo ocurre al crear o rotar secretos. No se usa la colección `viczem.keepass`.
 - **Sustituible:** el lookup es la única pieza que sabe cómo se leen los secretos. Si `keepassxc-cli` no convence, se cambia su implementación (por ejemplo, a la librería pykeepass) sin tocar playbooks ni roles.
 - **Creación:** `containers.podman.podman_secret` con `no_log: true`. Solo se lee KeePassXC si el secreto **no existe** en el servidor o si se pide rotarlo. Un despliegue normal no pide la contraseña.
 - **El lookup va siempre en los argumentos de la tarea, nunca en `loop:`.** Comprobado en la fase 0 (`tests/ee/`): con `when:` falso, Ansible no evalúa el lookup de los argumentos, pero `loop:` se evalúa antes que `when:` y el lookup se ejecutaría igualmente.
@@ -268,6 +270,7 @@ Se evalúa si un agente (por ejemplo OpenClaw) recibe capacidad amplia de ejecut
 - Que cualquier IA ejecute `apply`, haga merge, cree tags o acceda a los servidores.
 - Gestionar desde Ansible el Docker de vLLM en esta etapa.
 - Añadir herramientas, paneles o servicios no listados aquí sin aprobación.
+- Software de pago o que pida suscripción (por ejemplo, Ansible Automation Platform, Automation Hub o `registry.redhat.io`).
 - Preguntar de nuevo por el cifrado del portátil: ya está resuelto.
 
 ## 9. Fuentes de referencia

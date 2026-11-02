@@ -2,6 +2,27 @@
 
 Lo que se hace **una vez** en el nodo de control (Fedora Atomic 44, x86_64). Ningún paso necesita `rpm-ostree`: todo queda en tu usuario.
 
+## 0. Copia del repo en el portátil
+
+Todo lo de esta guía, y más adelante `deploy.sh`, se ejecuta **en el portátil**, dentro de una copia (clon) del repo. Se hace una vez y luego solo se actualiza:
+
+```bash
+mkdir -p ~/src && cd ~/src
+git clone git@github.com:laperl/infra-podman.git    # por SSH, con la clave que sirve KeePassXC
+cd infra-podman
+```
+
+Para clonar por SSH, tu clave tiene que estar dada de alta en GitHub como clave de **autenticación** (Settings → SSH and GPG keys), además de como clave de firma.
+
+Para probar un PR antes del merge, cámbiate a su rama:
+
+```bash
+git fetch origin && git switch feat/phase-0b-ee-kdbx    # el nombre de la rama aparece en el PR
+git pull
+```
+
+Para volver a `main`: `git switch main && git pull`.
+
 ## 1. ansible-navigator
 
 En un entorno virtual de Python de tu usuario. Todas sus dependencias tienen paquetes binarios para Python 3.14, así que no hace falta compilador (comprobado el 2026-11-02 para `ansible-navigator==26.10.0`).
@@ -18,7 +39,7 @@ Ansible no se instala en el portátil: corre dentro de la imagen de Ansible.
 
 ## 2. Acceso a la imagen de Ansible en GHCR
 
-La imagen es privada. Crea en GitHub un token **classic** con solo el permiso `read:packages` (Settings → Developer settings → Personal access tokens) y guárdalo en `infra-pro.kdbx`. Luego:
+La imagen es privada. Crea en GitHub un token **classic** con solo el permiso `read:packages` (Settings → Developer settings → Personal access tokens) y guárdalo en `infra-pro.kdbx`. GHCR solo admite tokens clásicos ([documentación de GitHub](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)). Ponle **caducidad** (por ejemplo, 90 días) en lugar de indefinida. La mejora está pendiente en `ROADMAP.md`. Luego:
 
 ```bash
 podman login ghcr.io --username laperl   # pega el token cuando lo pida
@@ -36,7 +57,7 @@ Con KeePassXC 2.8 crea `infra-dev.kdbx` **fuera del repo** (el `.gitignore` excl
 
 ## 4. Prueba del lookup contra tu `.kdbx` (criterio de hecho de la fase 0)
 
-Desde la raíz del repo, con la imagen del PR (su digest está en `ansible-navigator.yml`):
+En el portátil, dentro de tu copia del repo (paso 0), en la rama del PR 0b. Hace falta haber hecho el paso 2 (`podman login`). La primera vez descarga la imagen (~1 GB). La imagen es la que fija `ansible-navigator.yml`:
 
 ```bash
 IMAGE=$(sed -n 's/^ *image: *\([^ ]*\).*/\1/p' ansible-navigator.yml)

@@ -19,6 +19,7 @@ El contenido y el criterio de hecho de cada fase están en [`SPEC.md`](SPEC.md),
 | Tema | Cuándo | Notas |
 | --- | --- | --- |
 | Protección de `main` | Si se pasa a un plan de pago | Comprobado el 2026-11-02: GitHub avisa de que los rulesets no se aplican en este repo privado sin una cuenta de organización Team. No se crean hasta entonces; el control sigue siendo el tag firmado (SPEC 5.2) |
+| Token de lectura de GHCR más seguro | Antes de la fase 1 (los servidores también lo necesitan, SPEC 5.6) | Hoy: token clásico `read:packages` sin caducidad (R13). GHCR no admite tokens de grano fino. Opciones a evaluar: caducidad corta con rotación desde KeePassXC; una cuenta de GitHub aparte, solo de lectura y con acceso únicamente a estos paquetes, para limitar lo que expone el token; u otras que se encuentren |
 | Escáner de vulnerabilidades en CI | Al cerrar la fase 0, antes de la fase 1 | Abierto en SPEC 7.2. Encaja en el workflow `ee-image` y, más adelante, en las imágenes de los servicios |
 | Propuestas automáticas de actualización de digests | Al cerrar la fase 0, antes de la fase 1 | Abierto en SPEC 7.2. Siempre como PR, nunca aplicadas solas. Cubriría las actions fijadas por SHA, la imagen base de Ansible y las imágenes de los servicios |
 | Validar las plantillas con Podman 6 | Cuando salga Fedora 45 | El job `quadlet-forward` del workflow `lint` ya valida con un Podman más nuevo (Fedora 44, Podman 5). Para Podman 6 basta con cambiar su imagen por el digest de `fedora:45` |
