@@ -11,6 +11,8 @@ name: ee-image
       - execution-environment.yml
       - plugins/**
       - tests/ee/**
+      - playbooks/secrets.yml
+      - inventory/dev/**
       - scripts/requirements-ee-build.txt
       - .github/workflows/ee-image.yml
   workflow_dispatch:
