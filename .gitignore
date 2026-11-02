@@ -1,0 +1,6 @@
+.venv/
+.ansible/
+__pycache__/
+*.retry
+# Never commit KeePassXC databases, not even DEV ones (SPEC 8).
+*.kdbx

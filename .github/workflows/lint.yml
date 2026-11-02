@@ -1,0 +1,81 @@
+---
+# SPEC 5.4: yamllint, ansible-lint, shellcheck and validation of rendered Quadlet
+# templates with the Podman 4.9 generator, on every push.
+name: lint
+
+"on":
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    # Syntax checks do not depend on the CPU architecture; x86 keeps ARM minutes for `lifecycle`.
+    # Ubuntu 24.04 ships Podman 4.9, the same version as the GX10.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Podman and shellcheck from Ubuntu 24.04
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends podman shellcheck
+          podman --version
+          podman --version | grep -Eq ' 4\.9\.' || { echo "Expected Podman 4.9"; exit 1; }
+          shellcheck --version | sed -n 2p
+
+      - name: Install pinned Python lint toolchain
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --requirement scripts/requirements-lint.txt
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: yamllint
+        run: yamllint --strict .
+
+      - name: ansible-lint
+        run: ansible-lint
+
+      - name: shellcheck
+        run: git ls-files -z -- '*.sh' deploy.sh | xargs -0 --no-run-if-empty shellcheck
+
+      - name: Quadlet templates (policy + Podman 4.9 generator)
+        run: tests/quadlet/run.sh
+
+  quadlet-forward:
+    # Same Quadlet checks with a newer Podman, to see early what would break when the
+    # GX10 is upgraded. It does not change the templates: they stay 4.9-only (D5).
+    # Today: Fedora 44 (Podman 5). For Podman 6, switch the digest to fedora:45.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: registry.fedoraproject.org/fedora@sha256:9b53c238bb4e9f6221b4820bbdfa61c1bd8273d386dacaaed429a81dd7362085  # fedora:44
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Podman and Python from Fedora
+        run: |
+          dnf install -y -q --setopt=install_weak_deps=False podman python3
+          podman --version
+
+      - name: Install pinned Python toolchain
+        run: |
+          python3 -m venv /opt/venv
+          /opt/venv/bin/pip install --quiet --requirement scripts/requirements-lint.txt
+          echo "/opt/venv/bin" >> "$GITHUB_PATH"
+
+      - name: Quadlet templates (policy + newer Podman generator)
+        run: tests/quadlet/run.sh

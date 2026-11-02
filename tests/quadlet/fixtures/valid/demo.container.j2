@@ -1,0 +1,23 @@
+# Fixture: a unit that must pass the policy and the Podman 4.9 generator.
+[Unit]
+Description=Demo container (CI fixture)
+
+[Container]
+Image={{ demo_image }}
+Network=demo.network
+Volume=demo.volume:/data:Z
+PublishPort=127.0.0.1:{{ demo_port }}:8080
+Secret=demo_password,type=mount,target=/run/secrets/demo_password,mode=0400
+NoNewPrivileges=true
+DropCapability=ALL
+PodmanArgs=--memory=512m --cpus=1
+PidsLimit=200
+ReadOnly=true
+HealthCmd=/bin/true
+HealthInterval=30s
+
+[Service]
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target
