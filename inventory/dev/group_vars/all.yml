@@ -1,0 +1,7 @@
+---
+infra_env: dev
+
+# Secrets this environment expects in its KeePassXC database, under Infra_Podman/.
+# Names only, never values (docs/SECRETS_INVENTORY.md).
+infra_secrets:
+  - test_dummy

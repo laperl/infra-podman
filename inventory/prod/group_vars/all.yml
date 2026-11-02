@@ -1,0 +1,6 @@
+---
+infra_env: prod
+
+# Secrets this environment expects in its KeePassXC database, under Infra_Podman/.
+# Names only, never values (docs/SECRETS_INVENTORY.md). The first ones arrive in phase 1.
+infra_secrets: []
