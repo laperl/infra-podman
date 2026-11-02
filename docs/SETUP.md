@@ -9,6 +9,7 @@ En un entorno virtual de Python de tu usuario. Todas sus dependencias tienen paq
 ```bash
 python3 -m venv ~/.local/share/ansible-navigator
 ~/.local/share/ansible-navigator/bin/pip install ansible-navigator==26.10.0
+mkdir -p ~/.local/bin/
 ln -s ~/.local/share/ansible-navigator/bin/ansible-navigator ~/.local/bin/ansible-navigator
 ansible-navigator --version
 ```
