@@ -37,7 +37,27 @@ git push origin v0.1.0
 ./deploy.sh apply <playbook>                     # solo si el plan es lo esperado
 ```
 
-`deploy.sh` rechaza desplegar si el checkout no es un tag firmado válido. Su interfaz exacta se define en las fases 0 y 1.
+`deploy.sh` rechaza desplegar en producción si el checkout no está limpio o si `HEAD` no tiene un tag firmado por una clave de `~/.config/infra-podman/allowed_signers`. `apply` en producción pide además que escribas `prod`.
+
+### Probar un PR en DEV antes del merge
+
+```bash
+git fetch origin && git switch <rama-del-PR> && git pull
+./deploy.sh plan <playbook> --env dev
+./deploy.sh apply <playbook> --env dev      # lo lanzas tú; opencode solo ejecuta pruebas
+```
+
+En DEV no hace falta tag. Si en DEV ves algo raro, coméntalo en el PR antes de mergear.
+
+### Las órdenes de `deploy.sh`
+
+| Orden | Qué hace |
+| --- | --- |
+| `./deploy.sh plan <playbook> [--env dev\|prod] [--limit HOSTS]` | Simula (`--check --diff`) y enseña qué cambiaría |
+| `./deploy.sh apply <playbook> [--env dev\|prod] [--limit HOSTS]` | Aplica |
+| `./deploy.sh secrets [--env dev\|prod] [--rotate NOMBRE]` | Pide la contraseña de KeePassXC y gestiona los secretos (en la fase 0 solo comprueba que se pueden leer) |
+
+`--env` vale `prod` si no lo pones. Cada ejecución deja una línea en `~/.local/state/infra-podman/deploy.log` con fecha, entorno, acción, playbook, tag o rama, hosts y resultado.
 
 ## Versiones de los tags
 

@@ -77,7 +77,7 @@ Eres el ingeniero que implementa esta plataforma para un operador único. Eres e
   ansible-navigator.yml
   ansible.cfg                  # rutas de plugins y roles
   execution-environment.yml    # imagen de Ansible (ansible-builder)
-  inventory/  group_vars/  host_vars/
+  inventory/dev/  inventory/prod/  # hosts.yml, group_vars/ y host_vars/ por entorno
   plugins/lookup/kdbx.py       # lookup propio que invoca keepassxc-cli
   roles/
     host_base/                 # usuario de servicio, linger, firewalld
@@ -160,7 +160,10 @@ Para OpenClaw, SearXNG y el servicio de audio: `NoNewPrivileges=true`, `DropCapa
 - `deploy.sh apply <playbook> [--env dev|prod] [--limit]`: aplica. Lo lanza solo el operador, también en DEV.
 - `deploy.sh secrets [--env dev|prod] [--rotate nombre]`: pide la contraseña de KeePassXC y crea o rota secretos. Con `dev` usa `infra-dev.kdbx`.
 - `--env` vale `prod` por defecto. Con `prod`, antes de `plan` o `apply` comprueba que el checkout es un **tag firmado** válido (`git verify-tag`). Con `dev` se despliega desde la rama del PR, sin tag.
-- Cada ejecución deja una línea en un registro local: fecha, tag, hosts, acción y resultado.
+- `secrets --env prod` también exige el tag firmado: el playbook que se ejecuta recibe la contraseña maestra.
+- `apply --env prod` pide además escribir `prod` en un terminal interactivo. Sin terminal, se rechaza.
+- Con `prod`, el checkout tiene que estar limpio (sin cambios ni ficheros sin seguimiento).
+- Cada ejecución deja una línea en un registro local (`~/.local/state/infra-podman/deploy.log`): fecha, entorno, acción, playbook, tag o rama, hosts y resultado, incluidos los rechazos.
 
 ## 5. CI/CD, firma y flujo de cambios
 
@@ -229,7 +232,7 @@ Son supuestos razonables pero no comprobados. Si alguno falla, detente y propón
 
 | Fase | Qué verificar |
 | --- | --- |
-| 0 | Cómo instalar ansible-navigator en Fedora Atomic 44 y que la imagen de Ansible funcione con el Podman del portátil (5 en Fedora 44; 6 al pasar a Fedora 45) y el reenvío del agente SSH |
+| 0 | Cómo instalar ansible-navigator en Fedora Atomic 44 y que la imagen de Ansible funcione con el Podman del portátil (5 en Fedora 44; 6 al pasar a Fedora 45) y el reenvío del agente SSH. Instalación: **comprobada** (`docs/SETUP.md`). Agente SSH: se comprueba con `deploy.sh plan check --env dev`. Supuesto: hace falta `--security-opt=label=disable`, porque ansible-runner monta `~/.ssh` y el socket del agente sin etiqueta SELinux (R16) |
 | 0 | Que `keepassxc-cli` dentro de la imagen de Ansible abre un `.kdbx` guardado con KeePassXC 2.8, cómo se instala en esa imagen y qué versión trae. Se instala con el paquete `keepassxc` de Fedora 44 y trae la **2.8.0**. **Comprobado** el 2026-11-02 por el operador: el lookup lee `Infra_Podman/test_dummy` de `infra-dev.kdbx` creado con KeePassXC 2.8 de escritorio (`docs/SETUP.md`, paso 4) |
 | 0 | Que `keepassxc-cli` acepta la contraseña maestra por la entrada estándar sin terminal. La documentación oficial describe `-q` (silencia la petición de contraseña) y `-s`/`-a`, pero no detalla este comportamiento. **Comprobado** con 2.7.6 en local y con 2.8.0, la que trae la imagen de Ansible, en CI (`tests/ee/run.sh`) |
 | 0 | Que Ansible no evalúa el lookup de KeePassXC en una tarea saltada (`when:` falso) cuando el secreto ya existe. **Comprobado**, salvo en `loop:` (ver 4.5) |

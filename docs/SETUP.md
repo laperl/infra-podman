@@ -76,4 +76,53 @@ Resultado esperado: `OK: read Infra_Podman/test_dummy (N characters)`. El valor 
 
 La contraseña viaja así: `read -s` (no se ve ni queda en el historial) → `printf`, que es una orden interna de bash y por tanto no aparece en la lista de procesos → entrada estándar del contenedor → variable de entorno solo dentro del contenedor → entrada estándar de `keepassxc-cli`. No toca el disco.
 
-Más adelante, `deploy.sh secrets` (fase 0c) hará esto por ti.
+Desde la fase 0c, `deploy.sh secrets --env dev` hace esto por ti (paso 7).
+
+## 5. Firma SSH
+
+Sigue [`SIGNING.md`](SIGNING.md).
+
+## 6. La VM DEV
+
+En la VM (Ubuntu Server 24.04 x86_64), con tu usuario:
+
+```bash
+sudo apt update && sudo apt install -y podman   # Podman 4.9, igual que el GX10
+podman --version
+```
+
+Para entrar desde el portátil, tu clave SSH tiene que estar en el `~/.ssh/authorized_keys` de la VM (`ssh-copy-id` desde el portátil).
+
+En el portátil, define en `~/.ssh/config` el alias que usa el inventario. La dirección y el usuario se quedan en tu `~/.ssh/config`, fuera del repo:
+
+```text
+Host devvm
+    HostName 192.168.122.10      # la IP de tu VM
+    User tu_usuario_en_la_vm
+```
+
+Conéctate una vez a mano para aceptar su huella: `ssh devvm true`. Ansible corre en un contenedor que lee tu `~/.ssh` en solo lectura y no puede preguntarte por huellas nuevas.
+
+## 7. Configuración de `deploy.sh`
+
+`~/.config/infra-podman/deploy.conf` dice dónde están tus bases de KeePassXC. Solo contiene rutas, nunca contraseñas:
+
+```text
+kdbx_dev = ~/ruta/a/infra-dev.kdbx
+kdbx_prod = ~/ruta/a/infra-pro.kdbx
+```
+
+## 8. Prueba contra DEV (criterio de hecho de la fase 0)
+
+En tu copia del repo, en la rama del PR, con KeePassXC desbloqueado:
+
+```bash
+./deploy.sh plan check --env dev       # conecta con devvm y comprueba Podman >= 4.9 sin cambiar nada
+./deploy.sh secrets --env dev          # pide la contraseña de infra-dev.kdbx y lee test_dummy
+tail -2 ~/.local/state/infra-podman/deploy.log
+```
+
+Resultado esperado:
+- **`plan`:** una línea `devvm: Ubuntu 24.04, podman version 4.9.3, connected as …` y `failed=0`.
+- **`secrets`:** `1 secret(s) readable from KeePassXC for dev`.
+- **Registro:** dos líneas acabadas en `ok`.
