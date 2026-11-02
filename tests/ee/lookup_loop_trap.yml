@@ -1,0 +1,15 @@
+---
+# Documents a known trap: `loop:` is evaluated BEFORE `when:`, so a lookup used
+# as the loop source runs even when the task is skipped. tests/ee/run.sh expects
+# this play to FAIL. Never put the kdbx lookup in `loop:`.
+- name: Lookup in loop is evaluated even when the task is skipped
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Loop over a lookup with a false condition
+      ansible.builtin.set_fact:
+        kdbx_never: "{{ item }}"
+      loop: "{{ query('kdbx', 'test_dummy', database='/nonexistent/never.kdbx') }}"
+      no_log: true
+      when: false

@@ -1,0 +1,27 @@
+---
+# Integration test for the kdbx lookup against a real keepassxc-cli.
+# Run by tests/ee/run.sh, which creates a throwaway database with random values.
+- name: Kdbx lookup reads a secret and is not evaluated in skipped tasks
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Read the test secret
+      ansible.builtin.set_fact:
+        kdbx_test_value: "{{ lookup('kdbx', 'test_dummy') }}"
+      no_log: true
+
+    - name: Check the value matches what was stored
+      ansible.builtin.assert:
+        that: kdbx_test_value == lookup('ansible.builtin.env', 'KDBX_TEST_EXPECTED')
+        fail_msg: "The lookup returned a different value"
+        quiet: true
+      no_log: true
+
+    # SPEC 7.1: a skipped task must not evaluate the lookup. If it did, the
+    # missing database below would make the play fail.
+    - name: Skipped task does not run the lookup
+      ansible.builtin.set_fact:
+        kdbx_never: "{{ lookup('kdbx', 'test_dummy', database='/nonexistent/never.kdbx') }}"
+      no_log: true
+      when: false
