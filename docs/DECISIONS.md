@@ -113,12 +113,12 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
   - La confirmación evita un `apply` por error y bloquea cualquier ejecución sin persona delante (D14).
 - **Propuesta en:** PR de la fase 0c.
 
-### R16. Contenedores de Ansible con `label=disable` (supuesto pendiente de comprobar)
+### R16. Contenedores de Ansible con `label=disable`
 
 - **Decisión:** ansible-navigator y `deploy.sh secrets` lanzan la imagen con `--security-opt label=disable`.
 - **Motivo:** ansible-runner 2.4.3 monta `~/.ssh` y el socket del agente SSH sin etiqueta SELinux (`_handle_automounts` en `config/_base.py`). En Fedora, con SELinux activo, el contenedor no podría usarlos. Reetiquetarlos (`:z`) cambiaría la etiqueta de tu `~/.ssh` en el portátil, que es peor.
 - **Coste:** SELinux no aísla ese contenedor del resto de tu usuario. Es nuestra propia imagen, lanzada por ti, y Podman sin root ya la limita a tus permisos.
-- **Estado:** supuesto. Se confirma o se retira con `deploy.sh plan check --env dev` (SPEC 7.1).
+- **Estado:** funciona. El operador ejecutó `plan check` y `secrets` contra DEV el 2026-11-02 con esta opción. No se ha probado sin ella, así que no está demostrado que sea imprescindible. Se mantiene hasta que alguien lo pruebe.
 
 ### R17. La VM DEV no ve las claves del operador, y `infra-dev.kdbx` vive solo en el portátil
 
