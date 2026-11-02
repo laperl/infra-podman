@@ -1,0 +1,52 @@
+---
+# Render Quadlet templates (*.container.j2, *.network.j2, ...) with Ansible's own
+# templating engine so CI validates exactly what the roles would install.
+#
+# Usage:
+#   ansible-playbook scripts/render-quadlets.yml \
+#     -e quadlet_src_dir=roles -e quadlet_dest_dir=/tmp/out -e @tests/quadlet/ci_vars.yml
+#
+# Every Quadlet unit type is rendered, including the forbidden ones (.pod, .kube,
+# .image, .build), so that the policy check can reject them.
+- name: Render Quadlet templates for validation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_unit_patterns:
+      - "*.container.j2"
+      - "*.network.j2"
+      - "*.volume.j2"
+      - "*.pod.j2"
+      - "*.kube.j2"
+      - "*.image.j2"
+      - "*.build.j2"
+  tasks:
+    - name: Check required variables
+      ansible.builtin.assert:
+        that:
+          - quadlet_src_dir is defined
+          - quadlet_dest_dir is defined
+        fail_msg: "Pass -e quadlet_src_dir=<dir> -e quadlet_dest_dir=<dir>"
+
+    - name: Find Quadlet templates
+      ansible.builtin.find:
+        paths: "{{ quadlet_src_dir }}"
+        patterns: "{{ quadlet_unit_patterns }}"
+        recurse: true
+      register: quadlet_templates
+
+    - name: Create destination directory
+      ansible.builtin.file:
+        path: "{{ quadlet_dest_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Render templates
+      ansible.builtin.template:
+        src: "{{ item.path }}"
+        dest: "{{ quadlet_dest_dir }}/{{ item.path | basename | regex_replace('\\.j2$', '') }}"
+        mode: "0644"
+      loop: "{{ quadlet_templates.files }}"
+      loop_control:
+        label: "{{ item.path }}"
