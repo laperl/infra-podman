@@ -1,0 +1,10 @@
+---
+# Strictest built-in profile; relax per rule only with a written reason.
+profile: production
+
+exclude_paths:
+  - .venv/
+  - .ansible/
+  - .github/
+  # Jinja fixtures for the Quadlet validator are not Ansible content.
+  - tests/quadlet/fixtures/

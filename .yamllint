@@ -1,0 +1,22 @@
+---
+# Settings required by ansible-lint (https://docs.ansible.com/projects/lint/rules/yaml/)
+extends: default
+
+ignore: |
+  .venv/
+  .ansible/
+
+rules:
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: false
+  braces:
+    max-spaces-inside: 1
+  line-length:
+    max: 160
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
+  truthy:
+    allowed-values: ["true", "false"]
+    check-keys: false
