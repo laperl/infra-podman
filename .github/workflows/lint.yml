@@ -52,6 +52,9 @@ jobs:
       - name: Quadlet templates (policy + Podman 4.9 generator)
         run: tests/quadlet/run.sh
 
+      - name: Unit tests (kdbx lookup)
+        run: python3 -m unittest discover -s tests/unit -v
+
   quadlet-forward:
     # Same Quadlet checks with a newer Podman, to see early what would break when the
     # GX10 is upgraded. It does not change the templates: they stay 4.9-only (D5).
