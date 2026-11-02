@@ -5,3 +5,8 @@ infra_env: dev
 # Names only, never values (docs/SECRETS_INVENTORY.md).
 infra_secrets:
   - test_dummy
+
+# Never forward the operator's SSH agent to a server: any process there (an AI included)
+# could use the operator's keys, the signing key among them (D14, R17). On the command line
+# this wins over whatever ~/.ssh/config says.
+ansible_ssh_common_args: "-o ForwardAgent=no"

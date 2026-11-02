@@ -55,6 +55,8 @@ Con KeePassXC 2.8 crea `infra-dev.kdbx` **fuera del repo** (el `.gitignore` excl
 - entrada `test_dummy` con una contraseña ficticia cualquiera;
 - contraseña maestra distinta de la de `infra-pro.kdbx`.
 
+Este fichero **vive solo en el portátil**: no se copia a la VM y no hace falta hacerle copia de seguridad. Solo contiene valores ficticios y se recrea en dos minutos con el grupo y los nombres de `infra_secrets` en `inventory/dev/group_vars/all.yml` (R17). La copia de seguridad que sí importa es la de `infra-pro.kdbx`: está apuntada en el `ROADMAP`.
+
 ## 4. Prueba del lookup contra tu `.kdbx` (criterio de hecho de la fase 0)
 
 En el portátil, dentro de tu copia del repo (paso 0), en la rama del PR 0b. Hace falta haber hecho el paso 2 (`podman login`). La primera vez descarga la imagen (~1 GB). La imagen es la que fija `ansible-navigator.yml`:
@@ -84,6 +86,8 @@ Sigue [`SIGNING.md`](SIGNING.md).
 
 ## 6. La VM DEV
 
+**En la VM no se clona el repo ni se instala Ansible.** Todo se ejecuta desde el portátil, que se conecta a la VM por SSH (R2 en `DECISIONS.md`). La VM solo necesita Podman y tu clave pública en `authorized_keys`.
+
 En la VM (Ubuntu Server 24.04 x86_64), con tu usuario:
 
 ```bash
@@ -91,17 +95,34 @@ sudo apt update && sudo apt install -y podman   # Podman 4.9, igual que el GX10
 podman --version
 ```
 
-Para entrar desde el portátil, tu clave SSH tiene que estar en el `~/.ssh/authorized_keys` de la VM (`ssh-copy-id` desde el portátil).
+Para entrar desde el portátil, tu clave pública tiene que estar en el `~/.ssh/authorized_keys` de la VM (`ssh-copy-id` desde el portátil).
 
-En el portátil, define en `~/.ssh/config` el alias que usa el inventario. La dirección y el usuario se quedan en tu `~/.ssh/config`, fuera del repo:
+En el portátil, define en `~/.ssh/config` el alias que usa el inventario, `vmiadev`. La dirección y el usuario se quedan en tu `~/.ssh/config`, fuera del repo:
 
 ```text
-Host devvm
+Host vmiadev
     HostName 192.168.122.10      # la IP de tu VM
     User tu_usuario_en_la_vm
+    ForwardAgent no
 ```
 
-Conéctate una vez a mano para aceptar su huella: `ssh devvm true`. Ansible corre en un contenedor que lee tu `~/.ssh` en solo lectura y no puede preguntarte por huellas nuevas.
+Si ya tienes un bloque `Host *` con `ForwardAgent yes`, el bloque `Host vmiadev` tiene que ir **antes**: ssh se queda con el primer valor que encuentra. Comprueba con `ssh -G vmiadev | grep -i forwardagent`: tiene que salir `forwardagent no`.
+
+Conéctate una vez a mano para aceptar su huella: `ssh vmiadev true`. Ansible corre en un contenedor que lee tu `~/.ssh` en solo lectura y no puede preguntarte por huellas nuevas.
+
+### La VM no debe ver tus claves
+
+Entra en la VM (`ssh vmiadev`) y comprueba:
+
+```bash
+echo "$SSH_AUTH_SOCK"    # vacío
+ssh-add -l               # "Could not open a connection to your authentication agent" o "The agent has no identities"
+ls ~/.ssh                # solo authorized_keys y known_hosts, ninguna clave privada
+```
+
+Si `ssh-add -l` lista tus claves, la sesión está **reenviando tu agente** (`ssh -A` o `ForwardAgent yes`). Mientras dure esa sesión, cualquier proceso de la VM, opencode incluido, puede usar tus claves: entrar en el GX10 o firmar un tag. Es justo lo que D14 prohíbe. Pon `ForwardAgent no` como arriba y vuelve a entrar. Los inventarios ya lo desactivan para las conexiones de Ansible (R17), pero tu `ssh` a mano depende de tu `~/.ssh/config`.
+
+Si más adelante opencode ejecuta pruebas dentro de la VM, necesitará una copia del repo. Eso se decide cuando llegue ese momento; no hace falta para la fase 0.
 
 ## 7. Configuración de `deploy.sh`
 
@@ -117,12 +138,12 @@ kdbx_prod = ~/ruta/a/infra-pro.kdbx
 En tu copia del repo, en la rama del PR, con KeePassXC desbloqueado:
 
 ```bash
-./deploy.sh plan check --env dev       # conecta con devvm y comprueba Podman >= 4.9 sin cambiar nada
+./deploy.sh plan check --env dev       # conecta con vmiadev y comprueba Podman >= 4.9 sin cambiar nada
 ./deploy.sh secrets --env dev          # pide la contraseña de infra-dev.kdbx y lee test_dummy
 tail -2 ~/.local/state/infra-podman/deploy.log
 ```
 
 Resultado esperado:
-- **`plan`:** una línea `devvm: Ubuntu 24.04, podman version 4.9.3, connected as …` y `failed=0`.
+- **`plan`:** una línea `vmiadev: Ubuntu 24.04, podman version 4.9.3, connected as …` y `failed=0`.
 - **`secrets`:** `1 secret(s) readable from KeePassXC for dev`.
 - **Registro:** dos líneas acabadas en `ok`.

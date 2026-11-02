@@ -70,13 +70,22 @@ called_with() { # called_with <description> <grep -E pattern>
   if grep -Eq -- "$2" "$calls"; then pass "$1"; else fail "$1"; sed 's/^/    /' "$calls"; fi
 }
 
+# --- the SSH agent is never forwarded by Ansible connections (R17) ---------------------
+for e in dev prod; do
+  if grep -q '^ansible_ssh_common_args: "-o ForwardAgent=no"$' "$src/inventory/$e/group_vars/all.yml"; then
+    pass "inventory $e disables SSH agent forwarding"
+  else
+    fail "inventory $e disables SSH agent forwarding"
+  fi
+done
+
 # --- DEV: no tag needed ---------------------------------------------------------------
 expect ok "dev plan runs without a tag" plan check --env dev
 called_with "dev plan uses the dev inventory, --check and --diff" \
   '^navigator run playbooks/check.yml -i inventory/dev/hosts.yml -- --check --diff$'
-expect ok "dev apply runs without --check" apply check --env dev --limit devvm
+expect ok "dev apply runs without --check" apply check --env dev --limit vmiadev
 called_with "dev apply passes --diff and --limit, not --check" \
-  '^navigator run playbooks/check.yml -i inventory/dev/hosts.yml -- --diff --limit devvm$'
+  '^navigator run playbooks/check.yml -i inventory/dev/hosts.yml -- --diff --limit vmiadev$'
 
 # --- input validation -------------------------------------------------------------------
 expect refused "unknown environment is refused" plan check --env staging
