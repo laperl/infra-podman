@@ -1,6 +1,6 @@
 # Especificación: plataforma Podman + Ansible
 
-Versión 1.1 · 2 de noviembre de 2026 · Operador: @Jau
+Versión 1.2 · 2 de noviembre de 2026 · Operador: @Jau
 
 Los cambios respecto a la versión 1, con su motivo, están en [`DECISIONS.md`](DECISIONS.md).
 
@@ -34,9 +34,9 @@ Eres el ingeniero que implementa esta plataforma para un operador único. Eres e
 
 | Rol | Equipo | Sistema | Podman | Notas |
 | --- | --- | --- | --- | --- |
-| Nodo de control (PRO) | Portátil, solo CPU, 16 GB RAM | Fedora Atomic Sway 44 | El de Fedora 44 (Podman 5). Podman 6 llega con Fedora 45 | Ejecuta Ansible y KeePassXC. Disco cifrado con LUKS y VeraCrypt: **no volver a preguntar**. Aloja la VM DEV |
+| Nodo de control y servicios personales (PRO) | Portátil, solo CPU, 16 GB RAM | Fedora Atomic Sway 44 | El de Fedora 44 (Podman 5). Podman 6 llega con Fedora 45 | Ejecuta Ansible y KeePassXC. Desde la versión 1.2 aloja también el Postgres principal y las aplicaciones personales, disponibles sin conexión (R18). Disco cifrado con LUKS y VeraCrypt: **no volver a preguntar**. Aloja la VM DEV |
 | DEV | VM dentro del portátil | Ubuntu Server 24.04 x86_64 | **4.9** (apt) | Misma versión de Podman y misma base que el GX10. El operador despliega a mano desde la rama del PR; opencode con IA local solo ejecuta pruebas. Sin credenciales de producción |
-| Servidor principal | ASUS Ascent GX10, ARM64, 128 GB, GPU con CUDA 13 | DGX OS 7 (Ubuntu 24.04) | **4.9** | Docker con vLLM. Se queda en Ubuntu 24.04: ASUS solo soporta DGX OS y DGX OS 8 aún no admite este equipo |
+| Servidor principal | ASUS Ascent GX10, ARM64, 128 GB, GPU con CUDA 13 | DGX OS 7 (Ubuntu 24.04) | **4.9** | Docker con vLLM. Destino de las copias de backup (4.11). Disco **sin cifrar**: solo guarda datos cifrados en origen. Se queda en Ubuntu 24.04: ASUS solo soporta DGX OS y DGX OS 8 aún no admite este equipo |
 | Servidor opcional | Lenovo x86 con GPU NVIDIA | Fedora Atomic Sway 44 | 5 (6 con Fedora 45) | Parado. Solo se usará si hace falta. El diseño no debe depender de él |
 
 **Excepción Docker en el GX10:** vLLM corre en Docker porque Podman 4.9 no ve la GPU con CUDA 13 (comprobado por el operador). Fuera de alcance de migrar.
@@ -45,7 +45,7 @@ Eres el ingeniero que implementa esta plataforma para un operador único. Eres e
 
 **Prioridad de servicio:** best effort. Lo primero es la integridad de los datos y la sencillez de recuperación, por delante de la alta disponibilidad.
 
-**Servicios previstos:** Postgres (una instancia compartida más, como mucho, una de test), Firefly III, LiteLLM (ya funcionando contra vLLM), instancias de OpenClaw, SearXNG, un servicio de audio y proyectos propios (por ejemplo `rag`) que publican imagen.
+**Servicios previstos:** Postgres (una o más instancias por máquina: la principal en el portátil y, cuando sus servicios lo necesiten, otra en el GX10), Firefly III, LiteLLM (ya funcionando contra vLLM), instancias de OpenClaw, SearXNG, un servicio de audio y proyectos propios (por ejemplo `rag`) que publican imagen.
 
 ## 3. Decisiones cerradas (no reabrir)
 
@@ -53,14 +53,14 @@ Eres el ingeniero que implementa esta plataforma para un operador único. Eres e
 | --- | --- |
 | D1 | Todos los contenedores Podman se gestionan con systemd mediante **Quadlet**, rootless |
 | D2 | Despliegue con **Ansible** desde el portátil, ejecutado con **ansible-navigator** y una imagen de entorno de ejecución (Execution Environment) en Podman |
-| D3 | **Un solo usuario de servicio** en cada servidor (variable `service_user`, por defecto `svc_runner`), con `loginctl enable-linger`. Ansible entra por SSH con el usuario del operador y cambia al de servicio. Un segundo usuario solo se añadirá si se cumple un disparador (sección 7) |
+| D3 | **Un solo usuario de servicio** en cada máquina que aloja servicios (variable `service_user`, por defecto `svc_runner`), con `loginctl enable-linger`. Ansible entra por SSH con el usuario del operador y cambia al de servicio. Un segundo usuario solo se añadirá si se cumple un disparador (sección 7) |
 | D4 | **Plantillas Quadlet nativas por servicio** (`.container.j2`, `.network.j2`, `.volume.j2`), sin un lenguaje intermedio propio en YAML |
 | D5 | **Compatibilidad mínima: Podman 4.9.** Ver la sección 4.3 |
 | D6 | **Imágenes fijadas por digest**, nunca etiquetas móviles. Para imágenes multiarquitectura se fija el digest del índice (manifest list) y se comprueba que incluye `linux/arm64` |
 | D7 | **Secretos:** KeePassXC es la copia maestra; los secretos de Podman son el mecanismo de entrega. Lookup propio que invoca `keepassxc-cli`, la herramienta oficial de KeePassXC. Ver la sección 4.5 |
-| D8 | **Un único Postgres compartido**, con una base y un rol por aplicación, más como mucho una instancia de test |
+| D8 | **Un Postgres por máquina que lo necesite**, con una base y un rol por aplicación. En una misma máquina pueden convivir varias instancias (por ejemplo, una de test), cada una con su nombre, su volumen y sus redes. **Sin replicación entre máquinas:** la protección son los backups (4.11). Modificada en la versión 1.2 (R18) |
 | D9 | **Una red por consumidor de Postgres**, todas con `isolate=true` (comprobado que funciona en el GX10) |
-| D10 | **Cortafuegos: firewalld** en todos los servidores. Nada de ufw |
+| D10 | **Cortafuegos: firewalld** en todos los servidores. Nada de ufw. Se aplica en la fase 1b |
 | D11 | **Servicios con datos sin rollback automático de imagen.** Si falla el healthcheck tras un cambio, se detiene y se avisa para intervención humana |
 | D12 | **GitHub** con repos privados; **GHCR privado** para las imágenes propias |
 | D13 | **Tags y commits firmados con la clave SSH** del operador, servida por el agente SSH de KeePassXC |
@@ -118,6 +118,7 @@ Esta sección debe copiarse a `docs/COMPATIBILITY.md`.
 
 - Una red por consumidor de Postgres (por ejemplo `firefly-pg-net`), con `Options=isolate=true` y subred fija declarada en el `.network`.
 - El contenedor de Postgres se une a todas esas redes. Los consumidores no se ven entre sí.
+- Con varias instancias en la misma máquina, cada red de consumidor se une solo a la instancia que usa ese consumidor. No hay una red común para todos los Postgres.
 - En Postgres, una base y un rol por aplicación, y en `pg_hba.conf` cada rol solo se admite desde la subred de su red.
 - Postgres **no publica puertos** en el host.
 - Los servicios accesibles por el operador publican en `127.0.0.1` y se exponen con `tailscale serve`, o en la IP de Tailscale. La elección está abierta (sección 7).
@@ -136,6 +137,8 @@ Esta sección debe copiarse a `docs/COMPATIBILITY.md`.
 
 ### 4.6 Cortafuegos
 
+Se aplica en la fase 1b, empezando por una auditoría de solo lectura (R20).
+
 - firewalld con backend nftables en los servidores. En el GX10: instalarlo y desactivar ufw si está activo. Docker se integra con firewalld creando su propia zona.
 - Entrada: solo por `tailscale0`, incluido SSH. Gestionado por Ansible.
 - Nunca vaciar el conjunto de reglas completo (`flush ruleset`): borraría las de Docker y las de netavark.
@@ -143,7 +146,7 @@ Esta sección debe copiarse a `docs/COMPATIBILITY.md`.
 
 ### 4.7 Excepción Docker
 
-vLLM sigue en Docker y Ansible no lo gestiona en esta etapa. LiteLLM lo alcanza mediante `vllm_host` y `vllm_port`. Hoy LiteLLM usa solo clave maestra; su Postgres (necesario para las virtual keys) llegará más adelante, dentro del Postgres compartido.
+vLLM sigue en Docker y Ansible no lo gestiona en esta etapa. LiteLLM lo alcanza mediante `vllm_host` y `vllm_port`. Hoy LiteLLM usa solo clave maestra; su Postgres (necesario para las virtual keys) llegará más adelante, como una instancia en el GX10 (D8).
 
 ### 4.8 Observabilidad
 
@@ -164,6 +167,18 @@ Para OpenClaw, SearXNG y el servicio de audio: `NoNewPrivileges=true`, `DropCapa
 - `apply --env prod` pide además escribir `prod` en un terminal interactivo. Sin terminal, se rechaza.
 - Con `prod`, el checkout tiene que estar limpio (sin cambios ni ficheros sin seguimiento).
 - Cada ejecución deja una línea en un registro local (`~/.local/state/infra-podman/deploy.log`): fecha, entorno, acción, playbook, tag o rama, hosts y resultado, incluidos los rechazos.
+
+### 4.11 Backups
+
+Sin réplica entre máquinas: una réplica copia también los errores, como un borrado equivocado, una migración rota o un ransomware (R18).
+
+- **Herramienta:** restic (R19). Cifra en origen y la clave de cada repositorio vive en KeePassXC.
+- **En el portátil:** un temporizador de systemd de usuario, cada hora y con `Persistent=true` para ponerse al día al despertar, vuelca cada base con `pg_dump` y guarda los volúmenes de datos en un repositorio restic local, en el disco cifrado.
+- **Copia externa:** cuando el GX10 es alcanzable por Tailscale, el repositorio se copia a un **rest-server de restic en el GX10** en modo `--append-only`. El portátil puede añadir copias pero no borrarlas. La retención se aplica desde el GX10.
+- **El GX10 no necesita disco cifrado para esto:** solo recibe datos cifrados. Puede usar un disco USB externo por capacidad.
+- **restic y rest-server** corren como contenedores Quadlet (D1), fijados por digest.
+- **Pérdida aceptada:** si se pierde el portátil, lo hecho desde el último contacto con el GX10.
+- **Restauración:** se prueba al cerrar la fase 1, desde la copia local y desde la del GX10.
 
 ## 5. CI/CD, firma y flujo de cambios
 
@@ -195,7 +210,7 @@ Para OpenClaw, SearXNG y el servicio de audio: `NoNewPrivileges=true`, `DropCapa
 | Workflow | Cuándo | Qué hace |
 | --- | --- | --- |
 | `lint` | Cada push | yamllint, ansible-lint, shellcheck de `deploy.sh` y de los scripts, y validación de las plantillas Quadlet renderizadas: política del repo (sección 8) y generador de Podman 4.9. Un segundo job repite la validación con un Podman más nuevo (hoy el 5 de Fedora 44), sin cambiar las plantillas |
-| `lifecycle` | PR que toca un rol | En un runner `ubuntu-24.04-arm` (misma base y arquitectura que el GX10) con Podman rootless: desplegar, esperar healthcheck, reaplicar (cero cambios) y destruir conservando el volumen. Usa secretos aleatorios generados en el propio CI, nunca KeePassXC |
+| `lifecycle` | PR que toca un rol | Con Podman rootless y systemd de usuario: desplegar, esperar healthcheck, reaplicar (cero cambios) y destruir conservando el volumen. Runner `ubuntu-24.04` (Podman 4.9, el mínimo) para los servicios del portátil y `ubuntu-24.04-arm` para los del GX10. Usa secretos aleatorios generados en el propio CI, nunca KeePassXC |
 | `ee-image` | Cambio en `execution-environment.yml` | Construye la imagen de Ansible con ansible-builder y la publica en GHCR privado, fijada por digest |
 
 En repos privados, los runners ARM estándar consumen los minutos gratuitos del plan. Mantener los trabajos cortos.
@@ -215,10 +230,11 @@ Cada fase termina en un PR (o varios pequeños) y no se pasa a la siguiente sin 
 | Fase | Contenido | Criterio de hecho |
 | --- | --- | --- |
 | **0. Base** | Estructura del repo, `CLAUDE.md` y `docs/`; firma SSH y fichero de firmantes permitidos; workflow `lint`; imagen de Ansible; esqueleto de `deploy.sh`; lookup `kdbx.py` probado contra `infra-dev.kdbx` | CI en verde; `deploy.sh plan` funciona contra DEV; un tag sin firmar es rechazado; el lookup lee un secreto ficticio de un `.kdbx` creado con KeePassXC 2.8 |
-| **1. Postgres** | Rol `host_base` en el GX10 (usuario de servicio, linger, firewalld y ufw desactivado); Postgres con volumen, secreto como fichero y healthcheck; backup y restauración (herramienta por decidir); workflow `lifecycle` | `apply` correcto y un segundo `apply` con cero cambios; sobrevive a un reinicio del servidor; no publica puertos; backup restaurado con éxito en una prueba; ningún secreto en repo ni logs |
-| **2. Firefly III** | Red `firefly-pg-net` con `isolate=true`; base, rol y regla `pg_hba` propios; espera a Postgres según 4.3; exposición al operador | Firefly solo arranca con Postgres sano; no alcanza otras redes; al destruirlo se conserva su volumen |
+| **1. Postgres y backups** | Rol `host_base` en el portátil y en el GX10 (usuario de servicio y linger); Postgres en el portátil, parametrizado por instancia, con volumen, secreto como fichero y healthcheck; backups según 4.11, con rest-server en el GX10; workflow `lifecycle` | `apply` correcto y un segundo `apply` con cero cambios; sobrevive a un reinicio del portátil; no publica puertos; restauración correcta desde la copia local y desde la del GX10; ningún secreto en repo ni logs |
+| 1b. Cortafuegos (cuando el operador lo decida, antes de la fase 5) | Auditoría de solo lectura de lo que escucha cada servidor; ensayo en `vmiadev` con Docker y Tailscale; firewalld en dos pasos (primero con SSH también desde la red local como puerta de emergencia, después solo por Tailscale); ufw desactivado | Solo se entra por Tailscale; vLLM sigue funcionando; el operador no pierde el acceso en ningún paso |
+| **2. Firefly III** | En el portátil. Red `firefly-pg-net` con `isolate=true`; base, rol y regla `pg_hba` propios; espera a Postgres según 4.3; exposición al operador | Firefly solo arranca con Postgres sano; no alcanza otras redes; al destruirlo se conserva su volumen |
 | **3. Observabilidad** | `prometheus-podman-exporter` como servicio de usuario y objetivo en el Prometheus existente | Métricas visibles en el Grafana actual |
-| 4. LiteLLM (más adelante) | Pasar LiteLLM a Quadlet con `vllm_host` y `vllm_port`; su base en el Postgres compartido cuando lleguen las virtual keys | LiteLLM responde igual que hoy |
+| 4. LiteLLM (más adelante) | Pasar LiteLLM a Quadlet con `vllm_host` y `vllm_port`; su base en una instancia de Postgres en el GX10 cuando lleguen las virtual keys | LiteLLM responde igual que hoy |
 | 5. Agentes (más adelante) | OpenClaw, SearXNG y audio con el endurecimiento de 4.9; control de salida por usuario tras una prueba previa (sección 7); evaluar el disparador del segundo usuario | Un contenedor de agente no alcanza la LAN, Tailscale ni Postgres salvo lo permitido |
 | 6. Análisis de logs (más adelante) | Exportar journald, limpiar datos sensibles y analizar con el vLLM local en solo lectura, sin herramientas | Un log con instrucciones maliciosas no provoca ninguna acción |
 
@@ -236,9 +252,12 @@ Son supuestos razonables pero no comprobados. Si alguno falla, detente y propón
 | 0 | Que `keepassxc-cli` dentro de la imagen de Ansible abre un `.kdbx` guardado con KeePassXC 2.8, cómo se instala en esa imagen y qué versión trae. Se instala con el paquete `keepassxc` de Fedora 44 y trae la **2.8.0**. **Comprobado** el 2026-11-02 por el operador: el lookup lee `Infra_Podman/test_dummy` de `infra-dev.kdbx` creado con KeePassXC 2.8 de escritorio (`docs/SETUP.md`, paso 4) |
 | 0 | Que `keepassxc-cli` acepta la contraseña maestra por la entrada estándar sin terminal. La documentación oficial describe `-q` (silencia la petición de contraseña) y `-s`/`-a`, pero no detalla este comportamiento. **Comprobado** con 2.7.6 en local y con 2.8.0, la que trae la imagen de Ansible, en CI (`tests/ee/run.sh`) |
 | 0 | Que Ansible no evalúa el lookup de KeePassXC en una tarea saltada (`when:` falso) cuando el secreto ya existe. **Comprobado**, salvo en `loop:` (ver 4.5) |
-| 1 | Que el runner `ubuntu-24.04-arm` permite instalar Podman 4.9 y usarlo en modo rootless para el workflow `lifecycle` |
-| 1 | Que instalar firewalld en DGX OS convive con Docker y con la pila de NVIDIA |
+| 1 | Que el runner `ubuntu-24.04` permite usar Podman 4.9 rootless con systemd de usuario para `lifecycle` (y `ubuntu-24.04-arm` cuando haya servicios del GX10 con datos) |
+| 1b | Que instalar firewalld en DGX OS convive con Docker y con la pila de NVIDIA |
 | 1 | En la página oficial de facturación de GitHub, que el almacenamiento y la transferencia de imágenes en GHCR siguen siendo gratuitos |
+| 1 | Cómo despliega Ansible en el propio portátil desde el contenedor de ansible-navigator (por ejemplo, SSH a `127.0.0.1` con la red del host) |
+| 1 | Que ansible-navigator permite pedir la contraseña de sudo (`--ask-become-pass`) con la configuración del repo |
+| 1 | Que la imagen oficial de rest-server incluye `linux/arm64`, y cómo publica en la IP de Tailscale del GX10 (ver «Exposición de servicios» en 7.2) |
 | 2 | Que el patrón de espera con `ExecStartPre` funciona en 4.9 y respeta `TimeoutStartSec` |
 | 3 | Cómo se instala `prometheus-podman-exporter` en Ubuntu 24.04 ARM64 (paquete o binario) |
 | 5 | Que una regla nftables por usuario captura el tráfico de salida de slirp4netns, y qué excepciones de DNS hacen falta (incluido el DNS de Tailscale, 100.100.100.100) |
@@ -248,12 +267,12 @@ Son supuestos razonables pero no comprobados. Si alguno falla, detente y propón
 
 | Tema | Opciones conocidas |
 | --- | --- |
-| Backups de Postgres y volúmenes | Herramienta (restic, borg u otra) y destino fuera del GX10 |
-| Exposición de servicios al operador | `tailscale serve` hacia `127.0.0.1`, o publicar en la IP de Tailscale. Inferencia a comprobar: publicar en esa IP puede fallar al arrancar si la interfaz aún no tiene dirección |
+| Exposición de servicios al operador | `tailscale serve` hacia `127.0.0.1`, o publicar en la IP de Tailscale. Inferencia a comprobar: publicar en esa IP puede fallar al arrancar si la interfaz aún no tiene dirección. Afecta ya a la fase 1: el rest-server del GX10 |
 | Prometheus y Grafana existentes | Dónde corren exactamente y si sus objetivos se gestionan desde Ansible o a mano |
-| Escáner de vulnerabilidades en CI | Por elegir. Aplazado hasta cerrar la fase 0 (ver `ROADMAP.md`) |
-| Propuestas automáticas de actualización de digests | Herramienta por elegir. Siempre como PR, nunca aplicación automática. Aplazado hasta cerrar la fase 0 (ver `ROADMAP.md`) |
+| Escáner de vulnerabilidades en CI | Propuesta: Trivy. Aplazado hasta después de la fase 3 (R21) |
+| Propuestas automáticas de actualización de digests | Propuesta: Dependabot para las actions y Python; los digests de imágenes, más adelante. Siempre como PR, nunca aplicación automática. Aplazado hasta después de la fase 3 (R21) |
 | Plan de GitHub | Gratuito ahora. GitHub Pro activaría la protección de `main` según la documentación oficial, pero el aviso de la interfaz menciona cuentas Team; comprobar que desaparece antes de dar por hecho que funciona. Comprobado el 2026-11-02 en este repo (cuenta personal gratuita): el formulario de rulesets avisa de que no se aplicarán «until you move to GitHub Team organization account». No se crean rulesets mientras tanto |
+| Cifrado de los datos propios del GX10 | Cuando el GX10 guarde datos sin cifrar en origen (por ejemplo, el Postgres de la fase 4): disco USB externo con LUKS y desbloqueo automático al arrancar (TPM, Clevis/Tang u otra). Se decide en esa fase |
 
 ### 7.3 Disparador para un segundo usuario de servicio
 
