@@ -4,7 +4,7 @@ set -euo pipefail
 user=${1:-svc_runner}
 uid=$(id -u "$user")
 
-fail() { echo "FAIL: $*"; exit 1; }
+fail() { echo "::error title=check-base::$*"; exit 1; }
 
 [[ -f /var/lib/systemd/linger/$user ]] || fail "linger is not enabled for $user"
 grep -q "^$user:" /etc/subuid || fail "no subuid range for $user"
