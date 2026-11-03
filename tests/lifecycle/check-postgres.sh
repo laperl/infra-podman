@@ -24,7 +24,7 @@ case $1 in
     done
     "$as" podman volume ls --filter label=infra.component=data --format '{{.Name}}' | grep -qx "$name-data" \
       || fail "volume $name-data missing or unlabelled"
-    [[ -e /run/user/$(id -u svc_runner)/systemd/generator/default.target.wants/$name.service ]] \
+    "$as" test -e "/run/user/$(id -u svc_runner)/systemd/generator/default.target.wants/$name.service" \
       || fail "$name.service is not wanted by default.target: it would not start at boot"
     if "$as" podman inspect "$name" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -q '^POSTGRES_PASSWORD='; then
       fail "the password is in the container configuration; it must only be a file (SPEC 4.5)"
@@ -39,9 +39,9 @@ case $1 in
     ;;
   destroyed)
     ! "$as" podman container exists "$name" || fail "the container still exists"
-    [[ ! -e $units/$name.container ]] || fail "$name.container is still installed"
+    ! "$as" test -e "$units/$name.container" || fail "$name.container is still installed"
     "$as" podman volume exists "$name-data" || fail "the volume was removed (SPEC 4.2: never without purge)"
-    [[ -e $units/$name-data.volume ]] || fail "$name-data.volume was removed"
+    "$as" test -e "$units/$name-data.volume" || fail "$name-data.volume was removed"
     ;;
   *) echo "usage: $0 running|write|read|destroyed" >&2; exit 2 ;;
 esac
