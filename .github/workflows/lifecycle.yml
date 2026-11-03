@@ -142,15 +142,30 @@ jobs:
           grep -Eq 'changed=0 +unreachable=0 +failed=0' plan.log || { echo "::error::the plan after apply shows changes"; exit 1; }
 
       - name: Running, healthy, no published ports
-        run: |
-          tests/lifecycle/check-postgres.sh running
-          tests/lifecycle/check-postgres.sh write
+        run: tests/lifecycle/check-postgres.sh running
+
+      - name: Follows docs/POSTGRES.md (parameters, hardening, backup, pg_hba.conf)
+        run: tests/lifecycle/check-postgres.sh standard
+
+      - name: Write a marker row
+        run: tests/lifecycle/check-postgres.sh write
 
       - name: Survives a restart of its service
         run: |
           tests/lifecycle/as-svc.sh systemctl --user restart dev-pg-main.service
           for _ in $(seq 1 30); do tests/lifecycle/as-svc.sh podman healthcheck run dev-pg-main && break; sleep 3; done
           tests/lifecycle/check-postgres.sh running
+          tests/lifecycle/check-postgres.sh read
+
+      - name: A changed pg_hba.conf is reloaded, not restarted
+        run: |
+          started=$(tests/lifecycle/as-svc.sh podman inspect dev-pg-main --format '{{.State.StartedAt}}')
+          home=$(getent passwd svc_runner | cut -d: -f6)
+          (cd / && sudo -u svc_runner sed -i '1s/^/# changed by lifecycle\n/' "$home/.config/infra-podman/dev-pg-main/pg_hba.conf")
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml 2>&1 | tee hba.log | tee -a all.log
+          grep -A1 'Reload pg_hba.conf' hba.log | grep -q '^changed:' || { echo "::error::pg_hba.conf was not reloaded"; exit 1; }
+          [[ $(tests/lifecycle/as-svc.sh podman inspect dev-pg-main --format '{{.State.StartedAt}}') == "$started" ]] \
+            || { echo "::error::PostgreSQL was restarted for a pg_hba.conf change"; exit 1; }
           tests/lifecycle/check-postgres.sh read
 
       - name: Destroy, keeping the volume (SPEC 4.2)
