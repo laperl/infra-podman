@@ -2,13 +2,23 @@
 
 Infraestructura de un operador único: servicios en contenedores Podman gestionados por systemd (Quadlet) y desplegados con Ansible.
 
-- Especificación completa: [`docs/SPEC.md`](docs/SPEC.md)
-- Flujo de trabajo del operador: [`docs/WORKFLOW.md`](docs/WORKFLOW.md)
-- Reglas para agentes de IA: [`CLAUDE.md`](CLAUDE.md)
-- Estado y pendientes: [`docs/ROADMAP.md`](docs/ROADMAP.md) · Decisiones: [`docs/DECISIONS.md`](docs/DECISIONS.md)
+## Empieza aquí
+
+| Quiero… | Documento |
+| --- | --- |
+| Hacer un cambio y desplegarlo: PR, DEV, merge, tag, `plan` y `apply` | [`docs/WORKFLOW.md`](docs/WORKFLOW.md) |
+| Desplegar en producción paso a paso | [`docs/WORKFLOW.md`, pasos 5 y 6](docs/WORKFLOW.md#5-crear-el-tag-firmado) |
+| Preparar el portátil (se hace una vez) | [`docs/SETUP.md`](docs/SETUP.md) |
+| Configurar la firma de tags y commits (una vez) | [`docs/SIGNING.md`](docs/SIGNING.md) |
+| Saber en qué fase estamos y qué queda pendiente | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
+| Ver qué secretos existen (sin valores) | [`docs/SECRETS_INVENTORY.md`](docs/SECRETS_INVENTORY.md) |
+
+## Referencia
+
+- Especificación completa, la fuente de verdad: [`docs/SPEC.md`](docs/SPEC.md)
+- Por qué se decidió cada cosa: [`docs/DECISIONS.md`](docs/DECISIONS.md)
 - Compatibilidad con Podman 4.9: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)
-- Inventario de secretos (sin valores): [`docs/SECRETS_INVENTORY.md`](docs/SECRETS_INVENTORY.md)
-- Puesta en marcha del portátil: [`docs/SETUP.md`](docs/SETUP.md) · Firma SSH: [`docs/SIGNING.md`](docs/SIGNING.md)
+- Reglas para agentes de IA: [`CLAUDE.md`](CLAUDE.md)
 
 ## Comprobaciones en local
 

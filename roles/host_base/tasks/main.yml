@@ -1,0 +1,153 @@
+---
+# SPEC D3 and phase 1: one service user per machine that runs services, with linger,
+# so its systemd user services (the Quadlet containers) start at boot without a login.
+# Firewalld is phase 1b (R20) and is not here.
+
+- name: Check that service_user is defined
+  ansible.builtin.assert:
+    that:
+      - service_user is defined
+      - service_user is match('^[a-z_][a-z0-9_-]*$')
+    fail_msg: "service_user must be defined in the inventory (default svc_runner, SPEC D3)"
+    quiet: true
+
+- name: Read the Podman version
+  ansible.builtin.command:
+    cmd: podman --version
+  register: host_base_podman
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Require Podman 4.9 or newer (D5)
+  ansible.builtin.assert:
+    that:
+      - host_base_podman.rc == 0
+      - (host_base_podman.stdout | regex_search('[0-9]+\.[0-9]+(\.[0-9]+)?')) is version('4.9', '>=')
+    fail_msg: "Podman 4.9 or newer is required. Found: {{ host_base_podman.stdout | default('podman not installed', true) }}"
+    quiet: true
+
+- name: Install the packages rootless Podman needs (Ubuntu)
+  ansible.builtin.apt:
+    name: "{{ host_base_apt_packages }}"
+    state: present
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Look for the commands rootless Podman needs
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ host_base_required_commands }}"
+  register: host_base_commands
+
+- name: Require those commands
+  ansible.builtin.assert:
+    that: item.stat.exists
+    fail_msg: "{{ item.item }} is missing on {{ inventory_hostname }}"
+    quiet: true
+  loop: "{{ host_base_commands.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  # In a plan, a package that the previous task would install is not there yet.
+  when: not ansible_check_mode
+
+- name: Create the service user (D3)
+  ansible.builtin.user:
+    name: "{{ service_user }}"
+    comment: infra-podman service user
+    # No password and no login shell: nobody logs in as this user. Ansible reaches it
+    # with sudo from the operator's account, which does not use the login shell.
+    shell: /usr/sbin/nologin
+    create_home: true
+  register: host_base_user
+
+- name: Note that the rest is simulated in a plan until the user exists
+  ansible.builtin.debug:
+    msg: "{{ service_user }} does not exist yet on {{ inventory_hostname }}: it is created by apply, the remaining checks run then."
+  when: ansible_check_mode and host_base_user is changed
+
+- name: Finish here in a plan for a new user
+  ansible.builtin.meta: end_role
+  when: ansible_check_mode and host_base_user is changed
+
+- name: Keep the service user's home private
+  ansible.builtin.file:
+    path: "{{ host_base_user.home }}"
+    state: directory
+    owner: "{{ service_user }}"
+    group: "{{ host_base_user.group }}"
+    mode: "0700"
+
+- name: Read the subordinate ID ranges
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop:
+    - /etc/subuid
+    - /etc/subgid
+  register: host_base_subids
+
+# useradd assigns these ranges to every regular user on Ubuntu 24.04 and Fedora 44.
+# Picking a range by hand could overlap another user's, so the role only checks.
+- name: Require subordinate UID and GID ranges for rootless Podman
+  ansible.builtin.assert:
+    that: (item.content | b64decode) is search('(?m)^' ~ service_user ~ ':')
+    fail_msg: "{{ item.source }} has no range for {{ service_user }}. Add one with: sudo usermod --add-subuids ... --add-subgids ... {{ service_user }}"
+    quiet: true
+  loop: "{{ host_base_subids.results }}"
+  loop_control:
+    label: "{{ item.source }}"
+
+- name: Enable linger, so the user services start at boot (D3)
+  ansible.builtin.command:
+    cmd: loginctl enable-linger {{ service_user }}
+    creates: /var/lib/systemd/linger/{{ service_user }}
+
+- name: Read the service user's UID
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ service_user }}"
+
+- name: Make sure the service user's systemd manager is running
+  ansible.builtin.systemd_service:
+    name: user@{{ ansible_facts['getent_passwd'][service_user][1] }}.service
+    state: started
+
+- name: Wait for the user bus that systemctl --user needs
+  ansible.builtin.wait_for:
+    path: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}/bus
+    timeout: 30
+
+# What sudo keeps from the caller's environment depends on the sudoers policy, and Podman
+# reads $HOME, $XDG_CONFIG_HOME and $XDG_DATA_HOME (the GitHub runner sets the XDG ones
+# to its own user), plus the user bus in $XDG_RUNTIME_DIR. All of them explicit.
+- name: Set the environment of the service user
+  ansible.builtin.set_fact:
+    host_base_user_env:
+      HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
+      XDG_CONFIG_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.config"
+      XDG_DATA_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.local/share"
+      XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+
+- name: Check Podman as the service user
+  ansible.builtin.command:
+    cmd: podman info --format {% raw %}'{{ .Host.Security.Rootless }}'{% endraw %}
+  become: true
+  become_user: "{{ service_user }}"
+  environment: "{{ host_base_user_env }}"
+  register: host_base_rootless
+  changed_when: false
+  check_mode: false
+
+- name: Require rootless Podman for the service user
+  ansible.builtin.assert:
+    that: host_base_rootless.stdout | trim == 'true'
+    fail_msg: "podman info as {{ service_user }} does not report rootless mode"
+    quiet: true
+
+- name: Check the user's systemd manager answers
+  ansible.builtin.systemd_service:
+    name: default.target
+    state: started
+    scope: user
+  become: true
+  become_user: "{{ service_user }}"
+  environment: "{{ host_base_user_env }}"

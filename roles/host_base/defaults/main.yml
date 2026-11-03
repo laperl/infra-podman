@@ -1,0 +1,19 @@
+---
+# Packages that rootless Podman with systemd user services needs on Ubuntu 24.04
+# (the GX10 and the DEV VM). All of them are in Ubuntu main. They are already present
+# on most installs; the role only makes sure.
+#   acl:               setfacl, so Ansible can hand its temporary files to the service user
+#   uidmap:            newuidmap/newgidmap for the user namespace of rootless Podman
+#   dbus-user-session: the D-Bus that `systemctl --user` talks to
+host_base_apt_packages:
+  - acl
+  - uidmap
+  - dbus-user-session
+
+# Commands that must exist on every machine. On Fedora Atomic (the laptop) packages are
+# not installed by Ansible (that would need rpm-ostree); these ship with the base image.
+host_base_required_commands:
+  - /usr/bin/setfacl
+  - /usr/bin/newuidmap
+  - /usr/bin/newgidmap
+  - /usr/lib/systemd/system-generators/podman-system-generator

@@ -1,0 +1,13 @@
+---
+# Inventory for the lifecycle workflow: the GitHub runner itself plays the server.
+# Throwaway machine, so the service user and every value here are fictitious.
+all:
+  vars:
+    infra_env: dev
+    service_user: svc_runner
+  children:
+    servers:
+      hosts:
+        localhost:
+          ansible_connection: local
+          ansible_python_interpreter: /usr/bin/python3

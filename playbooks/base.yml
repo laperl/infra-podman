@@ -1,0 +1,13 @@
+---
+# Phase 1: prepare every machine that runs services (laptop and GX10 in prod, the VM in
+# dev). Needs sudo: deploy.sh asks for the sudo password (R24).
+- name: Prepare the machines that run services
+  hosts: servers
+  become: true
+  gather_facts: true
+  gather_subset:
+    - "!all"
+    - "!min"
+    - distribution
+  roles:
+    - host_base

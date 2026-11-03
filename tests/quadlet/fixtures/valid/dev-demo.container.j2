@@ -3,9 +3,14 @@
 Description=Demo container (CI fixture)
 
 [Container]
+ContainerName={{ infra_env }}-demo
 Image={{ demo_image }}
-Network=demo.network
-Volume=demo.volume:/data:Z
+Label=infra.env={{ infra_env }}
+Label=infra.app=demo
+Label=infra.component=app
+Label=infra.managed-by=infra-podman
+Network={{ infra_env }}-demo-db-net.network
+Volume={{ infra_env }}-demo-data.volume:/data:Z
 PublishPort=127.0.0.1:{{ demo_port }}:8080
 Secret=demo_password,type=mount,target=/run/secrets/demo_password,mode=0400
 NoNewPrivileges=true

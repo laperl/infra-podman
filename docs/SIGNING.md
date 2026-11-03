@@ -34,7 +34,9 @@ Compara la clave del fichero con la salida de `ssh-add -L` antes de darla por bu
 
 ## 3. GitHub muestra tus firmas como verificadas
 
-GitHub → Settings → SSH and GPG keys → **New SSH key** → tipo **Signing Key**, y pega tu clave pública. Es la misma clave que tienes como clave de autenticación, pero hay que darla de alta otra vez como clave de firma.
+GitHub → Settings → SSH and GPG keys → **New SSH key** → tipo **Signing Key**, y pega tu clave pública. Si usas la misma clave para entrar en GitHub y para firmar, hay que darla de alta otra vez, ahora como clave de firma.
+
+**Recomendado: dos claves distintas**, una para entrar (GitHub, servidores, `authorized_keys`) y otra solo para firmar (la que lleva el comentario `git-signing`). La de firmar es el control de producción (SPEC 5.2): si nunca sirve para entrar en ninguna máquina, se usa menos y queda menos expuesta. Las dos viven en KeePassXC y no cuesta nada mantenerlas separadas.
 
 ## 4. Comprobación
 
