@@ -1,6 +1,6 @@
 # Especificación: plataforma Podman + Ansible
 
-Versión 1.3 · 3 de noviembre de 2026 · Operador: @Jau
+Versión 1.4 · 3 de noviembre de 2026 · Operador: @Jau
 
 Los cambios respecto a la versión 1, con su motivo, están en [`DECISIONS.md`](DECISIONS.md).
 
@@ -128,7 +128,7 @@ Esta sección debe copiarse a `docs/COMPATIBILITY.md`.
 - **Copia maestra:** `infra-pro.kdbx` en el portátil, con rutas `Infra_Podman/<secreto>`. En DEV, `infra-dev.kdbx` con las mismas rutas y valores ficticios. La bóveda personal nunca se toca.
 - **Lectura:** lookup propio `plugins/lookup/kdbx.py` que invoca `keepassxc-cli show -q -s -a password <base> <entrada>`, instalado en la imagen de Ansible. `deploy.sh secrets` pide la contraseña maestra con `read -s` y la pasa por la **entrada estándar** del contenedor de la imagen de Ansible, lanzado con `podman run -i` y no con ansible-navigator, que escribiría las variables de entorno en un fichero (R11 en `DECISIONS.md`). Dentro del contenedor queda como variable de entorno solo de ese proceso; el lookup se la entrega a `keepassxc-cli` por la entrada estándar, **nunca como argumento** (los argumentos son visibles en la lista de procesos). Nunca se escribe en disco ni en logs. Cada consulta vuelve a descifrar la base, lo que es aceptable porque solo ocurre al crear o rotar secretos. No se usa la colección `viczem.keepass`.
 - **Sustituible:** el lookup es la única pieza que sabe cómo se leen los secretos. Si `keepassxc-cli` no convence, se cambia su implementación (por ejemplo, a la librería pykeepass) sin tocar playbooks ni roles.
-- **Creación:** `containers.podman.podman_secret` con `no_log: true`. Solo se lee KeePassXC si el secreto **no existe** en el servidor o si se pide rotarlo. Un despliegue normal no pide la contraseña.
+- **Creación:** `deploy.sh secrets` (playbook `secrets`), máquina a máquina con `--limit`. Instala cada secreto declarado en `infra_secrets` como `<entorno>-<nombre>` en las máquinas de su grupo. Pide también la contraseña de sudo de esa máquina, que viaja por la entrada estándar como la maestra (R29). Usa `containers.podman.podman_secret` con `no_log: true`. Solo se lee KeePassXC si el secreto **no existe** en el servidor o si se pide rotarlo. Un despliegue normal no pide la contraseña.
 - **El lookup va siempre en los argumentos de la tarea, nunca en `loop:`.** Comprobado en la fase 0 (`tests/ee/`): con `when:` falso, Ansible no evalúa el lookup de los argumentos, pero `loop:` se evalúa antes que `when:` y el lookup se ejecutaría igualmente.
 - **Entrega:** como fichero (`Secret=nombre,type=mount,target=/ruta,mode=0400`). Para Postgres, `POSTGRES_PASSWORD_FILE`. Variables de entorno solo si la aplicación no admite fichero.
 - **Riesgo residual conocido:** Podman guarda los secretos en el disco del servidor sin cifrar, porque es el único driver disponible.
@@ -174,7 +174,7 @@ Sin réplica entre máquinas: una réplica copia también los errores, como un b
 
 - **Herramienta:** restic (R19). Cifra en origen y la clave de cada repositorio vive en KeePassXC.
 - **En el portátil:** un temporizador de systemd de usuario, **una vez al día** y con `Persistent=true` para ponerse al día si el portátil estaba apagado, vuelca cada base con `pg_dump` y guarda los volúmenes de datos en un repositorio restic local, en el disco cifrado.
-- **Copia externa:** cuando el GX10 es alcanzable por Tailscale, el repositorio se copia a un **rest-server de restic en el GX10** en modo `--append-only`. El portátil puede añadir copias pero no borrarlas. **Retención (R26):** automática solo en el repositorio local del portátil. En el GX10 no se borra nada en la fase 1: borrar exige la clave del repositorio, que no debe vivir en un disco sin cifrar; se decide más adelante con el tamaño real.
+- **Copia externa:** cuando el GX10 es alcanzable por Tailscale, el repositorio se copia a un **rest-server de restic en el GX10** en modo `--append-only`. El portátil puede añadir copias pero no borrarlas. **Retención (R26, R28):** automática solo en el repositorio local del portátil: 7 copias diarias, 12 mensuales y 5 anuales. En el GX10 no se borra nada en la fase 1: borrar exige la clave del repositorio, que no debe vivir en un disco sin cifrar; se decide más adelante con el tamaño real.
 - **El GX10 no necesita disco cifrado para esto:** solo recibe datos cifrados. Puede usar un disco USB externo por capacidad.
 - **restic y rest-server** corren como contenedores Quadlet (D1), fijados por digest.
 - **Pérdida aceptada:** lo hecho desde la última copia diaria; y si se pierde el portátil, desde el último contacto con el GX10.
@@ -280,7 +280,7 @@ Son supuestos razonables pero no comprobados. Si alguno falla, detente y propón
 | 0 | Que `keepassxc-cli` dentro de la imagen de Ansible abre un `.kdbx` guardado con KeePassXC 2.8, cómo se instala en esa imagen y qué versión trae. Se instala con el paquete `keepassxc` de Fedora 44 y trae la **2.8.0**. **Comprobado** el 2026-11-02 por el operador: el lookup lee `Infra_Podman/test_dummy` de `infra-dev.kdbx` creado con KeePassXC 2.8 de escritorio (`docs/SETUP.md`, paso 4) |
 | 0 | Que `keepassxc-cli` acepta la contraseña maestra por la entrada estándar sin terminal. La documentación oficial describe `-q` (silencia la petición de contraseña) y `-s`/`-a`, pero no detalla este comportamiento. **Comprobado** con 2.7.6 en local y con 2.8.0, la que trae la imagen de Ansible, en CI (`tests/ee/run.sh`) |
 | 0 | Que Ansible no evalúa el lookup de KeePassXC en una tarea saltada (`when:` falso) cuando el secreto ya existe. **Comprobado**, salvo en `loop:` (ver 4.5) |
-| 1 | Que el runner `ubuntu-24.04` permite usar Podman 4.9 rootless con systemd de usuario para `lifecycle` (y `ubuntu-24.04-arm` cuando haya servicios del GX10 con datos). El usuario de servicio con linger, gestor de usuario y Podman rootless: lo prueba el job `base` de `lifecycle` (PR 1/4). Los contenedores, en el PR 2/4 |
+| 1 | Que el runner `ubuntu-24.04` permite usar Podman 4.9 rootless con systemd de usuario para `lifecycle` (y `ubuntu-24.04-arm` cuando haya servicios del GX10 con datos). **Comprobado** el 2026-11-03 (jobs `base` y `postgres`): usuario de servicio con linger, Podman 4.9.3 rootless, Quadlet, healthcheck y reinicio. Salvedad del runner, no de los servidores: su `/etc/environment` fija `XDG_*` para su propio usuario y el workflow lo quita (`docs/COMPATIBILITY.md`) |
 | 1b | Que instalar firewalld en DGX OS convive con Docker y con la pila de NVIDIA |
 | 1 | En la página oficial de facturación de GitHub, que el almacenamiento y la transferencia de imágenes en GHCR siguen siendo gratuitos |
 | 1 | Cómo despliega Ansible en el propio portátil desde el contenedor de ansible-navigator. **Propuesta aprobada (R23):** SSH a `127.0.0.1` (sshd solo en loopback y solo con clave) con `--network=host` en el contenedor. Pendiente de la prueba del operador (`docs/SETUP.md`, paso 9) |

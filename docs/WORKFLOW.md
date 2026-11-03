@@ -108,7 +108,7 @@ Después puedes seguir trabajando en `main` con normalidad. El siguiente desplie
 | --- | --- |
 | `./deploy.sh plan <playbook> [--env dev\|prod] [--limit HOSTS]` | Simula (`--check --diff`) y enseña qué cambiaría |
 | `./deploy.sh apply <playbook> [--env dev\|prod] [--limit HOSTS]` | Aplica |
-| `./deploy.sh secrets [--env dev\|prod] [--rotate NOMBRE]` | Pide la contraseña de KeePassXC y gestiona los secretos |
+| `./deploy.sh secrets [--env dev\|prod] [--limit HOSTS] [--rotate NOMBRE]` | Pide la contraseña de KeePassXC y la de sudo, y crea en las máquinas los secretos que faltan (o rota uno) |
 
 `--env` vale `prod` si no lo pones. `plan` y `apply` piden siempre la contraseña de sudo; si el playbook no la necesita, pulsa Intro.
 
@@ -118,6 +118,8 @@ Después puedes seguir trabajando en `main` con normalidad. El siguiente desplie
 | --- | --- | --- |
 | `check` | Solo lee: comprueba que llega a cada máquina y su versión de Podman | Todas |
 | `base` | Usuario de servicio `svc_runner` con linger (fase 1) | `laptop`, `gx10` (DEV: `vmiadev`) |
+| `secrets` | Solo con `./deploy.sh secrets`: crea en cada máquina los secretos que le faltan, leyéndolos de KeePassXC. Pide la contraseña maestra y la de sudo | Una cada vez, con `--limit` |
+| `postgres` | Las instancias de Postgres (`pg-main`). Necesita antes `base` y `secrets` | `laptop` (DEV: `vmiadev`) |
 
 ## Versiones de los tags
 

@@ -7,7 +7,7 @@ El contenido y el criterio de hecho de cada fase están en [`SPEC.md`](SPEC.md),
 | Fase | Estado |
 | --- | --- |
 | 0. Base | Hecha (2026-11-02): criterio de hecho comprobado por el operador en el portátil y en DEV |
-| 1. Postgres y backups | En curso: PR 1/4 (usuario de servicio y portátil como servidor). Después: 2/4 Postgres y `quadlet_deploy`, 3/4 backups, 4/4 cierre |
+| 1. Postgres y backups | En curso. Hechos: PR 1/4 (usuario de servicio, `v0.1.0`). En revisión: PR 2/4 (Postgres). Después: 3/4 backups, 4/4 cierre |
 | 1b. Cortafuegos | Cuando el operador lo decida, antes de la fase 5 (R20) |
 | 2. Firefly III | Pendiente |
 | 3. Observabilidad | Pendiente |
@@ -27,8 +27,9 @@ El contenido y el criterio de hecho de cada fase están en [`SPEC.md`](SPEC.md),
 | Propuestas automáticas de actualización | Después de la fase 3 (R21) | Propuesta: Dependabot para las actions fijadas por SHA y los paquetes de Python. Los digests de imágenes en plantillas Quadlet no los cubre; se deciden aparte. Siempre como PR |
 | Validar las plantillas con Podman 6 | Cuando salga Fedora 45 | El job `quadlet-forward` del workflow `lint` ya valida con un Podman más nuevo (Fedora 44, Podman 5). Para Podman 6 basta con cambiar su imagen por el digest de `fedora:45` |
 | Aprovechar Podman 5 o superior donde exista | Después de la fase 2, y solo con un servidor real con Podman 5+ en uso | Ansible lee la versión del servidor y usa `Notify=healthy` en el único sitio del patrón de espera (SPEC 4.3). El mínimo sigue siendo 4.9 (D5) |
-| Límites de recursos parametrizados (memoria, CPU, procesos) | Fase 1, empezando por Postgres | Parámetros por servicio con valor por defecto, escritos en un único sitio de las plantillas. En 4.9: `PodmanArgs=--memory= --cpus=` y `PidsLimit=` (ver [`COMPATIBILITY.md`](COMPATIBILITY.md)). La fase 5 los endurece para los agentes. Nombres y valores por defecto se proponen en el PR de la fase 1 |
-| Cargar los valores por defecto de los roles al validar plantillas | Fase 1 | `scripts/render-quadlets.yml` hoy solo usa `tests/quadlet/ci_vars.yml`; con roles reales tendrá que leer también sus `defaults/` |
+| Límites de recursos parametrizados (memoria, CPU, procesos) | Hecho para Postgres (PR 2/4) | `postgres_memory`, `postgres_cpus`, `postgres_pids_limit` y `postgres_shm_size` en `roles/postgres/defaults/main.yml`, escritos en un único sitio de la plantilla. La fase 5 los endurece para los agentes |
 | `ForwardAgent` hacia el GX10 (operador) | En cuanto funcione la confirmación de KeePassXC | Hoy `~/.ssh/config` reenvía el agente al GX10 para clonar repos. Hasta que «Require user confirmation» funcione en Sway/Wayland, cualquier proceso del GX10 puede usar tus claves mientras estás conectado. Alternativas: `ssh -A` solo cuando se vaya a clonar, o una deploy key de solo lectura por repo |
 | Disco cifrado para datos propios del GX10 | Fase 4 (primer Postgres en el GX10) | Disco USB externo con LUKS y desbloqueo automático al arrancar. Opciones a estudiar: TPM (`systemd-cryptenroll`), Clevis/Tang u otra. No hace falta para los backups, que llegan cifrados |
 | Espacio libre en el disco del GX10 | Antes del PR 3/4 (rest-server) | El 2026-11-03 tenía un 97 % ocupado (30 GB libres de 916 GB), en una sola partición. No hace falta reparticionar. El operador revisa qué ocupa más y borra lo que sobre. rest-server tendrá un tope de tamaño (`--max-size`) para que los backups no se coman el último espacio. Si no basta, se adelanta el disco USB |
+| Backup antes de cambiar la imagen de Postgres | PR 3/4 | Antes de reiniciar Postgres con una imagen nueva, el `apply` hace un volcado, para poder volver atrás a mano (D11) |
+| Avisos semanales de imágenes nuevas | PR 4/4 | `scripts/image-updates.sh` y un workflow semanal que falla, y por tanto avisa por correo, cuando un digest de `images.yml` tiene versión nueva. Aprobado el 2026-11-03 |
