@@ -45,10 +45,10 @@ echo "ok"
 echo "== playbooks/secrets.yml with the password on stdin, exactly as deploy.sh secrets runs it"
 printf '%s\n' "$master" | KDBX_DATABASE=$db \
   bash -c 'IFS= read -r KDBX_PASSWORD; export KDBX_PASSWORD; exec ansible-playbook "$@"' secrets \
-  playbooks/secrets.yml -i inventory/dev/hosts.yml --limit localhost -e secrets_rotate=test_dummy
+  playbooks/secrets.yml -i inventory.example/dev/hosts.yml --limit localhost -e secrets_rotate=test_dummy
 if printf '%s\n' "$master" | KDBX_DATABASE=$db \
   bash -c 'IFS= read -r KDBX_PASSWORD; export KDBX_PASSWORD; exec ansible-playbook "$@"' secrets \
-  playbooks/secrets.yml -i inventory/dev/hosts.yml --limit localhost -e secrets_rotate=undeclared >/dev/null 2>&1; then
+  playbooks/secrets.yml -i inventory.example/dev/hosts.yml --limit localhost -e secrets_rotate=undeclared >/dev/null 2>&1; then
   echo "FAIL: rotating an undeclared secret was accepted"; exit 1
 fi
 echo "ok"

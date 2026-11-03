@@ -55,7 +55,7 @@ Con KeePassXC 2.8 crea `infra-dev.kdbx` **fuera del repo** (el `.gitignore` excl
 - entrada `test_dummy` con una contraseña ficticia cualquiera;
 - contraseña maestra distinta de la de `infra-pro.kdbx`.
 
-Este fichero **vive solo en el portátil**: no se copia a la VM y no hace falta hacerle copia de seguridad. Solo contiene valores ficticios y se recrea en dos minutos con el grupo y los nombres de `infra_secrets` en `inventory/dev/group_vars/all.yml` (R17). La copia de seguridad que sí importa es la de `infra-pro.kdbx`: está apuntada en el `ROADMAP`.
+Este fichero **vive solo en el portátil**: no se copia a la VM y no hace falta hacerle copia de seguridad. Solo contiene valores ficticios y se recrea en dos minutos con el grupo y los nombres de `infra_secrets` en `inventory/dev/group_vars/all.yml` de tu repo de datos (paso 14; R17). La copia de seguridad que sí importa es la de `infra-pro.kdbx`: está apuntada en el `ROADMAP`.
 
 ## 4. Prueba del lookup contra tu `.kdbx` (criterio de hecho de la fase 0)
 
@@ -131,7 +131,10 @@ Si más adelante opencode ejecuta pruebas dentro de la VM, necesitará una copia
 ```text
 kdbx_dev = ~/ruta/a/infra-dev.kdbx
 kdbx_prod = ~/ruta/a/infra-pro.kdbx
+data_repo = ~/Documents/SECURE_vc/ansible/infra-podman
 ```
+
+`data_repo` es la ruta de tu repo de datos, donde vive el inventario (paso 14). La lee `deploy.sh` desde la fase 1c, en DEV y en producción.
 
 ## 8. Prueba contra DEV (criterio de hecho de la fase 0)
 
@@ -197,7 +200,7 @@ Acepta la huella una vez: `ssh laptop true`. Tiene que entrar sin pedir contrase
 `laptop` está en el inventario de producción, así que `deploy.sh` exige un tag firmado (`docs/WORKFLOW.md`). Para comprobar **antes del merge** que el contenedor de Ansible llega al portátil, desde la rama del PR, lanza ansible-navigator a mano con `check`, que solo lee:
 
 ```bash
-ansible-navigator run playbooks/check.yml -i inventory/prod/hosts.yml -- --limit laptop
+ansible-navigator run playbooks/check.yml -i ~/Documents/SECURE_vc/ansible/infra-podman/inventory/prod/hosts.yml -- --limit laptop
 ```
 
 Resultado esperado: `laptop: Fedora 44, podman version 5…` y `failed=0`.
@@ -286,3 +289,56 @@ Postgres solo va en el portátil (R18):
 ```
 
 Después reinicia el portátil y comprueba `svc podman healthcheck run prod-pg-main && echo sano`. Es parte del criterio de hecho de la fase 1: «sobrevive a un reinicio del portátil».
+
+## 14. Repo de datos (fase 1c)
+
+Desde la fase 1c, el inventario (máquinas, instancias y, más adelante, bases, usuarios y aplicaciones) no vive en el repo de código sino en tu **repo de datos**: un repo git solo en el portátil, sin GitHub y con los commits firmados (SPEC 4.13, R38). Su estructura es la de [`inventory.example/`](../inventory.example/README.md).
+
+Se hace **una vez**, **antes** de probar en DEV la rama del PR de la fase 1c: desde esa versión, `deploy.sh` ya no encuentra el inventario en el repo de código.
+
+Con el volumen cifrado `SECURE_vc` montado y KeePassXC desbloqueado:
+
+```bash
+CODE=~/Documents/src/github.com/laperl/infra-podman
+DATA=~/Documents/SECURE_vc/ansible/infra-podman
+
+# 1. El tag desplegado está firmado (tiene que decir Good "git" signature)
+git -C "$CODE" fetch --tags && git -C "$CODE" verify-tag v0.2.0
+
+# 2. Crear el repo de datos. La firma se configura SOLO en este repo, igual que en el de código
+mkdir -p "$DATA" && cd "$DATA"
+git init -b main
+git config gpg.format ssh
+git config user.signingkey "key::$(ssh-add -L | grep git-signing)"
+git config user.email reposja@pm.me
+git config commit.gpgSign true
+git config gpg.ssh.allowedSignersFile ~/.config/infra-podman/allowed_signers
+
+# 3. Copiar el inventario EXACTAMENTE como está en v0.2.0, lo que tienes desplegado
+git -C "$CODE" archive v0.2.0 inventory | tar -x -C "$DATA"
+git add inventory
+git commit -m "inventory from infra-podman v0.2.0"
+
+# 4. Comprobaciones
+git verify-commit HEAD                               # Good "git" signature
+git -C "$CODE" rev-parse v0.2.0:inventory            # estas dos líneas tienen que ser
+git -C "$DATA" rev-parse HEAD:inventory              # el MISMO número: copia idéntica
+git status --short                                   # vacío
+
+# 5. Decirle a deploy.sh dónde está
+echo 'data_repo = ~/Documents/SECURE_vc/ansible/infra-podman' >> ~/.config/infra-podman/deploy.conf
+cat ~/.config/infra-podman/deploy.conf               # una sola línea data_repo
+```
+
+Qué hace cada cosa:
+
+- **`git archive v0.2.0 inventory`** saca la carpeta tal como está en el tag, sin ficheros sueltos de tu copia. Tu copia del código no cambia.
+- **El paso 4** compara la «huella» de la carpeta en los dos repos: si es la misma, el contenido es idéntico byte a byte.
+- **La firma** se configura con `git config` sin `--global`: solo afecta a este repo. Usa la misma clave de firma que los tags y el mismo fichero de firmantes de confianza. Si git pide `user.name`, ponlo también con `git config user.name "<tu nombre>"`, sin `--global`.
+- **La línea `data_repo`** la ignora el `deploy.sh` de `v0.2.0`, así que puedes añadirla ya: lo desplegado sigue funcionando igual hasta que pases a la versión nueva.
+
+Si el volumen `SECURE_vc` no está montado, `deploy.sh` se niega con `no existe el repo de datos … ¿Está montado el volumen cifrado?`.
+
+La copia de seguridad del repo de datos la harán los backups de la fase 1e. Mientras tanto vive solo en el portátil: si se perdiera, se rehace con estos mismos pasos desde `v0.2.0`, pero se perderían los cambios hechos después.
+
+Cómo se cambian los datos a partir de ahora: [`WORKFLOW.md`](WORKFLOW.md), «Cambiar datos».

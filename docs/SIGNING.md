@@ -46,9 +46,13 @@ git config --global --unset gpg.ssh.allowedSignersFile
 
 `user.email`: si antes de esta guía usabas otro correo en general, vuelve a ponerlo con `git config --global user.email <tu-correo-de-siempre>`. Este repo ya tiene el suyo.
 
+### En el repo de datos
+
+El repo de datos (SPEC 4.13) usa la **misma clave de firma** y el mismo fichero de firmantes, también configurados solo en ese repo. Las órdenes están en [`SETUP.md`](SETUP.md), paso 14. Allí `commit.gpgSign true` no es opcional: en producción, `deploy.sh` exige que el último commit del repo de datos esté firmado.
+
 ## 2. Fichero de firmantes de confianza (fuera del repo)
 
-`deploy.sh` solo se fía de **este** fichero, no del que hay en el repo (R4 en `DECISIONS.md`). Si alguien añadiera su clave al repo, no le serviría de nada.
+`deploy.sh` solo se fía de **este** fichero, no del que hay en el repo (R4 en `DECISIONS.md`). Si alguien añadiera su clave al repo, no le serviría de nada. Lo usa para los tags del código y para los commits del repo de datos, y rechaza que apunte a un fichero de cualquiera de los dos repos.
 
 ```bash
 mkdir -p ~/.config/infra-podman

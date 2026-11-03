@@ -1,0 +1,24 @@
+---
+# EXAMPLE (SPEC 4.13). The real file is inventory/dev/group_vars/postgres_hosts.yml in
+# the data repository.
+#
+# PostgreSQL instances on each machine of postgres_hosts (D8): dev-pg-<name>. Each one
+# needs the secret pg-<name>-superuser-password in infra_secrets (group_vars/all.yml)
+# and in KeePassXC.
+postgres_instances:
+  - name: main
+
+# Coming in phase 2 (docs/POSTGRES.md, section 6): the databases and users of each
+# application, as data. NOT read by the code yet; shown so the shape is known. Names are
+# chosen by the operator and never go into the code repository.
+#
+# postgres_instances:
+#   - name: main
+#     databases:
+#       - name: app1            # ^[a-z][a-z0-9_]{0,30}$
+#         consumers: [app1]     # applications with their own network to this instance
+#         users:
+#           - name: app1_rw
+#             group: writer     # owner | writer | reader
+#           - name: app1_migrate
+#             group: owner

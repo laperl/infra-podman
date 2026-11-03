@@ -13,6 +13,7 @@ Infraestructura de un operador único: servicios en contenedores Podman gestiona
 | Saber en qué fase estamos y qué queda pendiente | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
 | Ver qué secretos existen (sin valores) | [`docs/SECRETS_INVENTORY.md`](docs/SECRETS_INVENTORY.md) |
 | Cómo se monta Postgres: instancias, bases, grupos, usuarios y acceso | [`docs/POSTGRES.md`](docs/POSTGRES.md) |
+| Cambiar el inventario (máquinas, instancias, bases…): vive en tu repo de datos | [`docs/WORKFLOW.md`, «Cambiar datos»](docs/WORKFLOW.md#cambiar-datos) y [`inventory.example/`](inventory.example/README.md) |
 
 ## Referencia
 

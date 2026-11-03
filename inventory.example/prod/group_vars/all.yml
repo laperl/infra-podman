@@ -1,5 +1,7 @@
 ---
-infra_env: dev
+# EXAMPLE (SPEC 4.13). The real file is inventory/prod/group_vars/all.yml in the data
+# repository. Variables for every machine of this environment.
+infra_env: prod
 
 # The one service user on every machine that runs services (D3).
 service_user: svc_runner
@@ -8,7 +10,6 @@ service_user: svc_runner
 # Names only, never values (docs/SECRETS_INVENTORY.md). With group: installed by
 # deploy.sh secrets as the Podman secret <env>-<name> on every machine of that group.
 infra_secrets:
-  - name: test_dummy  # only checked, never installed
   - name: pg-main-superuser-password
     group: postgres_hosts
 
