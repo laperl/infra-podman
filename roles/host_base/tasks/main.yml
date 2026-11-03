@@ -116,12 +116,15 @@
     path: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}/bus
     timeout: 30
 
-# sudo does not always reset HOME (it depends on the sudoers policy), and Podman reads
-# its configuration from $HOME and the user bus from $XDG_RUNTIME_DIR. Both explicit.
+# What sudo keeps from the caller's environment depends on the sudoers policy, and Podman
+# reads $HOME, $XDG_CONFIG_HOME and $XDG_DATA_HOME (the GitHub runner sets the XDG ones
+# to its own user), plus the user bus in $XDG_RUNTIME_DIR. All of them explicit.
 - name: Set the environment of the service user
   ansible.builtin.set_fact:
     host_base_user_env:
       HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
+      XDG_CONFIG_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.config"
+      XDG_DATA_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.local/share"
       XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
 
 - name: Check Podman as the service user
