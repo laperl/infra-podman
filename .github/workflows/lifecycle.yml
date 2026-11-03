@@ -151,3 +151,7 @@ jobs:
         run: |
           if grep -qF -f "$RUNNER_TEMP/pw" all.log; then echo "::error::the password appears in the Ansible output"; exit 1; fi
           echo "ok"
+
+      - name: Diagnose
+        if: failure()
+        run: tests/lifecycle/diagnose.sh
