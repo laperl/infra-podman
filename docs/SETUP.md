@@ -154,7 +154,7 @@ Desde la fase 1 el portátil también aloja servicios (R18). Ansible corre en un
 
 ### 9.1 Tu clave en `authorized_keys`
 
-Con KeePassXC desbloqueado, mira las claves que sirve el agente y copia la que usas para GitHub y los servidores:
+Con KeePassXC desbloqueado, mira las claves que sirve el agente y copia la que usas para **entrar** en GitHub y en los servidores. No la de firmar (`git-signing`): esa solo firma tags ([`SIGNING.md`](SIGNING.md)).
 
 ```bash
 ssh-add -L                          # una línea por clave; la última palabra es su comentario
@@ -220,7 +220,7 @@ Primero en DEV, desde la rama del PR:
 ./deploy.sh apply base --env dev      # el segundo apply tiene que dar changed=0
 ```
 
-Después del merge y con un tag firmado, igual en producción (`--limit laptop` y `--limit gx10` si las contraseñas de sudo son distintas).
+Después, en producción: merge, tag firmado y `plan`/`apply` en cada máquina con `--limit laptop` y `--limit gx10`. Paso a paso en [`WORKFLOW.md`](WORKFLOW.md), pasos 4 a 6.
 
 Comprobación a mano en cada máquina:
 

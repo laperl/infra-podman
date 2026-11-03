@@ -208,7 +208,7 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 
 - **Decisión:** `deploy.sh plan` y `apply` pasan `--ask-become-pass` a Ansible. La contraseña se teclea en el terminal; si un playbook no la necesita, basta con pulsar Intro.
 - **Por qué no repite el problema de R11:** la contraseña no viaja como variable de entorno ni como argumento, ni se escribe en un fichero. En `mode: stdout`, ansible-navigator 26.10.0 entrega a ansible-runner 2.4.3 la entrada estándar del terminal (`input_fd`), y este lanza el contenedor con `--interactive` (y `--tty` si la entrada y la salida son un terminal). La lee `ansible-playbook` dentro del contenedor y solo la guarda en memoria.
-- **Contraseñas distintas por máquina:** Ansible pide una sola por ejecución. Si la del portátil y la del GX10 no coinciden, se despliega cada máquina por separado con `--limit`.
+- **Contraseñas distintas por máquina:** Ansible pide una sola por ejecución. La del portátil y la del GX10 no coinciden (confirmado por el operador el 2026-11-03), así que en producción se despliega siempre una máquina cada vez, con `--limit` (`docs/WORKFLOW.md`, paso 6).
 - **Usuario:** el del operador, que ya está en `wheel` (Fedora) o `sudo` (Ubuntu). `svc_runner` no tiene sudo ni contraseña.
 - **Aprobada por:** el operador, el 2026-11-03 («que la pida siempre»).
 - **SPEC:** sección 7.1.
