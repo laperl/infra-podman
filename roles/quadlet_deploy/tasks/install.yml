@@ -163,5 +163,4 @@
         msg: >-
           {{ quadlet_deploy_wait_healthy | join(', ') }} did not pass its healthcheck in
           {{ (quadlet_deploy_health_retries | int) * (quadlet_deploy_health_delay | int) }} s and has been STOPPED,
-          without rolling back the image (D11). Look at: journalctl --user -u <name>.service as {{ service_user }}
-          (sudo -u {{ service_user }} XDG_RUNTIME_DIR={{ quadlet_deploy_env.XDG_RUNTIME_DIR }} journalctl --user -u <name>.service).
+          without rolling back the image (D11). Its logs: sudo journalctl _SYSTEMD_USER_UNIT=<name>.service -n 50

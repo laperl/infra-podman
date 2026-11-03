@@ -244,7 +244,7 @@ Y luego:
 svc podman ps                                         # los contenedores
 svc podman ps --filter label=infra.app=pg-main        # filtrar por etiqueta (SPEC 4.12)
 svc systemctl --user status prod-pg-main.service      # el servicio
-svc journalctl --user -u prod-pg-main.service -n 50   # sus logs
+sudo journalctl _SYSTEMD_USER_UNIT=prod-pg-main.service -n 50   # sus logs
 ```
 
 El `cd /` evita un error de permisos: `svc_runner` no puede entrar en tu carpeta personal.
