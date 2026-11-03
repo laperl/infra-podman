@@ -1,0 +1,9 @@
+---
+# Collections used by the playbooks, the same versions as execution-environment.yml (keep
+# both in sync). Only for linting: ansible-lint installs them from Galaxy in CI. Deploys
+# use the collections inside the Ansible image.
+collections:
+  - name: containers.podman
+    version: "1.21.2"
+  - name: ansible.posix
+    version: "2.2.2"

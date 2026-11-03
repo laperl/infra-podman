@@ -3,14 +3,15 @@
 #
 #   deploy.sh plan    <playbook> [--env dev|prod] [--limit PATTERN]
 #   deploy.sh apply   <playbook> [--env dev|prod] [--limit PATTERN]
-#   deploy.sh secrets            [--env dev|prod] [--rotate NAME]
+#   deploy.sh secrets            [--env dev|prod] [--limit PATTERN] [--rotate NAME]
 #
 # --env defaults to prod. In prod the checkout must be clean and HEAD must carry a tag
 # signed by a key listed in ~/.config/infra-podman/allowed_signers, a file that lives
 # OUTSIDE the repository (R4 in docs/DECISIONS.md).
 # plan/apply run through ansible-navigator and always ask for the sudo password at the
 # terminal (R24); press Enter if a playbook needs none. secrets runs the same image with podman and
-# hands the KeePassXC master password over stdin, never through ansible-navigator (R11).
+# hands the KeePassXC master password and the sudo password over stdin, never through
+# ansible-navigator (R11, R29).
 # Every run appends one line to ~/.local/state/infra-podman/deploy.log.
 set -euo pipefail
 
@@ -62,7 +63,7 @@ parse_args() {
     case $1 in
       --env | --limit | --rotate) [[ $# -ge 2 ]] || usage ;;&
       --env) env_name=$2 ;;
-      --limit) [[ $action != secrets ]] || usage; limit=$2 ;;
+      --limit) limit=$2 ;;
       --rotate) [[ $action == secrets ]] || usage; rotate=$2 ;;
       *) usage ;;
     esac
@@ -70,7 +71,7 @@ parse_args() {
   done
   [[ $env_name =~ ^(dev|prod)$ ]] || refuse "--env debe ser dev o prod"
   [[ -z $limit || $limit =~ ^[A-Za-z0-9_.,:-]+$ ]] || refuse "--limit no válido: $limit"
-  [[ -z $rotate || $rotate =~ ^[a-z0-9_]+$ ]] || refuse "nombre de secreto no válido en --rotate: $rotate"
+  [[ -z $rotate || $rotate =~ ^[a-z0-9_-]+$ ]] || refuse "nombre de secreto no válido en --rotate: $rotate"
   if [[ $action != secrets ]]; then
     [[ $target =~ ^[a-z0-9_-]+$ && -f $REPO_DIR/playbooks/$target.yml ]] \
       || refuse "playbook desconocido '$target' (se espera playbooks/<nombre>.yml)"
@@ -150,24 +151,34 @@ run_secrets() {
   local mounts=(
     -v "$REPO_DIR:/work:ro" -w /work
     -v "$kdbx:/kdbx/database.kdbx:ro" -e KDBX_DATABASE=/kdbx/database.kdbx
-    -v "$SSH_AUTH_SOCK:/run/ssh-agent.sock" -e SSH_AUTH_SOCK=/run/ssh-agent.sock
+    # The agent socket at the SAME path as on the laptop, as ansible-navigator does
+    # (ansible-runner's automounts): an IdentityAgent in ~/.ssh/config keeps working.
+    -v "$SSH_AUTH_SOCK:$SSH_AUTH_SOCK" -e "SSH_AUTH_SOCK=$SSH_AUTH_SOCK"
   )
   [[ -d $HOME/.ssh ]] && mounts+=(-v "$HOME/.ssh:/root/.ssh:ro")
+  [[ -f /etc/ssh/ssh_known_hosts ]] && mounts+=(-v /etc/ssh/ssh_known_hosts:/etc/ssh/ssh_known_hosts:ro)
   local playbook_args=(playbooks/secrets.yml -i "inventory/$env_name/hosts.yml")
+  [[ -n $limit ]] && playbook_args+=(--limit "$limit")
   [[ -n $rotate ]] && playbook_args+=(-e "secrets_rotate=$rotate")
 
+  local become_password
   IFS= read -rs -p "Contraseña maestra de $(basename "$kdbx"): " password
   echo >&2
   [[ -n $password ]] || refuse "contraseña vacía"
-  # printf is a bash builtin: the password never appears in the process list, and it
-  # reaches the container through stdin only, never as an argument or a file (R11).
+  # Installing the secrets on a machine needs sudo there, to become the service user.
+  # The sudo passwords of the laptop and the GX10 differ: use --limit (R24).
+  IFS= read -rs -p "Contraseña de sudo de ${limit:-las máquinas} (Intro si no hace falta): " become_password
+  echo >&2
+  # printf is a bash builtin: the passwords never appear in the process list, and they
+  # reach the container through stdin only, never as arguments or files (R11, R29).
   # label=disable: the agent socket and ~/.ssh cannot be relabelled for the container.
+  # --network=host: the laptop is reached over SSH on 127.0.0.1 (R23).
   local status=0
-  printf '%s\n' "$password" | "$PODMAN" run --rm -i --user root \
-    --security-opt label=disable "${mounts[@]}" "$image" \
-    bash -c 'IFS= read -r KDBX_PASSWORD; export KDBX_PASSWORD; exec ansible-playbook "$@"' \
+  printf '%s\n%s\n' "$password" "$become_password" | "$PODMAN" run --rm -i --user root \
+    --security-opt label=disable --network=host "${mounts[@]}" "$image" \
+    bash -c 'IFS= read -r KDBX_PASSWORD; IFS= read -r INFRA_BECOME_PASSWORD; export KDBX_PASSWORD INFRA_BECOME_PASSWORD; exec ansible-playbook --become-password-file scripts/become-password.sh "$@"' \
     secrets "${playbook_args[@]}" || status=$?
-  unset password
+  unset password become_password
   return "$status"
 }
 

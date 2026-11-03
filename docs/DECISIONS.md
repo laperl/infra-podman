@@ -230,3 +230,47 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Motivo:** para borrar, restic necesita la clave del repositorio. Si la retención se hiciera desde el GX10, la clave viviría en un disco sin cifrar, que es justo lo que SPEC 4.11 evita. Con la deduplicación, la copia del GX10 crece poco; se decide más adelante con el tamaño real.
 - **Aprobada por:** el operador, el 2026-11-03.
 - **SPEC:** sección 4.11. Cambia «la retención se aplica desde el GX10».
+
+### R27. Imagen de PostgreSQL: `pgvector/pgvector:pg18`
+
+- **Decisión:** el Postgres compartido usa la imagen del proyecto pgvector para PostgreSQL 18, fijada por digest. Es la única imagen de Postgres que se actualiza.
+- **Motivo:** el operador quiere poder usar embeddings más adelante sin cambiar de imagen. La extensión no se carga hasta `CREATE EXTENSION vector`, así que sin usarla no cuesta nada.
+- **Comprobado el 2026-11-03:** trae la misma versión de PostgreSQL que la imagen oficial (18.6), se reconstruyó tres días después que ella e incluye `linux/amd64` y `linux/arm64`. Base Debian 12, frente a Debian 13 de la oficial. En CI: PostgreSQL 18.6 y pgvector 0.8.7.
+- **Datos:** PostgreSQL 18 guarda los datos en `/var/lib/postgresql/18/docker`; el volumen se monta en `/var/lib/postgresql`.
+- **Aprobada por:** el operador, el 2026-11-03.
+- **SPEC:** imagen en `playbooks/group_vars/all/images.yml`.
+
+### R28. Retención: 7 diarias, 12 mensuales y 5 anuales
+
+- **Decisión:** el repositorio local de restic guarda 7 copias diarias, 12 mensuales y 5 anuales (`restic forget --keep-daily 7 --keep-monthly 12 --keep-yearly 5`).
+- **Motivo:** el esquema habitual de copias diarias, mensuales y anuales. Los 5 años cubren con margen los 4 años en que Hacienda puede revisar datos fiscales, por si Firefly guarda finanzas. `--keep-yearly 1` solo habría guardado la del año en curso.
+- **Validación:** el CI crea copias con fechas inventadas (`restic backup --time`), aplica la retención y comprueba que quedan las esperadas (PR 3/4).
+- **Aprobada por:** el operador, el 2026-11-03.
+- **SPEC:** sección 4.11.
+
+### R29. `deploy.sh secrets` pide también la contraseña de sudo
+
+- **Decisión:** para instalar los secretos en una máquina hace falta convertirse en `svc_runner`, y eso pide sudo. `deploy.sh secrets` pide la contraseña maestra de KeePassXC y después la de sudo, y las pasa las dos por la entrada estándar del contenedor de Ansible. Dentro, `ansible-playbook --become-password-file scripts/become-password.sh` lee la de sudo, sin que aparezca nunca como argumento ni en un fichero.
+- **Motivo:** con `podman run -i` no hay terminal dentro del contenedor, así que `--ask-become-pass` no podría preguntar. ansible-core ejecuta un `--become-password-file` que sea ejecutable y usa lo que imprime (comprobado en el código de ansible-core 2.21.5).
+- **Riesgo, el mismo que acepta SPEC 4.5:** dentro del contenedor, la contraseña de sudo queda como variable de entorno solo de ese proceso, igual que la maestra.
+- **Una máquina cada vez** (`--limit`), porque las contraseñas de sudo son distintas (R24).
+- **Propuesta en:** PR 2/4 de la fase 1.
+- **SPEC:** sección 4.5.
+
+### R30. Postgres sin red hasta que tenga consumidores
+
+- **Decisión:** mientras una instancia no tenga consumidores, su contenedor va con `Network=none`. En la fase 2 cada consumidor trae su red aislada (D9) y la instancia se une a ella.
+- **Motivo:** en la fase 1 nadie se conecta a Postgres por red; los backups usan `podman exec`. Sin red no publica puertos ni puede salir a ningún sitio.
+- **Propuesta en:** PR 2/4 de la fase 1.
+- **SPEC:** sección 4.4.
+
+### R31. La firma se configura solo en este repo
+
+- **Corrección:** `SIGNING.md` decía `git config --global` para la firma. Con eso, todos los repos del operador firmaban sus commits y pedían KeePassXC abierto. Ahora todo se configura solo en este repo, y la guía explica cómo deshacer lo global.
+- **Por qué basta:** `deploy.sh` verifica los tags con su propia configuración (`-c gpg.ssh.program=ssh-keygen -c gpg.ssh.allowedSignersFile=…`), sin depender de la de git.
+- **Detectado por:** el operador, el 2026-11-03.
+
+### R32. `deploy.sh secrets` monta el agente SSH en la misma ruta
+
+- **Corrección:** `deploy.sh secrets` montaba el socket del agente en `/run/ssh-agent.sock`. Si `~/.ssh/config` fija `IdentityAgent` con la ruta del portátil, ssh no encontraba el agente dentro del contenedor y fallaba con `Permission denied (publickey)`. En la fase 0 no se vio porque `secrets` aún no se conectaba a ninguna máquina. Ahora se monta en la misma ruta que en el portátil, como hace ansible-navigator (ansible-runner 2.4.3), y también `/etc/ssh/ssh_known_hosts` si existe.
+- **Detectado por:** el operador, el 2026-11-03, con `deploy.sh secrets --env dev --limit vmiadev`.

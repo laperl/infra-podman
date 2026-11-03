@@ -1,0 +1,22 @@
+---
+# Run by the meta: flush_handlers at the end of each install, so they act on the units of
+# the service that was just included and not on those of the next one.
+- name: Reload the service user's systemd (quadlet_deploy)
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+    scope: user
+  become: true
+  become_user: "{{ service_user }}"
+  environment: "{{ quadlet_deploy_env }}"
+
+- name: Restart the changed containers (quadlet_deploy)
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: restarted
+    scope: user
+  loop: "{{ quadlet_deploy_changed_services }}"
+  # In a plan systemd has not been reloaded, so a new unit would not be found.
+  when: not ansible_check_mode
+  become: true
+  become_user: "{{ service_user }}"
+  environment: "{{ quadlet_deploy_env }}"

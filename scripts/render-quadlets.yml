@@ -1,13 +1,20 @@
 ---
-# Render Quadlet templates (*.container.j2, *.network.j2, ...) with Ansible's own
-# templating engine so CI validates exactly what the roles would install.
+# Render Quadlet templates with Ansible's own templating engine so CI validates exactly
+# what the roles would install.
 #
-# Usage:
-#   ansible-playbook scripts/render-quadlets.yml \
-#     -e quadlet_src_dir=roles -e quadlet_dest_dir=/tmp/out -e @tests/quadlet/ci_vars.yml
+# Two modes:
+#   Fixtures: every *.<unit>.j2 under quadlet_src_dir, named after the template file.
+#     ansible-playbook scripts/render-quadlets.yml \
+#       -e quadlet_src_dir="$PWD/tests/quadlet/fixtures/valid" -e quadlet_dest_dir=/tmp/out -e @tests/quadlet/ci_vars.yml
+#   Roles: the units each role declares in <role>_quadlet_units (template, name), with the
+#     role's defaults/main.yml loaded, so files get the names they get on the servers
+#     (SPEC 4.12). Every unit template under roles/ must be declared somewhere.
+#     ansible-playbook scripts/render-quadlets.yml \
+#       -e quadlet_roles_dir="$PWD/roles" -e quadlet_dest_dir=/tmp/out -e @tests/quadlet/ci_vars.yml \
+#       -e @playbooks/group_vars/all/images.yml
 #
-# Every Quadlet unit type is rendered, including the forbidden ones (.pod, .kube,
-# .image, .build), so that the policy check can reject them.
+# Every Quadlet unit type is looked for, including the forbidden ones (.pod, .kube, .image,
+# .build), so that the policy check can reject them.
 - name: Render Quadlet templates for validation
   hosts: localhost
   connection: local
@@ -25,16 +32,9 @@
     - name: Check required variables
       ansible.builtin.assert:
         that:
-          - quadlet_src_dir is defined
           - quadlet_dest_dir is defined
-        fail_msg: "Pass -e quadlet_src_dir=<dir> -e quadlet_dest_dir=<dir>"
-
-    - name: Find Quadlet templates
-      ansible.builtin.find:
-        paths: "{{ quadlet_src_dir }}"
-        patterns: "{{ quadlet_unit_patterns }}"
-        recurse: true
-      register: quadlet_templates
+          - (quadlet_src_dir is defined) != (quadlet_roles_dir is defined)
+        fail_msg: "Pass -e quadlet_dest_dir=<dir> and either -e quadlet_src_dir=<dir> or -e quadlet_roles_dir=<dir>"
 
     - name: Create destination directory
       ansible.builtin.file:
@@ -42,11 +42,64 @@
         state: directory
         mode: "0755"
 
-    - name: Render templates
-      ansible.builtin.template:
-        src: "{{ item.path }}"
-        dest: "{{ quadlet_dest_dir }}/{{ item.path | basename | regex_replace('\\.j2$', '') }}"
-        mode: "0644"
-      loop: "{{ quadlet_templates.files }}"
-      loop_control:
-        label: "{{ item.path }}"
+    - name: Find Quadlet templates
+      ansible.builtin.find:
+        paths: "{{ quadlet_src_dir | default(quadlet_roles_dir) }}"
+        patterns: "{{ quadlet_unit_patterns }}"
+        recurse: true
+      register: quadlet_templates
+
+    - name: Fixtures
+      when: quadlet_src_dir is defined
+      block:
+        - name: Render fixture templates
+          ansible.builtin.template:
+            src: "{{ item.path }}"
+            dest: "{{ quadlet_dest_dir }}/{{ item.path | basename | regex_replace('\\.j2$', '') }}"
+            mode: "0644"
+          loop: "{{ quadlet_templates.files }}"
+          loop_control:
+            label: "{{ item.path }}"
+
+    - name: Roles
+      when: quadlet_roles_dir is defined
+      block:
+        - name: Find the role defaults
+          ansible.builtin.find:
+            paths: "{{ quadlet_roles_dir }}"
+            patterns: main.yml
+            recurse: true
+          register: quadlet_defaults
+
+        - name: Load the role defaults
+          ansible.builtin.include_vars:
+            file: "{{ item }}"
+          loop: "{{ quadlet_defaults.files | map(attribute='path') | select('search', '/defaults/main\\.yml$') | list }}"
+
+        - name: Collect the units each role declares
+          ansible.builtin.set_fact:
+            quadlet_declared: >-
+              {{ quadlet_declared | default([])
+                 + (lookup('ansible.builtin.vars', item ~ '_quadlet_units', default=[])
+                    | map('combine', {'src': quadlet_roles_dir ~ '/' ~ item ~ '/templates/'}) | list) }}
+          loop: >-
+            {{ quadlet_defaults.files | map(attribute='path') | select('search', '/defaults/main\.yml$')
+               | map('dirname') | map('dirname') | map('basename') | list }}
+
+        - name: Require every unit template to be declared
+          ansible.builtin.assert:
+            that: (item.path | basename) in (quadlet_declared | default([]) | map(attribute='template'))
+            fail_msg: "{{ item.path }} is not declared in any <role>_quadlet_units: CI would not validate it under its real name"
+            quiet: true
+          loop: "{{ quadlet_templates.files }}"
+          loop_control:
+            label: "{{ item.path }}"
+
+        - name: Render the declared units under their real names
+          ansible.builtin.template:
+            src: "{{ item.src }}{{ item.template }}"
+            dest: "{{ quadlet_dest_dir }}/{{ item.name }}"
+            mode: "0644"
+          loop: "{{ quadlet_declared | default([]) }}"
+          loop_control:
+            label: "{{ item.name }}"

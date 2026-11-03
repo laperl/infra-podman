@@ -1,0 +1,50 @@
+---
+# Included by main.yml when quadlet_deploy_state is absent. Keeps .volume and .network
+# files and the data unless quadlet_deploy_purge is true (SPEC 4.2, 8).
+- name: Find which units are installed
+  ansible.builtin.stat:
+    path: "{{ quadlet_deploy_dir }}/{{ item.name }}"
+  loop: "{{ quadlet_deploy_units }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_present
+
+- name: Choose what to remove (the .volume and .network files stay unless purged)
+  ansible.builtin.set_fact:
+    quadlet_deploy_remove: >-
+      {{ quadlet_deploy_present.results | selectattr('stat.exists') | map(attribute='item.name')
+         | select('match', '.*\.container$' if not quadlet_deploy_purge else '.*') | list }}
+
+- name: Stop the containers
+  ansible.builtin.systemd_service:
+    name: "{{ item | regex_replace('\\.container$', '.service') }}"
+    state: stopped
+    scope: user
+  loop: "{{ quadlet_deploy_remove | select('match', '.*\\.container$') | list }}"
+  environment: "{{ quadlet_deploy_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+
+- name: Remove the unit files
+  ansible.builtin.file:
+    path: "{{ quadlet_deploy_dir }}/{{ item }}"
+    state: absent
+  loop: "{{ quadlet_deploy_remove }}"
+  become: true
+  become_user: "{{ service_user }}"
+  notify: Reload the service user's systemd (quadlet_deploy)
+
+- name: Delete the volumes (explicit purge only; destroys data)
+  ansible.builtin.command:
+    cmd: podman volume rm --force {{ item | regex_replace('\.volume$', '') }}
+  loop: "{{ quadlet_deploy_remove | select('match', '.*\\.volume$') | list }}"
+  environment: "{{ quadlet_deploy_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  changed_when: true
+  when: quadlet_deploy_purge
+
+- name: Run the reload now
+  ansible.builtin.meta: flush_handlers

@@ -228,3 +228,61 @@ Comprobación a mano en cada máquina:
 loginctl show-user svc_runner -p Linger      # Linger=yes
 grep svc_runner /etc/subuid /etc/subgid      # una línea en cada fichero
 ```
+
+## 12. Mirar los contenedores como `svc_runner`
+
+Los contenedores son de `svc_runner`, no tuyos: `podman ps` con tu usuario no los ve. En cada máquina puedes definir esta función, por ejemplo en tu `~/.bashrc`:
+
+```bash
+svc() { (cd / && sudo -u svc_runner env HOME="$(getent passwd svc_runner | cut -d: -f6)" \
+  XDG_RUNTIME_DIR="/run/user/$(id -u svc_runner)" "$@"); }
+```
+
+Y luego:
+
+```bash
+svc podman ps                                         # los contenedores
+svc podman ps --filter label=infra.app=pg-main        # filtrar por etiqueta (SPEC 4.12)
+svc systemctl --user status prod-pg-main.service      # el servicio
+sudo journalctl _SYSTEMD_USER_UNIT=prod-pg-main.service -n 50   # sus logs
+```
+
+El `cd /` evita un error de permisos: `svc_runner` no puede entrar en tu carpeta personal.
+
+## 13. Postgres (fase 1, PR 2/4)
+
+### 13.1 La contraseña en KeePassXC
+
+En **`infra-dev.kdbx`**, grupo `Infra_Podman`: entrada `pg-main-superuser-password` con cualquier valor ficticio.
+
+En **`infra-pro.kdbx`**, la misma entrada con una contraseña generada por KeePassXC (32 caracteres o más). Solo se usa al crear la base por primera vez; cambiarla después tiene su procedimiento (`docs/SECRETS_INVENTORY.md`).
+
+### 13.2 En DEV, desde la rama del PR
+
+```bash
+./deploy.sh secrets --env dev --limit vmiadev   # contraseña de infra-dev.kdbx y después la de sudo de vmiadev
+./deploy.sh plan postgres --env dev
+./deploy.sh apply postgres --env dev
+./deploy.sh apply postgres --env dev            # changed=0
+```
+
+Comprueba en `vmiadev` (con la función `svc` del paso 12):
+
+```bash
+svc podman healthcheck run dev-pg-main && echo sano
+svc podman port dev-pg-main                      # vacío: no publica puertos
+sudo reboot                                      # y, al volver, repite la primera línea
+```
+
+### 13.3 En producción, después del merge y del tag
+
+Postgres solo va en el portátil (R18):
+
+```bash
+./deploy.sh secrets --limit laptop
+./deploy.sh plan postgres --limit laptop
+./deploy.sh apply postgres --limit laptop
+./deploy.sh apply postgres --limit laptop       # changed=0
+```
+
+Después reinicia el portátil y comprueba `svc podman healthcheck run prod-pg-main && echo sano`. Es parte del criterio de hecho de la fase 1: «sobrevive a un reinicio del portátil».

@@ -43,7 +43,7 @@ En Podman 5 o superior, `Notify=healthy` hace esperar a que el healthcheck pase.
 
 ## Claves comprobadas contra el generador 4.9
 
-Aceptadas: `NoNewPrivileges`, `DropCapability`, `AddCapability`, `ReadOnly`, `ReadOnlyTmpfs`, `Tmpfs`, `UserNS`, `Secret` (con `type=mount,target=…,mode=…`), `HealthCmd`, `HealthInterval`, `HealthStartPeriod`, `Sysctl`, `AutoUpdate`, `PodmanArgs`, `PublishPort`, `Network`, `Volume` y, en `.network`, `Subnet` y `Options=isolate=true`.
+Aceptadas: `ContainerName`, `NetworkName`, `VolumeName`, `Label` (también en `.network` y `.volume`), `Environment`, `HealthRetries`, `HealthTimeout`, `ShmSize`, `NoNewPrivileges`, `DropCapability`, `AddCapability`, `ReadOnly`, `ReadOnlyTmpfs`, `Tmpfs`, `UserNS`, `Secret` (con `type=mount,target=…,mode=…`), `HealthCmd`, `HealthInterval`, `HealthStartPeriod`, `Sysctl`, `AutoUpdate`, `PodmanArgs`, `PublishPort`, `Network`, `Volume` y, en `.network`, `Subnet` y `Options=isolate=true`.
 
 ### Límites de recursos
 
@@ -62,6 +62,14 @@ Los límites se pasan como **parámetros por servicio** y se escriben en un úni
 `MemoryMax=` en `[Service]` (systemd) también funcionaría, pero limita el servicio entero (incluido `conmon`), no solo el contenedor. Se prefieren las opciones de Podman.
 
 Aceptar una clave solo demuestra que el generador la entiende, no que el contenedor se comporte como se espera. Eso lo comprueba el workflow `lifecycle` (fase 1).
+
+## Comprobado en el workflow `lifecycle`
+
+El 2026-11-03, en `ubuntu-24.04` con Podman 4.9.3 sin root y systemd de usuario:
+
+- `pgvector/pgvector:pg18` arranca con `Network=none`, pasa el healthcheck, no publica puertos y sobrevive a un reinicio del servicio. Tras destruirlo, el volumen sigue y un nuevo despliegue encuentra los mismos datos.
+- PostgreSQL 18 guarda los datos en `/var/lib/postgresql/18/docker`: el volumen se monta en `/var/lib/postgresql`.
+- **Salvedad del runner de GitHub, no de los servidores:** su `/etc/environment` fija `XDG_CONFIG_HOME` y otras `XDG_*` para su propio usuario, y PAM se las pasa al systemd de **cualquier** usuario. El generador de Quadlet de `svc_runner` buscaba entonces sus unidades en `/home/runner/.config`. El workflow borra esas líneas antes de crear el usuario. Si alguna vez un servidor tuviera lo mismo, el síntoma sería `Could not find the requested service` justo después de instalar una unidad.
 
 ## Versiones más nuevas
 

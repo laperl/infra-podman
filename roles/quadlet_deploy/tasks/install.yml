@@ -1,0 +1,166 @@
+---
+# Included by main.yml when quadlet_deploy_state is present.
+# Validation runs in plan too: it only writes to a temporary directory.
+- name: Create a temporary directory for validation
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: quadlet-
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_tmp
+  check_mode: false
+  changed_when: false
+
+- name: Validate with the host's Quadlet generator
+  block:
+    - name: Render the units into the temporary directory
+      ansible.builtin.template:
+        src: "{{ item.template }}"
+        dest: "{{ quadlet_deploy_tmp.path }}/{{ item.name }}"
+        mode: "0644"
+      loop: "{{ quadlet_deploy_units }}"
+      loop_control:
+        label: "{{ item.name }}"
+      become: true
+      become_user: "{{ service_user }}"
+      check_mode: false
+      changed_when: false
+
+    - name: Run the generator in dry-run mode (SPEC 4.2)
+      ansible.builtin.command:
+        cmd: "{{ quadlet_deploy_generator }} --user --dryrun"
+      environment: "{{ quadlet_deploy_env | combine({'QUADLET_UNIT_DIRS': quadlet_deploy_tmp.path}) }}"
+      become: true
+      become_user: "{{ service_user }}"
+      register: quadlet_deploy_dryrun
+      check_mode: false
+      changed_when: false
+      failed_when: quadlet_deploy_dryrun.rc != 0 or 'unsupported key' in quadlet_deploy_dryrun.stderr
+  always:
+    - name: Remove the temporary directory
+      ansible.builtin.file:
+        path: "{{ quadlet_deploy_tmp.path }}"
+        state: absent
+      become: true
+      become_user: "{{ service_user }}"
+      check_mode: false
+      changed_when: false
+
+- name: Create the Quadlet directory of the service user
+  ansible.builtin.file:
+    path: "{{ quadlet_deploy_dir }}"
+    state: directory
+    mode: "0755"
+  become: true
+  become_user: "{{ service_user }}"
+
+- name: Install the units
+  ansible.builtin.template:
+    src: "{{ item.template }}"
+    dest: "{{ quadlet_deploy_dir }}/{{ item.name }}"
+    mode: "0644"
+  loop: "{{ quadlet_deploy_units }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_installed
+  notify:
+    - Reload the service user's systemd (quadlet_deploy)
+    - Restart the changed containers (quadlet_deploy)
+
+# Only containers are restarted. Podman does not change an existing network or volume
+# when its file changes (the generated service uses --ignore): that needs a person.
+- name: List the containers whose units changed
+  ansible.builtin.set_fact:
+    quadlet_deploy_changed_services: >-
+      {{ quadlet_deploy_installed.results | selectattr('changed') | map(attribute='item.name')
+         | select('match', '.*\.container$') | map('regex_replace', '\.container$', '.service') | list }}
+    quadlet_deploy_changed_other: >-
+      {{ quadlet_deploy_installed.results | selectattr('changed') | map(attribute='item.name')
+         | reject('match', '.*\.container$') | list }}
+
+- name: Warn about changed networks or volumes
+  ansible.builtin.debug:
+    msg: >-
+      Changed {{ quadlet_deploy_changed_other | join(', ') }}. If the object already exists, Podman keeps
+      it as it is: recreating a network or a volume is a manual step.
+  when: quadlet_deploy_changed_other | length > 0
+
+- name: Check which images are already present
+  ansible.builtin.command:
+    cmd: podman image exists {{ item }}
+  loop: "{{ quadlet_deploy_images }}"
+  environment: "{{ quadlet_deploy_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_image_exists
+  changed_when: false
+  failed_when: quadlet_deploy_image_exists.rc not in [0, 1]
+  check_mode: false
+
+- name: Pull the missing images
+  ansible.builtin.command:
+    cmd: podman pull --quiet {{ item.item }}
+  loop: "{{ quadlet_deploy_image_exists.results | selectattr('rc', 'equalto', 1) | list }}"
+  loop_control:
+    label: "{{ item.item }}"
+  environment: "{{ quadlet_deploy_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  changed_when: true
+
+# In a plan nothing is reloaded, so a new unit does not exist for systemd yet.
+- name: Show what would be restarted
+  ansible.builtin.debug:
+    msg: "Would restart: {{ quadlet_deploy_changed_services | join(', ') }}"
+  when: ansible_check_mode and quadlet_deploy_changed_services | length > 0
+
+- name: Run the reload and the restarts now
+  ansible.builtin.meta: flush_handlers
+
+- name: Make sure every container is running
+  ansible.builtin.systemd_service:
+    name: "{{ item | regex_replace('\\.container$', '.service') }}"
+    state: started
+    scope: user
+  loop: "{{ quadlet_deploy_containers }}"
+  environment: "{{ quadlet_deploy_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  when: not ansible_check_mode or (item | regex_replace('\.container$', '.service')) not in quadlet_deploy_changed_services
+
+# D11: no automatic rollback for services with data. If the healthcheck does not pass,
+# stop the service and tell the operator.
+- name: Wait for the healthcheck
+  when: not ansible_check_mode
+  block:
+    - name: Wait until the healthcheck passes
+      ansible.builtin.command:
+        cmd: podman healthcheck run {{ item }}
+      loop: "{{ quadlet_deploy_wait_healthy }}"
+      environment: "{{ quadlet_deploy_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      register: quadlet_deploy_health
+      until: quadlet_deploy_health.rc == 0
+      retries: "{{ quadlet_deploy_health_retries }}"
+      delay: "{{ quadlet_deploy_health_delay }}"
+      changed_when: false
+  rescue:
+    - name: Stop the unhealthy services (D11)
+      ansible.builtin.systemd_service:
+        name: "{{ item }}.service"
+        state: stopped
+        scope: user
+      loop: "{{ quadlet_deploy_wait_healthy }}"
+      environment: "{{ quadlet_deploy_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+
+    - name: Tell the operator
+      ansible.builtin.fail:
+        msg: >-
+          {{ quadlet_deploy_wait_healthy | join(', ') }} did not pass its healthcheck in
+          {{ (quadlet_deploy_health_retries | int) * (quadlet_deploy_health_delay | int) }} s and has been STOPPED,
+          without rolling back the image (D11). Its logs: sudo journalctl _SYSTEMD_USER_UNIT=<name>.service -n 50
