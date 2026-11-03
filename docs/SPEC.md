@@ -1,6 +1,6 @@
 # Especificación: plataforma Podman + Ansible
 
-Versión 1.2 · 2 de noviembre de 2026 · Operador: @Jau
+Versión 1.3 · 3 de noviembre de 2026 · Operador: @Jau
 
 Los cambios respecto a la versión 1, con su motivo, están en [`DECISIONS.md`](DECISIONS.md).
 
@@ -41,7 +41,7 @@ Eres el ingeniero que implementa esta plataforma para un operador único. Eres e
 
 **Excepción Docker en el GX10:** vLLM corre en Docker porque Podman 4.9 no ve la GPU con CUDA 13 (comprobado por el operador). Fuera de alcance de migrar.
 
-**Red:** todo va por Tailscale. Ningún puerto expuesto a internet. Los servicios publican solo en `127.0.0.1` o en la IP de Tailscale del host.
+**Red:** todo va por Tailscale. Ningún puerto expuesto a internet. Los servicios publican solo en `127.0.0.1`; lo que haya que alcanzar desde otra máquina se expone con `tailscale serve` (R25).
 
 **Prioridad de servicio:** best effort. Lo primero es la integridad de los datos y la sencillez de recuperación, por delante de la alta disponibilidad.
 
@@ -121,7 +121,7 @@ Esta sección debe copiarse a `docs/COMPATIBILITY.md`.
 - Con varias instancias en la misma máquina, cada red de consumidor se une solo a la instancia que usa ese consumidor. No hay una red común para todos los Postgres.
 - En Postgres, una base y un rol por aplicación, y en `pg_hba.conf` cada rol solo se admite desde la subred de su red.
 - Postgres **no publica puertos** en el host.
-- Los servicios accesibles por el operador publican en `127.0.0.1` y se exponen con `tailscale serve`, o en la IP de Tailscale. La elección está abierta (sección 7).
+- **Exposición (R25):** los contenedores publican solo en `127.0.0.1`. Si hay que alcanzar un servicio desde otra máquina, se expone por Tailscale con `tailscale serve --bg --tcp=<puerto> tcp://localhost:<puerto>`, que aplica Ansible. No se publica en la IP de Tailscale: un servicio de usuario no puede esperar limpiamente a que esa interfaz tenga dirección.
 
 ### 4.5 Secretos
 
@@ -150,7 +150,7 @@ vLLM sigue en Docker y Ansible no lo gestiona en esta etapa. LiteLLM lo alcanza 
 
 ### 4.8 Observabilidad
 
-- `prometheus-podman-exporter` como **servicio systemd de usuario**, no como contenedor con el socket de Podman montado. Escucha solo en la IP de Tailscale o en `127.0.0.1`, y se añade como objetivo al Prometheus existente.
+- `prometheus-podman-exporter` como **servicio systemd de usuario**, no como contenedor con el socket de Podman montado. Escucha solo en `127.0.0.1`; si el Prometheus está en otra máquina, se expone con `tailscale serve` (R25). Se añade como objetivo al Prometheus existente.
 - Logs en journald. El análisis de logs con IA queda diferido.
 
 ### 4.9 Endurecimiento de contenedores de agentes
@@ -174,7 +174,7 @@ Sin réplica entre máquinas: una réplica copia también los errores, como un b
 
 - **Herramienta:** restic (R19). Cifra en origen y la clave de cada repositorio vive en KeePassXC.
 - **En el portátil:** un temporizador de systemd de usuario, **una vez al día** y con `Persistent=true` para ponerse al día si el portátil estaba apagado, vuelca cada base con `pg_dump` y guarda los volúmenes de datos en un repositorio restic local, en el disco cifrado.
-- **Copia externa:** cuando el GX10 es alcanzable por Tailscale, el repositorio se copia a un **rest-server de restic en el GX10** en modo `--append-only`. El portátil puede añadir copias pero no borrarlas. La retención se aplica desde el GX10.
+- **Copia externa:** cuando el GX10 es alcanzable por Tailscale, el repositorio se copia a un **rest-server de restic en el GX10** en modo `--append-only`. El portátil puede añadir copias pero no borrarlas. **Retención (R26):** automática solo en el repositorio local del portátil. En el GX10 no se borra nada en la fase 1: borrar exige la clave del repositorio, que no debe vivir en un disco sin cifrar; se decide más adelante con el tamaño real.
 - **El GX10 no necesita disco cifrado para esto:** solo recibe datos cifrados. Puede usar un disco USB externo por capacidad.
 - **restic y rest-server** corren como contenedores Quadlet (D1), fijados por digest.
 - **Pérdida aceptada:** lo hecho desde la última copia diaria; y si se pierde el portátil, desde el último contacto con el GX10.
@@ -280,12 +280,12 @@ Son supuestos razonables pero no comprobados. Si alguno falla, detente y propón
 | 0 | Que `keepassxc-cli` dentro de la imagen de Ansible abre un `.kdbx` guardado con KeePassXC 2.8, cómo se instala en esa imagen y qué versión trae. Se instala con el paquete `keepassxc` de Fedora 44 y trae la **2.8.0**. **Comprobado** el 2026-11-02 por el operador: el lookup lee `Infra_Podman/test_dummy` de `infra-dev.kdbx` creado con KeePassXC 2.8 de escritorio (`docs/SETUP.md`, paso 4) |
 | 0 | Que `keepassxc-cli` acepta la contraseña maestra por la entrada estándar sin terminal. La documentación oficial describe `-q` (silencia la petición de contraseña) y `-s`/`-a`, pero no detalla este comportamiento. **Comprobado** con 2.7.6 en local y con 2.8.0, la que trae la imagen de Ansible, en CI (`tests/ee/run.sh`) |
 | 0 | Que Ansible no evalúa el lookup de KeePassXC en una tarea saltada (`when:` falso) cuando el secreto ya existe. **Comprobado**, salvo en `loop:` (ver 4.5) |
-| 1 | Que el runner `ubuntu-24.04` permite usar Podman 4.9 rootless con systemd de usuario para `lifecycle` (y `ubuntu-24.04-arm` cuando haya servicios del GX10 con datos) |
+| 1 | Que el runner `ubuntu-24.04` permite usar Podman 4.9 rootless con systemd de usuario para `lifecycle` (y `ubuntu-24.04-arm` cuando haya servicios del GX10 con datos). El usuario de servicio con linger, gestor de usuario y Podman rootless: lo prueba el job `base` de `lifecycle` (PR 1/4). Los contenedores, en el PR 2/4 |
 | 1b | Que instalar firewalld en DGX OS convive con Docker y con la pila de NVIDIA |
 | 1 | En la página oficial de facturación de GitHub, que el almacenamiento y la transferencia de imágenes en GHCR siguen siendo gratuitos |
-| 1 | Cómo despliega Ansible en el propio portátil desde el contenedor de ansible-navigator (por ejemplo, SSH a `127.0.0.1` con la red del host) |
-| 1 | Que ansible-navigator permite pedir la contraseña de sudo (`--ask-become-pass`) con la configuración del repo |
-| 1 | Que la imagen oficial de rest-server incluye `linux/arm64`, y cómo publica en la IP de Tailscale del GX10 (ver «Exposición de servicios» en 7.2) |
+| 1 | Cómo despliega Ansible en el propio portátil desde el contenedor de ansible-navigator. **Propuesta aprobada (R23):** SSH a `127.0.0.1` (sshd solo en loopback y solo con clave) con `--network=host` en el contenedor. Pendiente de la prueba del operador (`docs/SETUP.md`, paso 9) |
+| 1 | Que ansible-navigator permite pedir la contraseña de sudo (`--ask-become-pass`) con la configuración del repo. **Comprobado en el código** de ansible-navigator 26.10.0 y ansible-runner 2.4.3: en `mode: stdout` el terminal pasa al contenedor (`--interactive`, y `--tty` si la entrada y la salida son un terminal). Pendiente de la prueba del operador (R24) |
+| 1 | Que la imagen oficial de rest-server incluye `linux/arm64` (PR 3/4). Cómo se expone: con `tailscale serve` (R25); pendiente de comprobar en el GX10 (Tailscale 1.104.4) si el modo `--tcp` pide permisos o certificados |
 | 2 | Que el patrón de espera con `ExecStartPre` funciona en 4.9 y respeta `TimeoutStartSec` |
 | 3 | Cómo se instala `prometheus-podman-exporter` en Ubuntu 24.04 ARM64 (paquete o binario) |
 | 5 | Que una regla nftables por usuario captura el tráfico de salida de slirp4netns, y qué excepciones de DNS hacen falta (incluido el DNS de Tailscale, 100.100.100.100) |
@@ -295,7 +295,6 @@ Son supuestos razonables pero no comprobados. Si alguno falla, detente y propón
 
 | Tema | Opciones conocidas |
 | --- | --- |
-| Exposición de servicios al operador | `tailscale serve` hacia `127.0.0.1`, o publicar en la IP de Tailscale. Inferencia a comprobar: publicar en esa IP puede fallar al arrancar si la interfaz aún no tiene dirección. Afecta ya a la fase 1: el rest-server del GX10 |
 | Prometheus y Grafana existentes | Dónde corren exactamente y si sus objetivos se gestionan desde Ansible o a mano |
 | Escáner de vulnerabilidades en CI | Propuesta: Trivy. Aplazado hasta después de la fase 3 (R21) |
 | Propuestas automáticas de actualización de digests | Propuesta: Dependabot para las actions y Python; los digests de imágenes, más adelante. Siempre como PR, nunca aplicación automática. Aplazado hasta después de la fase 3 (R21) |

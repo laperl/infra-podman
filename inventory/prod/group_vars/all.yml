@@ -1,6 +1,9 @@
 ---
 infra_env: prod
 
+# The one service user on every machine that runs services (D3).
+service_user: svc_runner
+
 # Secrets this environment expects in its KeePassXC database, under Infra_Podman/.
 # Names only, never values (docs/SECRETS_INVENTORY.md). The first ones arrive in phase 1.
 infra_secrets: []

@@ -10,9 +10,13 @@ ansible-navigator:
       policy: missing
     # ansible-runner mounts ~/.ssh and the SSH agent socket without an SELinux label, so on
     # Fedora (enforcing) the container could not use them. Same choice as deploy.sh secrets.
-    # Assumption, to be confirmed with `deploy.sh plan check --env dev` (SPEC 7.1).
+    # Confirmed by the operator on 2026-11-02 (R16).
+    # --network=host: the laptop is also a server (R18) and Ansible reaches it over SSH on
+    # 127.0.0.1, where its sshd listens. From a container on Podman's own network,
+    # 127.0.0.1 would be the container itself (R23).
     container-options:
       - "--security-opt=label=disable"
+      - "--network=host"
   mode: stdout
   # Playbook artifacts store every task result in a JSON file on disk. Disabled so
   # nothing from a run is kept outside journald and the deploy.sh log line (SPEC 4.10).

@@ -147,3 +147,84 @@ Resultado esperado:
 - **`plan`:** una línea `vmiadev: Ubuntu 24.04, podman version 4.9.3, connected as …` y `failed=0`.
 - **`secrets`:** `1 secret(s) readable from KeePassXC for dev`.
 - **Registro:** dos líneas acabadas en `ok`.
+
+## 9. El portátil como servidor (fase 1)
+
+Desde la fase 1 el portátil también aloja servicios (R18). Ansible corre en un contenedor, así que entra en el portátil por SSH a `127.0.0.1`, como a cualquier otro servidor (R23). Se hace **una vez**.
+
+### 9.1 Tu clave en `authorized_keys`
+
+Con KeePassXC desbloqueado, mira las claves que sirve el agente y copia la que usas para GitHub y los servidores:
+
+```bash
+ssh-add -L                          # una línea por clave; la última palabra es su comentario
+ssh-add -L | grep 'COMENTARIO' >> ~/.ssh/authorized_keys     # cambia COMENTARIO
+chmod 600 ~/.ssh/authorized_keys
+```
+
+### 9.2 sshd solo en `127.0.0.1` y solo con clave
+
+```bash
+sudo tee /etc/ssh/sshd_config.d/10-infra-podman.conf >/dev/null <<CONF
+# infra-podman (R23): Ansible enters the laptop over loopback only, with a key.
+ListenAddress 127.0.0.1
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+AllowUsers $USER
+CONF
+sudo sshd -t && sudo systemctl enable --now sshd
+ss -tln | grep ':22 '               # tiene que salir solo 127.0.0.1:22
+```
+
+`sshd -t` comprueba la configuración antes de arrancar; si da un error, no sigas. El fichero empieza por `10-` para que gane a los de Fedora (`50-redhat.conf`): sshd se queda con el primer valor que encuentra.
+
+### 9.3 El alias `laptop`
+
+En `~/.ssh/config`, **antes** de cualquier bloque `Host *`:
+
+```text
+Host laptop
+    HostName 127.0.0.1
+    User tu_usuario
+    ForwardAgent no
+```
+
+Acepta la huella una vez: `ssh laptop true`. Tiene que entrar sin pedir contraseña.
+
+### 9.4 Comprobación
+
+`laptop` está en el inventario de producción, así que `deploy.sh` exige un tag firmado (`docs/WORKFLOW.md`). Para comprobar **antes del merge** que el contenedor de Ansible llega al portátil, desde la rama del PR, lanza ansible-navigator a mano con `check`, que solo lee:
+
+```bash
+ansible-navigator run playbooks/check.yml -i inventory/prod/hosts.yml -- --limit laptop
+```
+
+Resultado esperado: `laptop: Fedora 44, podman version 5…` y `failed=0`.
+
+## 10. sudo
+
+`deploy.sh plan` y `apply` piden siempre la contraseña de sudo (`BECOME password:`). Si el playbook no la necesita, pulsa Intro (R24).
+
+- Ansible entra con **tu usuario** y usa sudo para crear `svc_runner`, activar el linger y convertirse en `svc_runner`, que es quien ejecuta los contenedores.
+- Tu usuario ya tiene sudo si `sudo true` te funciona: está en el grupo `wheel` en Fedora y `sudo` en Ubuntu (`id -nG`). No hay que añadir nada.
+- Ansible pide una sola contraseña por ejecución. Si la del portátil y la del GX10 son distintas, despliega cada máquina por separado: `--limit laptop` y `--limit gx10`.
+
+## 11. Usuario de servicio (fase 1, PR 1/4)
+
+Primero en DEV, desde la rama del PR:
+
+```bash
+./deploy.sh plan base --env dev
+./deploy.sh apply base --env dev
+./deploy.sh apply base --env dev      # el segundo apply tiene que dar changed=0
+```
+
+Después del merge y con un tag firmado, igual en producción (`--limit laptop` y `--limit gx10` si las contraseñas de sudo son distintas).
+
+Comprobación a mano en cada máquina:
+
+```bash
+loginctl show-user svc_runner -p Linger      # Linger=yes
+grep svc_runner /etc/subuid /etc/subgid      # una línea en cada fichero
+```

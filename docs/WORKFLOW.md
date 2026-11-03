@@ -37,6 +37,8 @@ git push origin v0.1.0
 ./deploy.sh apply <playbook>                     # solo si el plan es lo esperado
 ```
 
+`plan` y `apply` piden siempre la contraseña de sudo (`BECOME password:`); si el playbook no la necesita, pulsa Intro. Si la del portátil y la del GX10 son distintas, despliega cada máquina con `--limit laptop` o `--limit gx10` (R24).
+
 `deploy.sh` rechaza desplegar en producción si el checkout no está limpio o si `HEAD` no tiene un tag firmado por una clave de `~/.config/infra-podman/allowed_signers`. `apply` en producción pide además que escribas `prod`.
 
 ### Probar un PR en DEV antes del merge

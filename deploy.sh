@@ -8,7 +8,8 @@
 # --env defaults to prod. In prod the checkout must be clean and HEAD must carry a tag
 # signed by a key listed in ~/.config/infra-podman/allowed_signers, a file that lives
 # OUTSIDE the repository (R4 in docs/DECISIONS.md).
-# plan/apply run through ansible-navigator. secrets runs the same image with podman and
+# plan/apply run through ansible-navigator and always ask for the sudo password at the
+# terminal (R24); press Enter if a playbook needs none. secrets runs the same image with podman and
 # hands the KeePassXC master password over stdin, never through ansible-navigator (R11).
 # Every run appends one line to ~/.local/state/infra-podman/deploy.log.
 set -euo pipefail
@@ -122,7 +123,10 @@ confirm_prod_apply() {
 run_navigator() {
   local args=(run "playbooks/$target.yml" -i "inventory/$env_name/hosts.yml" --)
   [[ $action == plan ]] && args+=(--check)
-  args+=(--diff)
+  # The sudo password is typed at the terminal and read by ansible-playbook inside the
+  # container: in stdout mode ansible-runner hands it the terminal (--interactive/--tty).
+  # It never travels as an argument, an environment variable or a file (R11, R24).
+  args+=(--diff --ask-become-pass)
   [[ -n $limit ]] && args+=(--limit "$limit")
   "$NAVIGATOR" "${args[@]}"
 }

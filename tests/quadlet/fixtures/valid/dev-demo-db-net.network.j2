@@ -1,0 +1,6 @@
+# Fixture network: <env>-<consumer>-<provider>-net (SPEC 4.12).
+[Network]
+NetworkName={{ infra_env }}-demo-db-net
+Label="infra.env={{ infra_env }}" "infra.app=demo" "infra.component=network" "infra.managed-by=infra-podman"
+Subnet={{ demo_subnet }}
+Options=isolate=true

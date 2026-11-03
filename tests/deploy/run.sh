@@ -81,11 +81,17 @@ done
 
 # --- DEV: no tag needed ---------------------------------------------------------------
 expect ok "dev plan runs without a tag" plan check --env dev
-called_with "dev plan uses the dev inventory, --check and --diff" \
-  '^navigator run playbooks/check.yml -i inventory/dev/hosts.yml -- --check --diff$'
+called_with "dev plan uses the dev inventory, --check, --diff and asks for the sudo password" \
+  '^navigator run playbooks/check.yml -i inventory/dev/hosts.yml -- --check --diff --ask-become-pass$'
 expect ok "dev apply runs without --check" apply check --env dev --limit vmiadev
-called_with "dev apply passes --diff and --limit, not --check" \
-  '^navigator run playbooks/check.yml -i inventory/dev/hosts.yml -- --diff --limit vmiadev$'
+called_with "dev apply passes --diff, --ask-become-pass and --limit, not --check" \
+  '^navigator run playbooks/check.yml -i inventory/dev/hosts.yml -- --diff --ask-become-pass --limit vmiadev$'
+
+if grep -q -- '"--network=host"' "$src/ansible-navigator.yml"; then
+  pass "the Ansible container uses the host network, to reach the laptop on 127.0.0.1 (R23)"
+else
+  fail "the Ansible container uses the host network, to reach the laptop on 127.0.0.1 (R23)"
+fi
 
 # --- input validation -------------------------------------------------------------------
 expect refused "unknown environment is refused" plan check --env staging
@@ -109,7 +115,7 @@ expect refused "R4: a key added to the repo's allowed_signers is not trusted" pl
 g reset -q --hard HEAD~1
 g -c user.signingkey="$work/trusted" tag -s v0.1.0 -m good
 expect ok "a tag signed by the trusted key is accepted" plan check
-called_with "prod plan uses the prod inventory" '^navigator run playbooks/check.yml -i inventory/prod/hosts.yml -- --check --diff$'
+called_with "prod plan uses the prod inventory" '^navigator run playbooks/check.yml -i inventory/prod/hosts.yml -- --check --diff --ask-become-pass$'
 if tail -1 "$log" | cut -f5 | grep -q '^tag:v0.1.0@'; then pass "the log records the verified tag"; else fail "the log records the verified tag"; fi
 
 touch "$repo/untracked-file"

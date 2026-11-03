@@ -184,5 +184,49 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Decisión:** los contenedores, redes, volúmenes y secretos se nombran `<entorno>-<app>[-<pieza>]`. Las redes, `<entorno>-<consumidor>-<proveedor>-net`. Todos llevan las etiquetas `infra.env`, `infra.app`, `infra.component` e `infra.managed-by`. Detalle en SPEC 4.12.
 - **Motivo:** el operador quiere saber de un vistazo de quién es cada objeto, para qué sirve y de qué entorno es. El nombre lo hace legible y las etiquetas permiten filtrar con `podman … --filter label=…`, sin herramientas nuevas. Es el mismo patrón que las etiquetas recomendadas de Kubernetes.
 - **Comprobado:** `ContainerName=`, `NetworkName=`, `VolumeName=` y `Label=` existen en Quadlet 4.9. Sin los nombres explícitos, Podman antepone `systemd-`.
-- **Aprobada por:** pendiente, con este PR.
+- **Aprobada por:** el operador, con el merge del PR #5 (2026-11-03).
 - **SPEC:** sección 4.12.
+
+## 2026-11-03
+
+### R23. Ansible entra en el portátil por SSH a `127.0.0.1`
+
+- **Decisión:**
+  - El portátil es un servidor más del inventario de producción (`laptop`). Ansible entra por SSH, con el usuario del operador, y cambia a `svc_runner` con sudo, igual que en el GX10 (D3).
+  - sshd escucha **solo en `127.0.0.1`**, solo con clave y solo para el usuario del operador. Se configura a mano una vez (`docs/SETUP.md`, paso 9), porque Ansible lo necesita para entrar.
+  - El contenedor de Ansible usa la red del host (`--network=host` en `ansible-navigator.yml`). En la red propia de Podman, `127.0.0.1` sería el propio contenedor.
+- **Motivo:**
+  - Ansible corre dentro de un contenedor (D2). Una conexión `local` actuaría dentro del contenedor, no en el portátil.
+  - Así no se instala Ansible en el portátil y el portátil se trata igual que el resto.
+  - sshd en loopback no abre nada hacia la red.
+- **Coste:** el contenedor de Ansible ve los servicios del portátil que escuchan en `127.0.0.1`. Es nuestra imagen, lanzada por el operador.
+- **Supuesto sin probar:** que con Podman 5 sin root y `--network=host` el contenedor llega al sshd de `127.0.0.1`. Lo comprueba el operador con `check` contra `laptop`.
+- **Aprobada por:** el operador, el 2026-11-03.
+- **SPEC:** sección 7.1.
+
+### R24. `deploy.sh` pide siempre la contraseña de sudo
+
+- **Decisión:** `deploy.sh plan` y `apply` pasan `--ask-become-pass` a Ansible. La contraseña se teclea en el terminal; si un playbook no la necesita, basta con pulsar Intro.
+- **Por qué no repite el problema de R11:** la contraseña no viaja como variable de entorno ni como argumento, ni se escribe en un fichero. En `mode: stdout`, ansible-navigator 26.10.0 entrega a ansible-runner 2.4.3 la entrada estándar del terminal (`input_fd`), y este lanza el contenedor con `--interactive` (y `--tty` si la entrada y la salida son un terminal). La lee `ansible-playbook` dentro del contenedor y solo la guarda en memoria.
+- **Contraseñas distintas por máquina:** Ansible pide una sola por ejecución. Si la del portátil y la del GX10 no coinciden, se despliega cada máquina por separado con `--limit`.
+- **Usuario:** el del operador, que ya está en `wheel` (Fedora) o `sudo` (Ubuntu). `svc_runner` no tiene sudo ni contraseña.
+- **Aprobada por:** el operador, el 2026-11-03 («que la pida siempre»).
+- **SPEC:** sección 7.1.
+
+### R25. Exposición de servicios: `127.0.0.1` y `tailscale serve`
+
+- **Decisión:** los contenedores publican solo en `127.0.0.1`. Lo que haya que alcanzar desde otra máquina (el primero, el rest-server del GX10) se expone con `tailscale serve --bg --tcp=<puerto> tcp://localhost:<puerto>`, aplicado por Ansible con sudo.
+- **Motivo:**
+  - Publicar en la IP de Tailscale puede fallar al arrancar si la interfaz aún no tiene dirección, y un servicio de usuario no puede esperar limpiamente a `tailscaled`, que es un servicio del sistema.
+  - Una sola regla para todos los contenedores.
+  - Según la [documentación de Tailscale](https://tailscale.com/docs/reference/tailscale-cli/serve), con `--bg` la configuración sobrevive a los reinicios.
+- **Pendiente de comprobar en el GX10 (Tailscale 1.104.4):** la documentación no dice si el modo `--tcp` necesita certificados HTTPS ni qué permisos pide.
+- **Aprobada por:** el operador, el 2026-11-03. Cierra la decisión abierta de SPEC 7.2.
+- **SPEC:** secciones 2, 4.4 y 4.8.
+
+### R26. Retención solo en el repositorio local
+
+- **Decisión:** la retención (borrar copias antiguas) es automática solo en el repositorio restic del portátil. En el GX10 no se borra nada en la fase 1.
+- **Motivo:** para borrar, restic necesita la clave del repositorio. Si la retención se hiciera desde el GX10, la clave viviría en un disco sin cifrar, que es justo lo que SPEC 4.11 evita. Con la deduplicación, la copia del GX10 crece poco; se decide más adelante con el tamaño real.
+- **Aprobada por:** el operador, el 2026-11-03.
+- **SPEC:** sección 4.11. Cambia «la retención se aplica desde el GX10».

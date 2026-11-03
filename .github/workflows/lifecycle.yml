@@ -1,0 +1,64 @@
+---
+# SPEC 5.4: deploy on a throwaway runner with rootless Podman and systemd user services,
+# re-apply expecting zero changes, and (from phase 1, PR 2/4) destroy keeping the volume.
+# Runner ubuntu-24.04 (Podman 4.9, the minimum) for the laptop's services.
+# Never uses KeePassXC: any secret is generated here at random.
+name: lifecycle
+
+"on":
+  pull_request:
+    paths:
+      - roles/**
+      - playbooks/**
+      - ansible.cfg
+      - tests/lifecycle/**
+      - .github/workflows/lifecycle.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lifecycle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  base:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Podman 4.9 from Ubuntu 24.04
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq podman
+          podman --version | grep -Eq ' 4\.9\.' || { echo "Expected Podman 4.9"; exit 1; }
+
+      - name: Install pinned ansible-core
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --requirement scripts/requirements-lint.txt
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Plan before anything exists (check mode)
+        run: ansible-playbook -i tests/lifecycle/inventory.yml playbooks/base.yml --check --diff
+
+      - name: Apply
+        run: ansible-playbook -i tests/lifecycle/inventory.yml playbooks/base.yml --diff
+
+      - name: Apply again, expecting zero changes (SPEC 4.2)
+        run: |
+          ansible-playbook -i tests/lifecycle/inventory.yml playbooks/base.yml | tee second.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "The second apply changed something"; exit 1; }
+
+      - name: Plan after apply, expecting zero changes
+        run: |
+          ansible-playbook -i tests/lifecycle/inventory.yml playbooks/base.yml --check | tee plan.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' plan.log || { echo "The plan after apply shows changes"; exit 1; }
+
+      - name: Check the result as the operator would
+        run: tests/lifecycle/check-base.sh svc_runner

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce the repository policy (docs/SPEC.md, sections 3, 4.3 and 8) on rendered Quadlet units.
+"""Enforce the repository policy (docs/SPEC.md, sections 3, 4.3, 4.12 and 8) on rendered Quadlet units.
 
 The Podman 4.9 generator does not catch everything we forbid: it accepts
 ``Notify=healthy`` silently and ignores ``.pod`` files without an error.
@@ -12,6 +12,7 @@ Exit code 0 when every file complies, 1 otherwise.
 from __future__ import annotations
 
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -28,6 +29,62 @@ FORBIDDEN_PATTERNS = [
     (re.compile(r"\b(podman|docker)\.sock\b", re.IGNORECASE),
      "mounting the Podman or Docker socket is forbidden (SPEC 8)"),
 ]
+
+
+# SPEC 4.12: explicit names, prefixed with the environment, and the infra.* labels.
+NAME_KEYS = {".container": "ContainerName", ".network": "NetworkName", ".volume": "VolumeName"}
+ENVIRONMENTS = ("prod", "dev")
+SLUG = r"[a-z0-9]+(?:-[a-z0-9]+)*"
+NAME_PATTERNS = {
+    # <env>-<app>[-<piece>]
+    ".container": re.compile(rf"^(?:{'|'.join(ENVIRONMENTS)})-{SLUG}$"),
+    # <env>-<consumer>-<provider>-net
+    ".network": re.compile(rf"^(?:{'|'.join(ENVIRONMENTS)})-[a-z0-9]+(?:-[a-z0-9]+)+-net$"),
+    # <env>-<app>-<content>
+    ".volume": re.compile(rf"^(?:{'|'.join(ENVIRONMENTS)})-[a-z0-9]+(?:-[a-z0-9]+)+$"),
+}
+NAME_HINTS = {
+    ".container": "<env>-<app>[-<piece>]",
+    ".network": "<env>-<consumer>-<provider>-net",
+    ".volume": "<env>-<app>-<content>",
+}
+REQUIRED_LABELS = ("infra.env", "infra.app", "infra.component", "infra.managed-by")
+MANAGED_BY = "infra-podman"
+
+
+def labels_from(value: str) -> dict[str, str]:
+    """Parse one Label= value: one or more key=value pairs, optionally quoted."""
+    labels = {}
+    for item in shlex.split(value):
+        key, _, val = item.partition("=")
+        labels[key] = val
+    return labels
+
+
+def check_names_and_labels(path: Path, keys: dict[str, str], labels: dict[str, str]) -> list[str]:
+    errors: list[str] = []
+    name_key = NAME_KEYS[path.suffix]
+    name = keys.get(name_key)
+    if not name:
+        errors.append(f"{path}: {name_key}= is required; without it Podman prefixes 'systemd-' (SPEC 4.12)")
+    else:
+        if not NAME_PATTERNS[path.suffix].match(name):
+            errors.append(f"{path}: {name_key}={name} must look like {NAME_HINTS[path.suffix]}, "
+                          f"lower case, starting with {' or '.join(ENVIRONMENTS)} (SPEC 4.12)")
+        if path.stem != name:
+            errors.append(f"{path}: the file must be named after the object: {name}{path.suffix} (SPEC 4.12)")
+    missing = [label for label in REQUIRED_LABELS if not labels.get(label)]
+    if missing:
+        errors.append(f"{path}: missing label(s) {', '.join(missing)} (SPEC 4.12)")
+    env = labels.get("infra.env")
+    if env and env not in ENVIRONMENTS:
+        errors.append(f"{path}: infra.env={env} must be one of {', '.join(ENVIRONMENTS)} (SPEC 4.12)")
+    if env and name and not name.startswith(f"{env}-"):
+        errors.append(f"{path}: {name_key}={name} does not start with its infra.env '{env}-' (SPEC 4.12)")
+    managed_by = labels.get("infra.managed-by")
+    if managed_by and managed_by != MANAGED_BY:
+        errors.append(f"{path}: infra.managed-by must be {MANAGED_BY} (SPEC 4.12)")
+    return errors
 
 
 def logical_lines(text: str):
@@ -54,6 +111,8 @@ def check_file(path: Path) -> list[str]:
         return [f"{path}: unit type '{path.suffix}' is not allowed "
                 f"(only {', '.join(sorted(ALLOWED_SUFFIXES))}; .pod needs Podman >= 5.0)"]
 
+    keys: dict[str, str] = {}
+    labels: dict[str, str] = {}
     for number, line in logical_lines(path.read_text(encoding="utf-8")):
         where = f"{path}:{number}"
         for pattern, message in FORBIDDEN_PATTERNS:
@@ -62,11 +121,17 @@ def check_file(path: Path) -> list[str]:
         if line.startswith("[") or "=" not in line:
             continue
         key, value = (part.strip() for part in line.split("=", 1))
+        keys[key] = value
+        if key == "Label":
+            try:
+                labels.update(labels_from(value))
+            except ValueError as error:
+                errors.append(f"{where}: cannot parse Label={value}: {error}")
         if key == "Notify" and value.lower() == "healthy":
             errors.append(f"{where}: Notify=healthy needs Podman >= 5.0 (SPEC 4.3)")
         if key == "Image" and not DIGEST_RE.search(value):
             errors.append(f"{where}: image '{value}' must be pinned by digest @sha256:<64 hex> (D6)")
-    return errors
+    return errors + check_names_and_labels(path, keys, labels)
 
 
 def main(argv: list[str]) -> int:
