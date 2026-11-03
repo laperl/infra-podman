@@ -1,0 +1,33 @@
+---
+# One PostgreSQL instance per call (D8): pg-<instance>, with its own volume, secret and
+# networks. The image lives in playbooks/group_vars/all/images.yml (postgres_image).
+
+postgres_instance: main
+postgres_state: present
+
+# Consumers that will get a network of their own (D9, SPEC 4.4). Empty in phase 1: the
+# container then runs with Network=none, reachable only through podman exec.
+postgres_consumers: []
+
+# Resource limits, in one place (ROADMAP). Podman 4.9 has no Memory= key, so they go
+# through PodmanArgs (docs/COMPATIBILITY.md). Values for a 16 GB laptop.
+postgres_memory: 1g
+postgres_cpus: "2"
+postgres_pids_limit: 500
+# PostgreSQL uses /dev/shm for parallel queries; Podman's default is 64m.
+postgres_shm_size: 256m
+
+# Names (SPEC 4.12). Derived; do not override.
+postgres_name: "{{ infra_env }}-pg-{{ postgres_instance }}"
+postgres_volume: "{{ postgres_name }}-data"
+# KeePassXC entry Infra_Podman/pg-<instance>-superuser-password; Podman secret with the
+# environment in front.
+postgres_secret_key: pg-{{ postgres_instance }}-superuser-password
+postgres_secret: "{{ infra_env }}-{{ postgres_secret_key }}"
+
+# What quadlet_deploy installs, and what CI renders (scripts/render-quadlets.yml).
+postgres_quadlet_units:
+  - template: pg.container.j2
+    name: "{{ postgres_name }}.container"
+  - template: pg-data.volume.j2
+    name: "{{ postgres_volume }}.volume"

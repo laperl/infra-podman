@@ -1,0 +1,19 @@
+---
+# Phase 1: the PostgreSQL instances of each machine (D8). Which instances a machine runs
+# is in the inventory (postgres_instances). Needs the base playbook and the secrets first.
+#   ./deploy.sh plan postgres --limit laptop
+# Destroy keeping the data: -e postgres_state=absent (not through deploy.sh yet).
+- name: PostgreSQL instances
+  hosts: postgres_hosts
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Deploy each instance
+      ansible.builtin.include_role:
+        name: postgres
+      loop: "{{ postgres_instances }}"
+      loop_control:
+        loop_var: postgres_item
+        label: pg-{{ postgres_item.name }}
+      vars:
+        postgres_instance: "{{ postgres_item.name }}"

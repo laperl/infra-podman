@@ -1,0 +1,27 @@
+---
+# Interface of quadlet_deploy (SPEC 4.2). The calling role sets these with include_role.
+#
+# Units to install. Each item:
+#   template: absolute path of the .j2 file (resolve it in the caller with set_fact:
+#             a role_path passed lazily would point at this role instead)
+#   name:     file name, the same as the object it creates (SPEC 4.12), e.g. prod-pg-main.container
+quadlet_deploy_units: []
+
+# Images the units use, pulled before starting so the first start does not run into
+# TimeoutStartSec while downloading.
+quadlet_deploy_images: []
+
+# Containers to wait for until their healthcheck passes (container names).
+quadlet_deploy_wait_healthy: []
+quadlet_deploy_health_retries: 30
+quadlet_deploy_health_delay: 5
+
+# present: install, validate and start. absent: stop and remove the .container files only;
+# the .volume and .network files and the data stay (SPEC 4.2, 8).
+quadlet_deploy_state: present
+
+# Only with state absent and an explicit request: also remove .volume and .network files
+# and delete the volumes. Destroys data. Never set it by default.
+quadlet_deploy_purge: false
+
+quadlet_deploy_generator: /usr/lib/systemd/system-generators/podman-system-generator

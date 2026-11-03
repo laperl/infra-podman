@@ -1,6 +1,6 @@
 ---
 # SPEC 5.4: deploy on a throwaway runner with rootless Podman and systemd user services,
-# re-apply expecting zero changes, and (from phase 1, PR 2/4) destroy keeping the volume.
+# re-apply expecting zero changes, and destroy keeping the volume.
 # Runner ubuntu-24.04 (Podman 4.9, the minimum) for the laptop's services.
 # Never uses KeePassXC: any secret is generated here at random.
 name: lifecycle
@@ -17,6 +17,11 @@ name: lifecycle
 
 permissions:
   contents: read
+
+# Explicit bash: GitHub then adds -o pipefail, so "playbook | tee" fails when the playbook fails.
+defaults:
+  run:
+    shell: bash
 
 concurrency:
   group: lifecycle-${{ github.ref }}
@@ -62,3 +67,87 @@ jobs:
 
       - name: Check the result as the operator would
         run: tests/lifecycle/check-base.sh svc_runner
+
+  postgres:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      INV: tests/lifecycle/inventory.yml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Podman 4.9 from Ubuntu 24.04
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq podman
+          podman --version | grep -Eq ' 4\.9\.' || { echo "Expected Podman 4.9"; exit 1; }
+
+      - name: Install pinned ansible-core
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --requirement scripts/requirements-lint.txt
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Service user (playbook base)
+        run: tests/lifecycle/playbook.sh -i "$INV" playbooks/base.yml
+
+      - name: Plan before the secret exists, expecting a clear refusal
+        run: |
+          if ansible-playbook -i "$INV" playbooks/postgres.yml --check > refusal.log 2>&1; then
+            echo "::error::postgres ran without its secret"; exit 1
+          fi
+          grep -q 'deploy.sh secrets' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+
+      # Random, thrown away with the runner. Never KeePassXC (SPEC 5.4).
+      - name: Create the superuser secret with a random value
+        run: |
+          pw=$(openssl rand -hex 24)
+          echo "::add-mask::$pw"
+          echo "$pw" > "$RUNNER_TEMP/pw"
+          printf '%s' "$pw" | tests/lifecycle/as-svc.sh podman secret create dev-pg-main-superuser-password -
+
+      - name: Plan (nothing deployed yet)
+        run: tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml --check --diff 2>&1 | tee -a all.log
+
+      - name: Apply
+        run: tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml --diff 2>&1 | tee -a all.log
+
+      - name: Apply again, expecting zero changes (SPEC 4.2)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml 2>&1 | tee second.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply changed something"; exit 1; }
+
+      - name: Plan after apply, expecting zero changes
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml --check 2>&1 | tee plan.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' plan.log || { echo "::error::the plan after apply shows changes"; exit 1; }
+
+      - name: Running, healthy, no published ports
+        run: |
+          tests/lifecycle/check-postgres.sh running
+          tests/lifecycle/check-postgres.sh write
+
+      - name: Survives a restart of its service
+        run: |
+          tests/lifecycle/as-svc.sh systemctl --user restart dev-pg-main.service
+          for _ in $(seq 1 30); do tests/lifecycle/as-svc.sh podman healthcheck run dev-pg-main && break; sleep 3; done
+          tests/lifecycle/check-postgres.sh running
+          tests/lifecycle/check-postgres.sh read
+
+      - name: Destroy, keeping the volume (SPEC 4.2)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml -e postgres_state=absent 2>&1 | tee -a all.log
+          tests/lifecycle/check-postgres.sh destroyed
+
+      - name: Deploy again on the kept volume
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml 2>&1 | tee -a all.log
+          tests/lifecycle/check-postgres.sh read
+
+      - name: The password never appears in the output (SPEC 4.5)
+        run: |
+          if grep -qF -f "$RUNNER_TEMP/pw" all.log; then echo "::error::the password appears in the Ansible output"; exit 1; fi
+          echo "ok"

@@ -4,10 +4,13 @@ infra_env: dev
 # The one service user on every machine that runs services (D3).
 service_user: svc_runner
 
-# Secrets this environment expects in its KeePassXC database, under Infra_Podman/.
-# Names only, never values (docs/SECRETS_INVENTORY.md).
+# Secrets this environment expects in its KeePassXC database, under Infra_Podman/<name>.
+# Names only, never values (docs/SECRETS_INVENTORY.md). With group: installed by
+# deploy.sh secrets as the Podman secret <env>-<name> on every machine of that group.
 infra_secrets:
-  - test_dummy
+  - name: test_dummy  # only checked, never installed
+  - name: pg-main-superuser-password
+    group: postgres_hosts
 
 # Never forward the operator's SSH agent to a server: any process there (an AI included)
 # could use the operator's keys, the signing key among them (D14, R17). On the command line

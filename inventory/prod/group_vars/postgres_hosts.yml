@@ -1,0 +1,4 @@
+---
+# PostgreSQL instances on each machine of postgres_hosts (D8): pg-<name>.
+postgres_instances:
+  - name: main

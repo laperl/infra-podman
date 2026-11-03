@@ -1,0 +1,49 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+[Unit]
+Description=PostgreSQL {{ postgres_instance }} ({{ infra_env }})
+
+[Container]
+ContainerName={{ postgres_name }}
+Image={{ postgres_image }}
+Label=infra.env={{ infra_env }}
+Label=infra.app=pg-{{ postgres_instance }}
+Label=infra.component=db
+Label=infra.managed-by=infra-podman
+
+# PostgreSQL 18 images keep PGDATA in /var/lib/postgresql/18/docker: mount the parent.
+Volume={{ postgres_volume }}.volume:/var/lib/postgresql:Z
+
+# The superuser password as a file, only read on the first start (empty volume).
+Secret={{ postgres_secret }},type=mount,target=/run/secrets/postgres-password,mode=0400
+Environment=POSTGRES_PASSWORD_FILE=/run/secrets/postgres-password
+
+# No published ports (SPEC 4.4). Each consumer gets its own isolated network (D9).
+{% for consumer in postgres_consumers %}
+Network={{ infra_env }}-{{ consumer }}-pg-{{ postgres_instance }}-net.network
+{% else %}
+Network=none
+{% endfor %}
+
+# Healthy only when the final server accepts TCP on its own loopback: during the first
+# initialisation the image runs a temporary server on the Unix socket only.
+HealthCmd=pg_isready --quiet --host 127.0.0.1 --username postgres --dbname postgres
+HealthInterval=30s
+HealthStartPeriod=60s
+HealthRetries=3
+HealthTimeout=5s
+
+NoNewPrivileges=true
+# Resource limits: the only place they are written (docs/COMPATIBILITY.md).
+PodmanArgs=--memory={{ postgres_memory }} --cpus={{ postgres_cpus }}
+PidsLimit={{ postgres_pids_limit }}
+ShmSize={{ postgres_shm_size }}
+
+[Service]
+Restart=on-failure
+# Quadlet waits for the container to start; the image is pulled beforehand by Ansible.
+TimeoutStartSec=120
+# PostgreSQL needs time to write a checkpoint on a clean shutdown.
+TimeoutStopSec=90
+
+[Install]
+WantedBy=default.target

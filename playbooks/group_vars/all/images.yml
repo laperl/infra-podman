@@ -1,0 +1,12 @@
+---
+# Every container image the platform runs, in ONE place (D6). Pinned by the digest of
+# the index (manifest list), never by tag. Ansible loads this file for every playbook
+# in playbooks/, in dev and prod.
+#
+# Each line is "<name>_image: <repository>@sha256:<digest>  # track: <tag>". The tag in
+# the comment is only where to look for updates (scripts/image-updates.sh, PR 4/4).
+# To update: change the digest in a PR; CI and lifecycle test it; then tag and apply.
+
+# PostgreSQL 18 with the pgvector extension (R27). linux/amd64 and linux/arm64.
+# 2026-10-31: PG_VERSION 18.6-1.pgdg12+2 (Debian 12), the same PostgreSQL as postgres:18.
+postgres_image: "docker.io/pgvector/pgvector@sha256:c29f30688a9ad961691bdf0ec1650717cc132a5814619d80f80463d6e4c42e47"  # track: pg18

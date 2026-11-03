@@ -1,0 +1,51 @@
+---
+# SPEC 4.2: render the units of one service, validate them with the host's own Quadlet
+# generator, install them in the service user's ~/.config/containers/systemd/, reload and
+# restart only what changed. A second apply without changes gives zero changes.
+
+- name: Check the interface
+  ansible.builtin.assert:
+    that:
+      - service_user is defined
+      - quadlet_deploy_state in ['present', 'absent']
+      - quadlet_deploy_units | length > 0
+      - quadlet_deploy_units | selectattr('template', 'undefined') | list | length == 0
+      - quadlet_deploy_units | selectattr('name', 'undefined') | list | length == 0
+      - quadlet_deploy_units | map(attribute='name') | map('regex_search', '\.(container|network|volume)$') | select('none') | list | length == 0
+      - not quadlet_deploy_purge or quadlet_deploy_state == 'absent'
+    fail_msg: "quadlet_deploy needs quadlet_deploy_units (template, name), only .container, .network and .volume; purge only with state absent"
+    quiet: true
+
+- name: Read the service user
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ service_user }}"
+    fail_key: false
+
+- name: Require the service user (playbook base)
+  ansible.builtin.assert:
+    that: ansible_facts['getent_passwd'][service_user] is not none
+    fail_msg: "{{ service_user }} does not exist on {{ inventory_hostname }}. Apply the base playbook first (docs/WORKFLOW.md)."
+    quiet: true
+
+# What sudo keeps from the caller's environment depends on the sudoers policy; Podman and
+# systemctl --user need these, all explicit (same as host_base).
+- name: Set the paths and environment of the service user
+  ansible.builtin.set_fact:
+    quadlet_deploy_dir: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.config/containers/systemd"
+    quadlet_deploy_env:
+      HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
+      XDG_CONFIG_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.config"
+      XDG_DATA_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.local/share"
+      XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+    quadlet_deploy_containers: "{{ quadlet_deploy_units | map(attribute='name') | select('match', '.*\\.container$') | list }}"
+    quadlet_deploy_changed_services: []
+
+# Separate files, so meta: flush_handlers does not inherit a condition.
+- name: Install the units
+  ansible.builtin.include_tasks: install.yml
+  when: quadlet_deploy_state == 'present'
+
+- name: Remove the units
+  ansible.builtin.include_tasks: remove.yml
+  when: quadlet_deploy_state == 'absent'
