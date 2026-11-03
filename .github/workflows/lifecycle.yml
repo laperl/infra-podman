@@ -37,6 +37,14 @@ jobs:
         with:
           persist-credentials: false
 
+      # The runner image sets XDG_* for its own user in /etc/environment, and PAM hands it to
+      # every user's systemd manager: svc_runner's would look for its Quadlet units in
+      # /home/runner/.config. A real server does not do this.
+      - name: Make the runner look like a normal server
+        run: |
+          grep '^XDG_' /etc/environment || true
+          sudo sed -i '/^XDG_/d' /etc/environment
+
       - name: Install Podman 4.9 from Ubuntu 24.04
         run: |
           sudo apt-get update -qq
@@ -78,6 +86,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+
+      # The runner image sets XDG_* for its own user in /etc/environment, and PAM hands it to
+      # every user's systemd manager: svc_runner's would look for its Quadlet units in
+      # /home/runner/.config. A real server does not do this.
+      - name: Make the runner look like a normal server
+        run: |
+          grep '^XDG_' /etc/environment || true
+          sudo sed -i '/^XDG_/d' /etc/environment
 
       - name: Install Podman 4.9 from Ubuntu 24.04
         run: |
