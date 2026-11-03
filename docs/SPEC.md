@@ -1,6 +1,6 @@
 # Especificación: plataforma Podman + Ansible
 
-Versión 1.5 · 3 de noviembre de 2026 · Operador: @Jau
+Versión 1.6 · 3 de noviembre de 2026 · Operador: @Jau
 
 Los cambios respecto a la versión 1, con su motivo, están en [`DECISIONS.md`](DECISIONS.md).
 
@@ -77,8 +77,7 @@ Eres el ingeniero que implementa esta plataforma para un operador único. Eres e
   ansible-navigator.yml
   ansible.cfg                  # rutas de plugins y roles
   execution-environment.yml    # imagen de Ansible (ansible-builder)
-  inventory/dev/  inventory/prod/  # hasta la fase 1c; después, en el repo de datos (4.13)
-  inventory.example/           # desde la fase 1c: datos inventados para el CI y como plantilla
+  inventory.example/           # datos inventados para el CI y como plantilla; el real, en el repo de datos (4.13)
   plugins/lookup/kdbx.py       # lookup propio que invoca keepassxc-cli
   roles/
     host_base/                 # usuario de servicio, linger, firewalld
@@ -167,7 +166,7 @@ Para OpenClaw, SearXNG y el servicio de audio: `NoNewPrivileges=true`, `DropCapa
 - `secrets --env prod` también exige el tag firmado: el playbook que se ejecuta recibe la contraseña maestra.
 - `apply --env prod` pide además escribir `prod` en un terminal interactivo. Sin terminal, se rechaza.
 - Con `prod`, el checkout tiene que estar limpio (sin cambios ni ficheros sin seguimiento).
-- Desde la fase 1c, el inventario se lee del **repo de datos** (4.13), cuya ruta está en `~/.config/infra-podman/deploy.conf`. Con `prod`, ese repo tiene que estar limpio y su último commit firmado por una clave de `allowed_signers` (`git verify-commit`), además del tag firmado del código.
+- Desde la fase 1c, el inventario se lee del **repo de datos** (4.13), cuya ruta está en `~/.config/infra-podman/deploy.conf` (`data_repo`), también en DEV. Con `prod`, ese repo tiene que estar limpio y su último commit firmado por una clave de `allowed_signers` (`git verify-commit`), además del tag firmado del código.
 - Cada ejecución deja una línea en un registro local (`~/.local/state/infra-podman/deploy.log`): fecha, entorno, acción, playbook, tag o rama, commit del repo de datos, hosts y resultado, incluidos los rechazos.
 
 ### 4.11 Backups
@@ -218,12 +217,14 @@ Desde la fase 1c (R38):
 | Qué | Dónde | Quién lo cambia |
 | --- | --- | --- |
 | **Código:** roles, plantillas, playbooks, `deploy.sh`, CI, documentación, digests de imágenes (`images.yml`) e `inventory.example/` con datos inventados | Este repo, en GitHub. Publicable | Claude por PR; el operador mergea y firma el tag |
-| **Datos:** inventario de cada entorno (`inventory/dev/`, `inventory/prod/`): máquinas, aplicaciones, instancias, bases, usuarios y configuración de cada aplicación | **Repo git `infra-podman-data`, solo en el portátil**, en el disco cifrado, sin remoto en GitHub. Todos sus commits firmados | Solo el operador. Cada PR de código dice qué hay que añadir en él |
+| **Datos:** inventario de cada entorno (`inventory/dev/`, `inventory/prod/`): máquinas, aplicaciones, instancias, bases, usuarios y configuración de cada aplicación | **Repo git de datos, solo en el portátil** (`~/Documents/SECURE_vc/ansible/infra-podman`), en el disco cifrado, sin remoto en GitHub. Todos sus commits firmados | Solo el operador. Cada PR de código dice qué hay que añadir en él |
 | **Secretos** | KeePassXC (4.5) | Solo el operador |
 
 - **Copia de seguridad del repo de datos:** los backups de 4.11 (local y GX10, cifrados).
 - **CI:** valida el código con `inventory.example/` y los inventarios de `tests/`. Los datos reales los valida `deploy.sh plan`.
 - Claude nunca ve el repo de datos.
+- **Estructura:** la de [`inventory.example/`](../inventory.example/README.md), dentro de una carpeta `inventory/`. Un repo de datos por proyecto: la carpeta `ansible/` del operador puede tener otros.
+- `deploy.sh` exige que `data_repo` sea la raíz de su propio repo git y que ninguno de los dos repos contenga al otro. En DEV acepta datos sin commit; en prod, no (R40).
 
 ## 5. CI/CD, firma y flujo de cambios
 

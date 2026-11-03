@@ -86,7 +86,7 @@ Sigue en `main`, justo en el tag, sin tocar ningún fichero: `deploy.sh` rechaza
 
 Qué vas a ver:
 
-1. `deploy.sh: tag firmado verificado: v0.1.0`.
+1. `deploy.sh: tag firmado verificado: v0.1.0` y `deploy.sh: commit firmado del repo de datos verificado: data@…`.
 2. Solo en `apply`: `Vas a aplicar … en PRODUCCIÓN … Escribe 'prod' para continuar:`. Escribe `prod`.
 3. `BECOME password:`: la contraseña de sudo **de esa máquina**. No se ve al escribir.
 4. Al final, `PLAY RECAP` con `failed=0`. En el segundo `apply`, también `changed=0`.
@@ -102,10 +102,33 @@ Después puedes seguir trabajando en `main` con normalidad. El siguiente desplie
 | `HEAD no tiene ningún tag firmado…` | El tag está en otro commit (creado antes del `git pull`) o no está firmado. El mensaje dice en qué commit estás y dónde está el último tag | Si el tag no se ha subido: `git tag -d <tag>` y repite el paso 5. Comprueba con `git tag --points-at HEAD` y `git verify-tag <tag>` |
 | `kdbx: cannot read 'Infra_Podman/…' … Could not find entry` | Falta esa entrada en el `.kdbx`, o tiene otro nombre o está en otro grupo | Créala en KeePassXC: grupo `Infra_Podman` y título exactamente el nombre del mensaje. Ver «Cómo desplegarlo» del PR |
 | `hay cambios sin commit o ficheros sin seguimiento` | Hay algo modificado en tu copia | `git status`. Guarda tus cambios en otra rama o descártalos |
+| `el repo de datos tiene cambios sin commit…` | Has editado datos y no has hecho el commit | En el repo de datos: `git status`, y commit firmado o `git restore` («Cambiar datos») |
+| `el último commit del repo de datos … no está firmado…` | Commit hecho sin firma, o con otra clave | `git -C ~/Documents/SECURE_vc/ansible/infra-podman verify-commit HEAD`. Revisa la configuración de firma de ese repo ([`SETUP.md`](SETUP.md), paso 14) y rehaz el commit: `git commit --amend --no-edit -S` |
+| `no existe el repo de datos …` o `define data_repo…` | Volumen `SECURE_vc` sin montar, o falta la línea en `deploy.conf` | Monta el volumen; [`SETUP.md`](SETUP.md), pasos 7 y 14 |
 | `Incorrect sudo password` o `Missing sudo password` | Contraseña de sudo de otra máquina, o falta `--limit` | Repite con `--limit` y la contraseña de esa máquina |
 | `UNREACHABLE` en `laptop` | sshd parado o el alias `laptop` no está bien | `ssh laptop true`; [`SETUP.md`](SETUP.md), paso 9 |
 | `UNREACHABLE` en `gx10` | GX10 apagado o fuera de Tailscale | `ssh gx10 true` |
 | `apply --env prod necesita un terminal interactivo` | Lo has lanzado sin terminal | Lánzalo tú desde una terminal |
+
+## Cambiar datos
+
+Los datos (máquinas, instancias y, más adelante, bases, usuarios y aplicaciones) viven en tu **repo de datos**, `~/Documents/SECURE_vc/ansible/infra-podman` (SPEC 4.13, [`SETUP.md`](SETUP.md), paso 14). No pasan por GitHub ni por PR: los cambias tú y los apruebas con tu firma. Qué va en cada fichero: [`inventory.example/`](../inventory.example/README.md).
+
+Cuando un PR de código diga «añade esto al repo de datos», hazlo así, con el volumen `SECURE_vc` montado y KeePassXC desbloqueado:
+
+```bash
+cd ~/Documents/SECURE_vc/ansible/infra-podman
+$EDITOR inventory/prod/group_vars/postgres_hosts.yml   # el fichero que diga el PR
+git diff                                               # revisa el cambio
+git add -A && git commit -m "qué cambias y por qué"    # se firma solo (commit.gpgSign)
+git verify-commit HEAD                                 # Good "git" signature
+```
+
+Y después, desde tu copia del código, `plan` y `apply` como siempre (paso 6).
+
+- **En DEV** puedes probar datos sin hacer commit: `deploy.sh` los acepta y anota `+dirty` en el registro.
+- **En producción** el repo de datos tiene que estar sin cambios y con el último commit firmado. Si no, `deploy.sh` se niega antes de conectar con ninguna máquina.
+- **Nunca** pongas contraseñas en el repo de datos: van en KeePassXC; en el inventario, solo sus nombres.
 
 ## Las órdenes de `deploy.sh`
 

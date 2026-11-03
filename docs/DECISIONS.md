@@ -334,3 +334,17 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Decisión:** el despliegue de todas las aplicaciones vive en este repo (código) y en el de datos. Las aplicaciones propias tienen su repo, construyen su imagen y la publican en GHCR (SPEC 5.5); aquí solo se apunta su digest.
 - **Motivo:** es lo estándar para una persona. Cada aplicación añade unas pocas plantillas y unas líneas de datos, y tener un solo sitio para `plan`, tag y `apply` simplifica. Si muchas aplicaciones se parecen, se creará un rol genérico «aplicación en contenedor».
 - **Aprobada por:** el operador, el 2026-11-03.
+
+### R40. Cómo lee `deploy.sh` el repo de datos
+
+- **Decisión** (implementa R38 en la fase 1c):
+  - El repo de datos está en `~/Documents/SECURE_vc/ansible/infra-podman`, en el volumen cifrado. Es un repo solo para este proyecto: la carpeta `ansible/` puede tener otros.
+  - Su ruta es la línea `data_repo` de `~/.config/infra-podman/deploy.conf`, y la usan DEV y producción: el inventario de DEV también son datos.
+  - Tiene que ser la raíz de su propio repo git, con al menos un commit, y ni el repo de código puede estar dentro del de datos ni al revés.
+  - En DEV acepta datos sin commit (el registro lo marca con `+dirty`), para probar antes de firmar. En producción, sin cambios y con el último commit firmado, comprobado con `git verify-commit` contra el mismo `allowed_signers` que los tags y con `ssh-keygen` forzado.
+  - `allowed_signers` no puede apuntar a un fichero de ninguno de los dos repos (R4).
+  - El registro de despliegues gana una columna, el commit del repo de datos, entre el tag y los hosts (SPEC 4.10). Las líneas anteriores se quedan con siete columnas.
+  - El repo de código guarda `inventory.example/`, con nombres inventados y comentado, para el CI y como plantilla.
+- **Cómo llega el inventario al contenedor de Ansible:** en `plan` y `apply`, ansible-runner 2.4.3 monta él solo la carpeta del fichero que se pasa con `-i`, en la misma ruta (`_handle_ansible_cmd_options_bind_mounts`). Comprobado en su código y con ansible-navigator 26.10.0 y un `podman` falso. Ese montaje no es de solo lectura; Ansible no escribe en el inventario. En `secrets` se monta en solo lectura.
+- **Motivo:** el inventario no debe estar en GitHub (R38) y producción solo debe recibir datos aprobados con la firma del operador.
+- **Propuesta en:** PR de la fase 1c.
