@@ -151,9 +151,12 @@ run_secrets() {
   local mounts=(
     -v "$REPO_DIR:/work:ro" -w /work
     -v "$kdbx:/kdbx/database.kdbx:ro" -e KDBX_DATABASE=/kdbx/database.kdbx
-    -v "$SSH_AUTH_SOCK:/run/ssh-agent.sock" -e SSH_AUTH_SOCK=/run/ssh-agent.sock
+    # The agent socket at the SAME path as on the laptop, as ansible-navigator does
+    # (ansible-runner's automounts): an IdentityAgent in ~/.ssh/config keeps working.
+    -v "$SSH_AUTH_SOCK:$SSH_AUTH_SOCK" -e "SSH_AUTH_SOCK=$SSH_AUTH_SOCK"
   )
   [[ -d $HOME/.ssh ]] && mounts+=(-v "$HOME/.ssh:/root/.ssh:ro")
+  [[ -f /etc/ssh/ssh_known_hosts ]] && mounts+=(-v /etc/ssh/ssh_known_hosts:/etc/ssh/ssh_known_hosts:ro)
   local playbook_args=(playbooks/secrets.yml -i "inventory/$env_name/hosts.yml")
   [[ -n $limit ]] && playbook_args+=(--limit "$limit")
   [[ -n $rotate ]] && playbook_args+=(-e "secrets_rotate=$rotate")

@@ -263,3 +263,14 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Motivo:** en la fase 1 nadie se conecta a Postgres por red; los backups usan `podman exec`. Sin red no publica puertos ni puede salir a ningún sitio.
 - **Propuesta en:** PR 2/4 de la fase 1.
 - **SPEC:** sección 4.4.
+
+### R31. La firma se configura solo en este repo
+
+- **Corrección:** `SIGNING.md` decía `git config --global` para la firma. Con eso, todos los repos del operador firmaban sus commits y pedían KeePassXC abierto. Ahora todo se configura solo en este repo, y la guía explica cómo deshacer lo global.
+- **Por qué basta:** `deploy.sh` verifica los tags con su propia configuración (`-c gpg.ssh.program=ssh-keygen -c gpg.ssh.allowedSignersFile=…`), sin depender de la de git.
+- **Detectado por:** el operador, el 2026-11-03.
+
+### R32. `deploy.sh secrets` monta el agente SSH en la misma ruta
+
+- **Corrección:** `deploy.sh secrets` montaba el socket del agente en `/run/ssh-agent.sock`. Si `~/.ssh/config` fija `IdentityAgent` con la ruta del portátil, ssh no encontraba el agente dentro del contenedor y fallaba con `Permission denied (publickey)`. En la fase 0 no se vio porque `secrets` aún no se conectaba a ninguna máquina. Ahora se monta en la misma ruta que en el portátil, como hace ansible-navigator (ansible-runner 2.4.3), y también `/etc/ssh/ssh_known_hosts` si existe.
+- **Detectado por:** el operador, el 2026-11-03, con `deploy.sh secrets --env dev --limit vmiadev`.

@@ -162,6 +162,7 @@ if grep -qF -e "$fake_password" -e "$fake_become" "$log" "$work/out"; then fail 
 called_with "secrets uses the pinned image, the host network, the dev inventory, --limit and --rotate" \
   '^podman run --rm -i --user root --security-opt label=disable --network=host .* ghcr\.io/[^ ]+@sha256:[0-9a-f]{64} bash -c .* secrets playbooks/secrets.yml -i inventory/dev/hosts.yml --limit vmiadev -e secrets_rotate=test_dummy$'
 called_with "secrets mounts the database read-only" "-v $work/dev.kdbx:/kdbx/database.kdbx:ro"
+called_with "secrets mounts the SSH agent at the same path, like ansible-navigator" "-v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK -e SSH_AUTH_SOCK=$SSH_AUTH_SOCK "
 if grep '^podman ' "$calls" | grep -q 'ansible-navigator'; then fail "secrets does not use ansible-navigator"; else pass "secrets does not use ansible-navigator"; fi
 
 expect refused "secrets refuses an invalid --rotate name" secrets --env dev --rotate 'x;rm'
