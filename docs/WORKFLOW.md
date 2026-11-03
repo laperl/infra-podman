@@ -50,19 +50,23 @@ En GitHub, en el PR:
 
 ## 5. Crear el tag firmado
 
-En el portátil, con KeePassXC desbloqueado:
+Antes de nada, lee el apartado **«Cómo desplegarlo»** de la descripción del PR: a veces hay que preparar algo antes, por ejemplo una entrada nueva en KeePassXC.
+
+En el portátil, en tu copia del repo, con KeePassXC desbloqueado. **El orden importa:** primero traer el merge y después crear el tag. Un tag creado antes del `git pull` se queda en el commit anterior, y `deploy.sh` lo rechaza.
 
 ```bash
-cd ~/src/infra-podman
-git switch main && git pull                        # trae el merge
-git tag --sort=-v:refname | head -3                # último tag, para elegir el siguiente número
-git tag -s v0.1.0 -m "fase 1: usuario de servicio"  # cambia número y descripción
-git verify-tag v0.1.0                              # tiene que decir Good "git" signature
-git push origin v0.1.0
+git switch main && git pull                        # 1. trae el merge
+git log --oneline -1 --decorate                    # 2. tiene que salir (HEAD -> main, origin/main, ...) con el título del PR
+git tag --sort=-v:refname | head -3                # 3. último tag, para elegir el siguiente número
+git tag -s v0.2.0 -m "fase 1: Postgres"            # 4. cambia número y descripción
+git tag --points-at HEAD                           # 5. tiene que mostrar el tag que acabas de crear
+git verify-tag v0.2.0                              # 6. tiene que decir Good "git" signature
+git push origin v0.2.0                             # 7. súbelo
 ```
 
-- El número sigue `vMAYOR.MENOR.PARCHE` (ver [Versiones de los tags](#versiones-de-los-tags)). El primero es `v0.1.0`.
+- El número sigue `vMAYOR.MENOR.PARCHE` (ver [Versiones de los tags](#versiones-de-los-tags)).
 - `git tag -s` firma con la clave de [`SIGNING.md`](SIGNING.md). Si `verify-tag` no dice `Good`, para: `deploy.sh` lo rechazará igual.
+- **Si te equivocas de commit** y el tag **no** se ha subido todavía: `git tag -d v0.2.0` y vuelve al paso 1. Si ya se había subido, no lo reutilices: crea el siguiente número.
 
 ## 6. Desplegar en producción
 
@@ -95,7 +99,8 @@ Después puedes seguir trabajando en `main` con normalidad. El siguiente desplie
 
 | Mensaje | Qué pasa | Qué hacer |
 | --- | --- | --- |
-| `HEAD no tiene ningún tag firmado…` | No estás en el commit del tag, o el tag no está firmado | `git switch main && git pull`, comprueba con `git tag --points-at HEAD` y con `git verify-tag <tag>` |
+| `HEAD no tiene ningún tag firmado…` | El tag está en otro commit (creado antes del `git pull`) o no está firmado. El mensaje dice en qué commit estás y dónde está el último tag | Si el tag no se ha subido: `git tag -d <tag>` y repite el paso 5. Comprueba con `git tag --points-at HEAD` y `git verify-tag <tag>` |
+| `kdbx: cannot read 'Infra_Podman/…' … Could not find entry` | Falta esa entrada en el `.kdbx`, o tiene otro nombre o está en otro grupo | Créala en KeePassXC: grupo `Infra_Podman` y título exactamente el nombre del mensaje. Ver «Cómo desplegarlo» del PR |
 | `hay cambios sin commit o ficheros sin seguimiento` | Hay algo modificado en tu copia | `git status`. Guarda tus cambios en otra rama o descártalos |
 | `Incorrect sudo password` o `Missing sudo password` | Contraseña de sudo de otra máquina, o falta `--limit` | Repite con `--limit` y la contraseña de esa máquina |
 | `UNREACHABLE` en `laptop` | sshd parado o el alias `laptop` no está bien | `ssh laptop true`; [`SETUP.md`](SETUP.md), paso 9 |
