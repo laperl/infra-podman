@@ -348,3 +348,14 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Cómo llega el inventario al contenedor de Ansible:** en `plan` y `apply`, ansible-runner 2.4.3 monta él solo la carpeta del fichero que se pasa con `-i`, en la misma ruta (`_handle_ansible_cmd_options_bind_mounts`). Comprobado en su código y con ansible-navigator 26.10.0 y un `podman` falso. Ese montaje no es de solo lectura; Ansible no escribe en el inventario. En `secrets` se monta en solo lectura.
 - **Motivo:** el inventario no debe estar en GitHub (R38) y producción solo debe recibir datos aprobados con la firma del operador.
 - **Propuesta en:** PR de la fase 1c.
+
+### R41. Superusuario como dato, y sin `public` ni `vector` en la base `postgres`
+
+- **Decisión** (fase 1d):
+  - **El superusuario de cada instancia se declara en el repo de datos** (`superuser:` en `postgres_instances`), sin valor por defecto en el código. Cambia lo que decían R34 y `POSTGRES.md` («`laperl`, configurable»): un nombre de usuario real no va en el código (R38). El operador usa `laperl`. No existe ningún rol `postgres`.
+  - **Sin esquema `public`** en la base `postgres` ni en `template1`. Así toda base nueva nace sin él, como ya pedía `POSTGRES.md` para las de las aplicaciones.
+  - **Sin extensión `vector` en la base `postgres`**: allí solo entran el superusuario y `backup`, así que no sirve. Cada aplicación la tiene en su propio esquema (fase 2).
+  - **Healthcheck por el socket**, comprobando que el servidor definitivo escucha (`listen_addresses` no vacío). Por TCP, cada comprobación quedaba rechazada por `pg_hba.conf` y apuntada como `FATAL` en el log cada 30 segundos.
+  - **Ansible no recrea nunca una instancia.** Lee en cada `apply` cómo se creó y, si no coincide con R34, se para con un mensaje que remite a `SETUP.md`, paso 15. Recrear es un paso manual del operador, porque borra datos (D11).
+- **Por qué `backup` sigue sin contraseña** (pregunta del operador): solo entra por el socket de dentro del contenedor, y para llegar ahí hay que ser `svc_runner`. Quien puede eso ya lee los ficheros del volumen y la contraseña del superusuario, que Podman guarda sin cifrar (SPEC 4.5). Una contraseña no protegería nada más. Por TCP está rechazado, y el CI lo comprueba.
+- **Aprobada por:** el operador, el 2026-11-03.

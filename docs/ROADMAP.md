@@ -7,7 +7,7 @@ El contenido y el criterio de hecho de cada fase están en [`SPEC.md`](SPEC.md),
 | Fase | Estado |
 | --- | --- |
 | 0. Base | Hecha (2026-11-02): criterio de hecho comprobado por el operador en el portátil y en DEV |
-| 1. Postgres y backups | En curso. Hechos: 1a usuario de servicio (`v0.1.0`) y 1b Postgres (`v0.2.0`). Siguen, en este orden: **1c** repo de datos (SPEC 4.13, R38, R40; en PR); **1d** instancia según `POSTGRES.md` (recrear `pg-main`: `laperl`, locale `builtin`, UTC, checksums, rol `backup`, `pg_hba` generado, endurecimiento; R33–R36); **1e** backups (SPEC 4.11); **1f** cierre (guía de restauración probada, avisos de imágenes nuevas, SECRETS_INVENTORY, 7.1) |
+| 1. Postgres y backups | En curso. Hechos: 1a usuario de servicio (`v0.1.0`), 1b Postgres (`v0.2.0`) y 1c repo de datos (`v0.3.0`; SPEC 4.13, R38, R40). Siguen, en este orden: **1d** instancia según `POSTGRES.md` (recrear `pg-main`: superusuario como dato, locale `builtin`, UTC, checksums, rol `backup`, sin `public`, `pg_hba` generado, endurecimiento; R33–R36, R41; en PR); **1e** backups (SPEC 4.11); **1f** cierre (guía de restauración probada, avisos de imágenes nuevas, SECRETS_INVENTORY, 7.1) |
 | 1b. Cortafuegos | Cuando el operador lo decida, antes de la fase 5 (R20) |
 | 2. Firefly III y pgAdmin | Pendiente. Bases y usuarios como datos según `POSTGRES.md`; pgAdmin solo en `127.0.0.1` (R37) |
 | 3. Observabilidad | Pendiente |

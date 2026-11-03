@@ -342,3 +342,98 @@ Si el volumen `SECURE_vc` no está montado, `deploy.sh` se niega con `no existe 
 La copia de seguridad del repo de datos la harán los backups de la fase 1e. Mientras tanto vive solo en el portátil: si se perdiera, se rehace con estos mismos pasos desde `v0.2.0`, pero se perderían los cambios hechos después.
 
 Cómo se cambian los datos a partir de ahora: [`WORKFLOW.md`](WORKFLOW.md), «Cambiar datos».
+
+## 15. Recrear `pg-main` con el estándar de PostgreSQL (fase 1d)
+
+Los parámetros de una instancia (superusuario, locale, codificación, checksums) solo se fijan al crearla por primera vez ([`POSTGRES.md`](POSTGRES.md), sección 1). La `pg-main` de la fase 1b se creó antes del estándar, así que hay que **borrarla y crearla de nuevo**. Se puede porque está vacía. Se hace una vez en DEV y una vez en el portátil.
+
+Ansible nunca borra una instancia por su cuenta (D11). Si encuentra una creada de otra forma, se para con `was not created with the platform's parameters` y te remite aquí.
+
+No hace falta nada nuevo en KeePassXC: el superusuario nuevo usa la misma entrada, `pg-main-superuser-password`, y el mismo secreto de Podman.
+
+### 15.1 El superusuario en el repo de datos
+
+En `inventory/dev/group_vars/postgres_hosts.yml` **y** en `inventory/prod/group_vars/postgres_hosts.yml` de tu repo de datos, la instancia tiene que quedar así:
+
+```yaml
+postgres_instances:
+  - name: main
+    superuser: laperl
+```
+
+```bash
+cd ~/Documents/SECURE_vc/ansible/infra-podman
+$EDITOR inventory/dev/group_vars/postgres_hosts.yml inventory/prod/group_vars/postgres_hosts.yml
+git diff                                       # solo las dos líneas superuser
+git commit -am "pg-main: superuser (infra-podman phase 1d)"
+git verify-commit HEAD                         # Good "git" signature
+```
+
+### 15.2 En DEV, desde la rama del PR
+
+**a. Comprueba que la protección funciona.** Con la instancia antigua aún en marcha, `plan` tiene que pararse:
+
+```bash
+./deploy.sh plan postgres --env dev --limit vmiadev
+# … FAILED … dev-pg-main was not created with the platform's parameters … docs/SETUP.md, section 15
+```
+
+**b. Comprueba que está vacía y bórrala.** En `vmiadev`, con la función `svc` del paso 12. La instancia antigua tiene el superusuario `postgres`:
+
+```bash
+ssh vmiadev
+svc podman exec dev-pg-main psql -XAt -U postgres -c "SELECT datname FROM pg_database ORDER BY 1"
+#   postgres, template0 y template1. Si sale otra base, PARA y avísame.
+svc podman exec dev-pg-main psql -XAt -U postgres -d postgres \
+  -c "SELECT count(*) FROM pg_tables WHERE schemaname NOT IN ('pg_catalog', 'information_schema')"
+#   0. Si no, PARA y avísame.
+
+svc systemctl --user stop dev-pg-main.service              # para y elimina el contenedor
+svc systemctl --user stop dev-pg-main-data-volume.service  # para que el apply vuelva a crear el volumen
+svc podman volume rm dev-pg-main-data                      # BORRA los datos de pg-main
+svc podman volume ls --filter label=infra.app=pg-main      # vacío
+exit
+```
+
+**c. Créala de nuevo**, desde el portátil:
+
+```bash
+./deploy.sh plan  postgres --env dev --limit vmiadev
+./deploy.sh apply postgres --env dev --limit vmiadev
+./deploy.sh apply postgres --env dev --limit vmiadev       # changed=0
+```
+
+**d. Comprueba**, en `vmiadev`:
+
+```bash
+svc podman healthcheck run dev-pg-main && echo sano
+svc podman exec dev-pg-main psql -XAt -U laperl -d postgres -c \
+  "SELECT datlocprovider, datlocale, pg_encoding_to_char(encoding), current_setting('data_checksums'), current_setting('TimeZone') FROM pg_database WHERE datname = 'postgres'"
+#   b|C.UTF-8|UTF8|on|UTC
+```
+
+### 15.3 En el portátil, después del merge y del tag
+
+Lo mismo, con `prod` y `--limit laptop`, desde tu copia del código en el tag (`docs/WORKFLOW.md`, pasos 5 y 6). En el portátil la función `svc` se usa directamente, sin `ssh`:
+
+```bash
+./deploy.sh plan postgres --limit laptop                   # se para: … not created with the platform's parameters
+
+svc podman exec prod-pg-main psql -XAt -U postgres -c "SELECT datname FROM pg_database ORDER BY 1"
+svc podman exec prod-pg-main psql -XAt -U postgres -d postgres \
+  -c "SELECT count(*) FROM pg_tables WHERE schemaname NOT IN ('pg_catalog', 'information_schema')"
+#   Solo postgres, template0 y template1, y 0 tablas. Si no, PARA y avísame.
+
+svc systemctl --user stop prod-pg-main.service
+svc systemctl --user stop prod-pg-main-data-volume.service
+svc podman volume rm prod-pg-main-data
+
+./deploy.sh plan  postgres --limit laptop
+./deploy.sh apply postgres --limit laptop
+./deploy.sh apply postgres --limit laptop                  # changed=0
+svc podman healthcheck run prod-pg-main && echo sano
+```
+
+Después, reinicia el portátil y repite la última línea: forma parte del criterio de hecho de la fase 1 («sobrevive a un reinicio»).
+
+Desde ahora, la consola es `svc podman exec -it prod-pg-main psql -U laperl -d postgres` ([`POSTGRES.md`](POSTGRES.md), sección 5).
