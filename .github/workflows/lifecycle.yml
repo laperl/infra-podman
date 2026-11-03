@@ -45,19 +45,19 @@ jobs:
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Plan before anything exists (check mode)
-        run: ansible-playbook -i tests/lifecycle/inventory.yml playbooks/base.yml --check --diff
+        run: tests/lifecycle/playbook.sh -i tests/lifecycle/inventory.yml playbooks/base.yml --check --diff
 
       - name: Apply
-        run: ansible-playbook -i tests/lifecycle/inventory.yml playbooks/base.yml --diff
+        run: tests/lifecycle/playbook.sh -i tests/lifecycle/inventory.yml playbooks/base.yml --diff
 
       - name: Apply again, expecting zero changes (SPEC 4.2)
         run: |
-          ansible-playbook -i tests/lifecycle/inventory.yml playbooks/base.yml | tee second.log
+          tests/lifecycle/playbook.sh -i tests/lifecycle/inventory.yml playbooks/base.yml | tee second.log
           grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "The second apply changed something"; exit 1; }
 
       - name: Plan after apply, expecting zero changes
         run: |
-          ansible-playbook -i tests/lifecycle/inventory.yml playbooks/base.yml --check | tee plan.log
+          tests/lifecycle/playbook.sh -i tests/lifecycle/inventory.yml playbooks/base.yml --check | tee plan.log
           grep -Eq 'changed=0 +unreachable=0 +failed=0' plan.log || { echo "The plan after apply shows changes"; exit 1; }
 
       - name: Check the result as the operator would
