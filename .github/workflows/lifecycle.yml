@@ -163,7 +163,11 @@ jobs:
           home=$(getent passwd svc_runner | cut -d: -f6)
           (cd / && sudo -u svc_runner sed -i '1s/^/# changed by lifecycle\n/' "$home/.config/infra-podman/dev-pg-main/pg_hba.conf")
           tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml 2>&1 | tee hba.log | tee -a all.log
-          grep -A1 'Reload pg_hba.conf' hba.log | grep -q '^changed:' || { echo "::error::pg_hba.conf was not reloaded"; exit 1; }
+          if ! grep -A2 'Reload pg_hba.conf' hba.log | grep -q '^changed:'; then
+            echo "::error::the playbook did not reload pg_hba.conf: $(grep -A2 'pg_hba' hba.log | tr '\n' ' ')"; exit 1
+          fi
+          tests/lifecycle/as-svc.sh podman logs dev-pg-main 2>&1 | grep -q 'received SIGHUP, reloading configuration files' \
+            || { echo "::error::PostgreSQL did not reload its configuration"; exit 1; }
           [[ $(tests/lifecycle/as-svc.sh podman inspect dev-pg-main --format '{{.State.StartedAt}}') == "$started" ]] \
             || { echo "::error::PostgreSQL was restarted for a pg_hba.conf change"; exit 1; }
           tests/lifecycle/check-postgres.sh read

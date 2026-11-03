@@ -94,6 +94,11 @@ case $1 in
     sql "CREATE SCHEMA app; CREATE EXTENSION vector SCHEMA app; SELECT '[1,2]'::app.vector;" lifecycle_app >/dev/null
     sql "DROP DATABASE lifecycle_app"
 
+    # The healthcheck uses the socket: until now nothing has been rejected in the log.
+    if "$as" podman logs "$name" 2>&1 | grep -q 'pg_hba.conf rejects connection'; then
+      fail "something (the healthcheck?) is being rejected by pg_hba.conf"
+    fi
+
     # pg_hba.conf: over TCP the superuser, backup and anyone else are rejected.
     tcp_rejected "$su"
     tcp_rejected backup

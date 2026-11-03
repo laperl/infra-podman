@@ -70,9 +70,9 @@
   block:
     - name: Read how the instance was created
       ansible.builtin.command:
-        argv: "{{ postgres_psql + ['-d', 'postgres', '-c', query] }}"
+        argv: "{{ postgres_psql + ['-d', 'postgres', '-c', postgres_query] }}"
       vars:
-        query: >-
+        postgres_query: >-
           SELECT concat_ws('|', d.datlocprovider, d.datlocale, d.datcollate, d.datctype,
           pg_encoding_to_char(d.encoding), current_setting('data_checksums'),
           current_setting('TimeZone'), current_setting('log_timezone'))
@@ -111,9 +111,9 @@
 
     - name: Read whether template1 still has the schema public
       ansible.builtin.command:
-        argv: "{{ postgres_psql + ['-d', 'template1', '-c', query] }}"
+        argv: "{{ postgres_psql + ['-d', 'template1', '-c', postgres_query] }}"
       vars:
-        query: SELECT count(*) FROM pg_namespace WHERE nspname = 'public'
+        postgres_query: SELECT count(*) FROM pg_namespace WHERE nspname = 'public'
       environment: "{{ postgres_env }}"
       become: true
       become_user: "{{ service_user }}"
@@ -156,7 +156,9 @@
       changed_when: true
       when: postgres_template1_public.stdout != '0'
 
-    - name: Reload pg_hba.conf
+    # Not a handler: it has to run here, after the container is up and healthy, and the
+    # handlers of quadlet_deploy are flushed earlier, inside its include.
+    - name: Reload pg_hba.conf  # noqa: no-handler
       ansible.builtin.command:
         argv: "{{ postgres_psql + ['-d', 'postgres', '-c', 'SELECT pg_reload_conf()'] }}"
       environment: "{{ postgres_env }}"
@@ -167,9 +169,9 @@
 
     - name: Check that PostgreSQL accepts every line of pg_hba.conf
       ansible.builtin.command:
-        argv: "{{ postgres_psql + ['-d', 'postgres', '-c', query] }}"
+        argv: "{{ postgres_psql + ['-d', 'postgres', '-c', postgres_query] }}"
       vars:
-        query: >-
+        postgres_query: >-
           SELECT coalesce(string_agg(line_number || ': ' || error, '; '), 'ok')
           FROM pg_hba_file_rules WHERE error IS NOT NULL
       environment: "{{ postgres_env }}"

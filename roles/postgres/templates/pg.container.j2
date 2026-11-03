@@ -33,10 +33,10 @@ Network={{ infra_env }}-{{ consumer }}-pg-{{ postgres_instance }}-net.network
 Network=none
 {% endfor %}
 
-# Healthy only when the final server accepts TCP on its own loopback: during the first
-# initialisation the image runs a temporary server on the Unix socket only. pg_isready
-# does not log in, so the TCP rejection in pg_hba.conf does not affect it.
-HealthCmd=pg_isready --quiet --host 127.0.0.1 --username {{ postgres_superuser }} --dbname postgres
+# Through the socket, which pg_hba.conf allows: over TCP every probe would be rejected and
+# logged. Healthy only when the final server runs: during the first initialisation the
+# image runs a temporary server with listen_addresses empty. Podman runs it with sh -c.
+HealthCmd=psql -XAtq -U {{ postgres_superuser }} -d postgres -c "SHOW listen_addresses" | grep -q .
 HealthInterval=30s
 HealthStartPeriod=60s
 HealthRetries=3
