@@ -7,9 +7,9 @@ El contenido y el criterio de hecho de cada fase están en [`SPEC.md`](SPEC.md),
 | Fase | Estado |
 | --- | --- |
 | 0. Base | Hecha (2026-11-02): criterio de hecho comprobado por el operador en el portátil y en DEV |
-| 1. Postgres y backups | En curso. Hechos: PR 1/4 (usuario de servicio, `v0.1.0`). En revisión: PR 2/4 (Postgres). Después: 3/4 backups, 4/4 cierre |
+| 1. Postgres y backups | En curso. Hechos: 1a usuario de servicio (`v0.1.0`) y 1b Postgres (`v0.2.0`). Siguen, en este orden: **1c** repo de datos (SPEC 4.13, R38); **1d** instancia según `POSTGRES.md` (recrear `pg-main`: `laperl`, locale `builtin`, UTC, checksums, rol `backup`, `pg_hba` generado, endurecimiento; R33–R36); **1e** backups (SPEC 4.11); **1f** cierre (guía de restauración probada, avisos de imágenes nuevas, SECRETS_INVENTORY, 7.1) |
 | 1b. Cortafuegos | Cuando el operador lo decida, antes de la fase 5 (R20) |
-| 2. Firefly III | Pendiente |
+| 2. Firefly III y pgAdmin | Pendiente. Bases y usuarios como datos según `POSTGRES.md`; pgAdmin solo en `127.0.0.1` (R37) |
 | 3. Observabilidad | Pendiente |
 | 4. LiteLLM | Más adelante |
 | 5. Agentes | Más adelante |
@@ -33,3 +33,5 @@ El contenido y el criterio de hecho de cada fase están en [`SPEC.md`](SPEC.md),
 | Espacio libre en el disco del GX10 | Antes del PR 3/4 (rest-server) | El 2026-11-03 tenía un 97 % ocupado (30 GB libres de 916 GB), en una sola partición. No hace falta reparticionar. El operador revisa qué ocupa más y borra lo que sobre. rest-server tendrá un tope de tamaño (`--max-size`) para que los backups no se coman el último espacio. Si no basta, se adelanta el disco USB |
 | Backup antes de cambiar la imagen de Postgres | PR 3/4 | Antes de reiniciar Postgres con una imagen nueva, el `apply` hace un volcado, para poder volver atrás a mano (D11) |
 | Avisos semanales de imágenes nuevas | PR 4/4 | `scripts/image-updates.sh` y un workflow semanal que falla, y por tanto avisa por correo, cuando un digest de `images.yml` tiene versión nueva. Aprobado el 2026-11-03 |
+| Digests de los backups (fase 1e) | Al implementar 1e | Comprobados por el operador el 2026-11-03 (índice multiarquitectura, amd64 y arm64): `docker.io/restic/restic:0.19.1` → `sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510`; `docker.io/restic/rest-server:0.14.0` → `sha256:d2aff06f47eb38637dff580c3e6bce4af98f386c396a25d32eb6727ec96214a5`. Van a `playbooks/group_vars/all/images.yml` |
+| Diseño de los backups acordado (fase 1e) | Al implementar 1e | En el GX10, volumen de Podman `prod-backup-repo`, nada en carpetas del operador. rest-server con `--append-only` y un tope `--max-size` (propuesta: 15 GB). Si una copia falla por espacio, el aviso explica en español qué ha pasado, cuánto se usa y qué hacer; cómo se entera el operador se propone en 1e. Cada copia lleva etiquetas de entorno, aplicación y tipo (`pgdump`, `volume`, `files`), con rutas `<app>/<tipo>/<nombre>`. Cada aplicación declara en una lista qué guarda. Se vuelcan todas las bases de cada instancia con el rol `backup`. El repo de datos también se copia |

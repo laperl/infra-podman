@@ -12,6 +12,7 @@ Infraestructura de un operador único: servicios en contenedores Podman gestiona
 | Configurar la firma de tags y commits (una vez) | [`docs/SIGNING.md`](docs/SIGNING.md) |
 | Saber en qué fase estamos y qué queda pendiente | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
 | Ver qué secretos existen (sin valores) | [`docs/SECRETS_INVENTORY.md`](docs/SECRETS_INVENTORY.md) |
+| Cómo se monta Postgres: instancias, bases, grupos, usuarios y acceso | [`docs/POSTGRES.md`](docs/POSTGRES.md) |
 
 ## Referencia
 

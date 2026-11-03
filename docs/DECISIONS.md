@@ -274,3 +274,63 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 
 - **Corrección:** `deploy.sh secrets` montaba el socket del agente en `/run/ssh-agent.sock`. Si `~/.ssh/config` fija `IdentityAgent` con la ruta del portátil, ssh no encontraba el agente dentro del contenedor y fallaba con `Permission denied (publickey)`. En la fase 0 no se vio porque `secrets` aún no se conectaba a ninguna máquina. Ahora se monta en la misma ruta que en el portátil, como hace ansible-navigator (ansible-runner 2.4.3), y también `/etc/ssh/ssh_known_hosts` si existe.
 - **Detectado por:** el operador, el 2026-11-03, con `deploy.sh secrets --env dev --limit vmiadev`.
+
+### R33. Estándar de PostgreSQL del operador
+
+- **Decisión:** las instancias y las bases de las aplicaciones siguen el estándar que el operador ya usaba en `personal-data-platform` (sus ADR 0003 y 0004), adaptado a esta plataforma. Detalle en [`POSTGRES.md`](POSTGRES.md).
+- **Un solo modelo por aplicación:** base `<app>` cuyo dueño es `<app>_owner`; tres grupos sin LOGIN (`_owner`, `_writer` y `_reader`); usuarios LOGIN a demanda, cada uno en un grupo; esquema `<app>` con `vector`, sin `public`; solo conectan sus roles y `backup`. Sin grupo `_migrate`.
+- **Cambia D8**, de «una base y un rol por aplicación» a «una base y tres grupos por aplicación, con usuarios a demanda». Lo aprobó el operador.
+- **Del estándar anterior no se mantienen:** la red compartida `postgres-net` (sigue D9: una red aislada por consumidor), los ficheros de contraseñas (`.pass`, `.pgpass`), sustituidos por KeePassXC y secretos de Podman (D7), y el puerto publicado en el host.
+- **Aprobada por:** el operador, el 2026-11-03.
+- **SPEC:** D8, sección 4.4 y [`POSTGRES.md`](POSTGRES.md).
+
+### R34. Parámetros fijos de cada instancia
+
+- **Decisión:** superusuario `laperl` (configurable), `POSTGRES_DB=postgres`, `UTF8`, locale `builtin` `C.UTF-8`, zona horaria `UTC`, checksums de datos y `scram-sha-256`. Iguales en todas las instancias.
+- **Motivo:** el operador pide que nunca den problemas con ningún idioma ni emoji, que el orden de los textos no cambie al actualizar el sistema base y que las migraciones futuras sean predecibles. El proveedor `builtin` (desde PostgreSQL 17) no depende de glibc ni de ICU. UTC con `timestamptz` es lo estándar para las fechas.
+- **`pg-main` se recrea** con estos parámetros mientras está vacía: solo se fijan al crear la base por primera vez.
+- **Por comprobar en el CI:** que la imagen admite el proveedor `builtin` y que los checksums quedan activados.
+- **Aprobada por:** el operador, el 2026-11-03.
+
+### R35. Quién crea las tablas
+
+- **Decisión:**
+  - en las aplicaciones propias, un usuario de migraciones en `_owner` y otro de uso diario en `_writer`;
+  - en las de terceros que migran solas (por ejemplo Firefly), un único usuario en `_owner`;
+  - los cambios a mano los hace el superusuario con `SET ROLE <app>_owner`;
+  - a los usuarios de `_owner` se les fija `ALTER ROLE … SET role = <app>_owner`, para que lo que creen quede a nombre del grupo.
+- **Motivo:** el dueño de un objeto es quien lo crea, y los privilegios por defecto solo se aplican a lo que crea `_owner`. Separar el usuario de migraciones del de uso diario es la práctica recomendada. Dar `_owner` solo durante la instalación y quitarlo después es frágil: si se olvida quitarlo, sobran permisos; si no se da al actualizar, la actualización falla.
+- **Por comprobar en el CI:** `ALTER ROLE … SET role`.
+- **Aprobada por:** el operador, el 2026-11-03.
+
+### R36. `_reader` no puede modificar datos de ninguna forma
+
+- **Decisión:** `_reader` solo tiene acceso al esquema y `SELECT` sobre las tablas. Sin permiso de ejecución sobre las funciones de la aplicación ni sobre las secuencias. Si hiciera falta una función concreta, se concede a mano.
+- **Motivo:** el estándar anterior daba `EXECUTE` a `_reader`, y una función `SECURITY DEFINER` le habría permitido modificar datos. El operador lo prohíbe.
+- **Comprobación:** el CI verifica que `_reader` no puede insertar, modificar, borrar ni ejecutar una función que escribe.
+- **Aprobada por:** el operador, el 2026-11-03.
+
+### R37. pgAdmin como aplicación de la plataforma
+
+- **Decisión:**
+  - pgAdmin 4 es una aplicación más de `svc_runner`, desplegada con Ansible en la fase 2;
+  - tiene su propia red aislada hacia la instancia y publica solo en `127.0.0.1` del portátil;
+  - su contraseña de entrada está en KeePassXC;
+  - el superusuario solo puede entrar por TCP desde la subred de pgAdmin, con `scram-sha-256`.
+- **Motivo:** el operador administra con pgAdmin. El que tiene en su propio Podman no puede llegar a las redes de `svc_runner`, y Postgres no publica puertos (4.4).
+- **Servicio nuevo** (SPEC 8): aprobado por el operador el 2026-11-03.
+
+### R38. Los datos del operador viven fuera de este repo
+
+- **Decisión:** el código (roles, plantillas, playbooks, CI y documentación) sigue en este repo, en GitHub. Los **datos** (inventario, bases, usuarios y configuración de cada aplicación) pasan a un **repo git solo en el portátil**, en el disco cifrado, sin GitHub, con todos sus commits firmados. Su copia de seguridad la hacen los backups de restic (local y GX10, cifrados). Detalle en SPEC 4.13.
+- **Motivo:** el operador no quiere que GitHub sepa qué aplicaciones usa ni cómo se llaman sus bases y usuarios. Un repo privado puede acabar visible: en 2022 se robaron repos privados de decenas de organizaciones con tokens de OAuth robados. Separar código y datos es como lo hacen quienes publican sus repos de Ansible. Así este repo es publicable y los datos nunca salen de las máquinas del operador.
+- **Se mantiene el control:** en `prod`, `deploy.sh` exige el tag firmado del código y además que el último commit del repo de datos esté firmado por una clave de confianza y sin cambios pendientes.
+- **Coste:** los cambios de datos no pasan por el CI de GitHub; se comprueban con `deploy.sh plan`. Claude no ve el repo de datos: cada PR dice qué hay que añadir en él.
+- **Descartado:** dejar los datos en este repo privado (quedarían en GitHub) y guardarlos en una carpeta sin git (sin firma, `deploy.sh` desplegaría datos sin aprobar).
+- **Aprobada por:** el operador, el 2026-11-03.
+
+### R39. Un solo repo de infraestructura para todas las aplicaciones
+
+- **Decisión:** el despliegue de todas las aplicaciones vive en este repo (código) y en el de datos. Las aplicaciones propias tienen su repo, construyen su imagen y la publican en GHCR (SPEC 5.5); aquí solo se apunta su digest.
+- **Motivo:** es lo estándar para una persona. Cada aplicación añade unas pocas plantillas y unas líneas de datos, y tener un solo sitio para `plan`, tag y `apply` simplifica. Si muchas aplicaciones se parecen, se creará un rol genérico «aplicación en contenedor».
+- **Aprobada por:** el operador, el 2026-11-03.
