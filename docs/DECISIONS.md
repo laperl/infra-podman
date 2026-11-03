@@ -131,3 +131,58 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Motivo del kdbx:** solo tiene valores ficticios y se recrea con los nombres de `infra_secrets` en `inventory/dev/group_vars/all.yml`. La VM no es nodo de control (R2), así que no lo necesita.
 - **Salvedad:** si DEV guardara datos que dependan de un secreto de ese fichero (por ejemplo, un volumen de Postgres de DEV creado con su contraseña), perderlo obligaría a recrear ese volumen. Es DEV y es aceptable. Si DEV deja de ser desechable, se reconsidera.
 - **Propuesta en:** PR de la fase 0c.
+
+### R18. El portátil es el principal de los datos personales; sin réplica
+
+- **Decisión:**
+  - El Postgres principal y las aplicaciones personales viven en el portátil, para tenerlas siempre disponibles, también sin conexión.
+  - No hay réplica de Postgres en el GX10.
+  - D8 pasa a ser «un Postgres por máquina que lo necesite»: en una misma máquina pueden convivir varias instancias, cada una con su nombre, su volumen y sus redes.
+  - Los servicios del GX10 que necesiten base de datos (por ejemplo, LiteLLM en la fase 4) tendrán su propia instancia allí, sin sincronizarse con la del portátil.
+- **Motivo:**
+  - Una réplica copia también los errores.
+  - Con conexión intermitente, el portátil acumula WAL sin límite o la réplica se rompe. Según la documentación de Postgres, por defecto `max_slot_wal_keep_size = -1`.
+  - Sería de solo lectura en el GX10.
+  - Dejaría los datos sin cifrar en un disco sin LUKS.
+  - Para una sola persona, los backups (R19) protegen más con menos piezas.
+- **Redes:** sigue D9. Cada red de consumidor se une solo a su instancia; no hay una red común para todos los Postgres.
+- **Aprobada por:** el operador, el 2026-11-02, con la condición de no complicarlo en exceso.
+- **SPEC:** secciones 2, 3 (D3, D8), 4.4, 4.7 y 6.
+
+### R19. Backups con restic y copia append-only en el GX10
+
+- **Decisión:**
+  - En el portátil, una vez al día, `pg_dump` de cada base y copia de los volúmenes de datos a un repositorio restic local. El operador lo pidió diario en vez de cada hora, para no cargar el portátil.
+  - Cuando el GX10 está alcanzable, copia a un rest-server de restic en el GX10 en modo `--append-only`, desde el que se aplica la retención.
+  - restic y rest-server corren como contenedores Quadlet.
+- **Motivo:**
+  - Un solo binario que cifra en origen y deduplica.
+  - El GX10 no necesita disco cifrado, porque solo recibe datos cifrados.
+  - En modo append-only, un portátil comprometido no puede borrar la copia externa.
+  - borg necesitaría borg instalado también en el GX10.
+- **Pérdida aceptada:** lo hecho desde la última copia diaria, o desde el último contacto con el GX10 si se pierde el portátil.
+- **Aprobada por:** el operador, el 2026-11-02.
+- **SPEC:** sección 4.11. Cierra la decisión abierta de backups de 7.2.
+
+### R20. El cortafuegos sale de la fase 1
+
+- **Decisión:** firewalld (D10) pasa a la fase 1b. Se hará cuando el operador lo decida, antes de la fase 5. Empieza con una auditoría de solo lectura de lo que escucha cada servidor, sigue con un ensayo en `vmiadev` y se aplica en dos pasos, con una puerta de emergencia por la red local.
+- **Motivo:**
+  - Con R18, la fase 1 apenas toca el GX10.
+  - Un error en el cortafuegos obliga a ir físicamente al GX10.
+  - Todavía está pendiente comprobar cómo convive firewalld con Docker y NVIDIA.
+- **Riesgo conocido mientras tanto:** Docker publica sus puertos en todas las interfaces y se salta ufw. Si vLLM se lanzó con `-p`, puede estar accesible desde la red de casa. La auditoría lo confirmará.
+- **Aprobada por:** el operador, el 2026-11-02.
+
+### R21. Escáner y actualizaciones automáticas, después de la fase 3
+
+- **Decisión:** Trivy (escáner de vulnerabilidades) y Dependabot (PRs de actualización de las actions y de los paquetes de Python) se añaden después de la fase 3. Las actualizaciones de digests de imágenes se deciden más adelante, porque Dependabot no las cubre en plantillas Quadlet.
+- **Aprobada por:** el operador («no es urgente»).
+
+### R22. Convención de nombres y etiquetas
+
+- **Decisión:** los contenedores, redes, volúmenes y secretos se nombran `<entorno>-<app>[-<pieza>]`. Las redes, `<entorno>-<consumidor>-<proveedor>-net`. Todos llevan las etiquetas `infra.env`, `infra.app`, `infra.component` e `infra.managed-by`. Detalle en SPEC 4.12.
+- **Motivo:** el operador quiere saber de un vistazo de quién es cada objeto, para qué sirve y de qué entorno es. El nombre lo hace legible y las etiquetas permiten filtrar con `podman … --filter label=…`, sin herramientas nuevas. Es el mismo patrón que las etiquetas recomendadas de Kubernetes.
+- **Comprobado:** `ContainerName=`, `NetworkName=`, `VolumeName=` y `Label=` existen en Quadlet 4.9. Sin los nombres explícitos, Podman antepone `systemd-`.
+- **Aprobada por:** pendiente, con este PR.
+- **SPEC:** sección 4.12.
