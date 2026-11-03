@@ -110,7 +110,11 @@ verify_signed_checkout() {
       return 0
     fi
   done
-  refuse "HEAD no tiene ningún tag firmado por una clave de confianza (git tag -s, ver docs/WORKFLOW.md)"
+  local nearest
+  nearest=$(git describe --tags --abbrev=0 2>/dev/null || echo ninguno)
+  refuse "HEAD ($(git rev-parse --short HEAD)) no tiene ningún tag firmado por una clave de confianza." \
+    "El último tag ($nearest) está en $(git rev-parse --short "$nearest^{commit}" 2>/dev/null || echo '-')." \
+    "¿Creaste el tag antes de git pull? Ver docs/WORKFLOW.md, paso 5"
 }
 
 confirm_prod_apply() {

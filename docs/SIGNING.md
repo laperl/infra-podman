@@ -17,7 +17,10 @@ git config user.signingkey "key::$(ssh-add -L | grep git-signing)"
 git config user.email reposja@pm.me
 git config tag.gpgSign true      # git tag -a/-m firma siempre
 git config commit.gpgSign true   # opcional: firma también los commits de este repo
+git config gpg.ssh.allowedSignersFile ~/.config/infra-podman/allowed_signers   # para git verify-tag (paso 2)
 ```
+
+Sin la última línea, `git verify-tag` falla con `gpg.ssh.allowedSignersFile needs to be configured and exist`. `deploy.sh` no la necesita (usa la suya), pero tú sí, para comprobar un tag a mano. El fichero se crea en el paso 2.
 
 `ssh-add -L | grep git-signing` tiene que devolver una sola línea, con tu clave. KeePassXC tiene que estar desbloqueado para firmar.
 
