@@ -116,13 +116,20 @@
     path: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}/bus
     timeout: 30
 
+# sudo does not always reset HOME (it depends on the sudoers policy), and Podman reads
+# its configuration from $HOME and the user bus from $XDG_RUNTIME_DIR. Both explicit.
+- name: Set the environment of the service user
+  ansible.builtin.set_fact:
+    host_base_user_env:
+      HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
+      XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+
 - name: Check Podman as the service user
   ansible.builtin.command:
     cmd: podman info --format {% raw %}'{{ .Host.Security.Rootless }}'{% endraw %}
   become: true
   become_user: "{{ service_user }}"
-  environment:
-    XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+  environment: "{{ host_base_user_env }}"
   register: host_base_rootless
   changed_when: false
   check_mode: false
@@ -140,5 +147,4 @@
     scope: user
   become: true
   become_user: "{{ service_user }}"
-  environment:
-    XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+  environment: "{{ host_base_user_env }}"
