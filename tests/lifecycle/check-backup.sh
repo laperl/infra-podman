@@ -14,7 +14,10 @@ unit=dev-backup
 home=$(getent passwd svc_runner | cut -d: -f6)
 status=/var/lib/infra-podman/backup-status/$unit.status
 image=$(sed -n 's/^restic_image: *"\([^"]*\)".*/\1/p' "$here/../../playbooks/group_vars/all/images.yml")
-fail() { echo "::error title=check-backup::$*"; exit 1; }
+# fd 3 is the real stdout: a failure inside a command whose output is discarded must
+# still reach the annotations.
+exec 3>&1
+fail() { echo "::error title=check-backup::$*" >&3; exit 1; }
 # Any unexpected failure names its line, command and error: the job log is not readable
 # from the checks API.
 errlog=$(mktemp)
