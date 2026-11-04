@@ -92,9 +92,9 @@ case $1 in
     ;;
   retention)
     gen=$("$as" systemctl --user cat "$unit.service")
-    d=$(grep -o 'BACKUP_KEEP_DAILY=[0-9]*' <<<"$gen" | cut -d= -f2)
-    m=$(grep -o 'BACKUP_KEEP_MONTHLY=[0-9]*' <<<"$gen" | cut -d= -f2)
-    y=$(grep -o 'BACKUP_KEEP_YEARLY=[0-9]*' <<<"$gen" | cut -d= -f2)
+    d=$(grep -o 'BACKUP_KEEP_DAILY=[0-9]*' <<<"$gen" | head -1 | cut -d= -f2)
+    m=$(grep -o 'BACKUP_KEEP_MONTHLY=[0-9]*' <<<"$gen" | head -1 | cut -d= -f2)
+    y=$(grep -o 'BACKUP_KEEP_YEARLY=[0-9]*' <<<"$gen" | head -1 | cut -d= -f2)
     [[ $d/$m/$y == 7/12/5 ]] || fail "the unit keeps $d/$m/$y, R28 says 7/12/5"
     # Fake dates: 10 daily, the 15th of 21 months, and 6 earlier years. Throwaway repository
     # and password, not the real ones.
