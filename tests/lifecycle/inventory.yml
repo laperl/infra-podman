@@ -17,3 +17,4 @@ all:
       vars:
         postgres_instances:
           - name: main
+            superuser: ci_admin  # fictitious

@@ -4,3 +4,4 @@ infra_env: dev
 demo_image: "ghcr.io/example/demo@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 demo_subnet: "10.89.250.0/24"
 demo_port: 8080
+postgres_superuser: ci_admin

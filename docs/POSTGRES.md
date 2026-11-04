@@ -4,11 +4,9 @@ Cómo se monta cada instancia de PostgreSQL y cada base de datos de aplicación.
 
 Todo se declara como **datos** en el inventario (ver [Datos fuera del código](#datos-fuera-del-código)): instancias, bases, usuarios y su grupo. En el código no hay ningún nombre de aplicación ni de usuario. Una base o un usuario nuevo es una entrada más, y Ansible lo crea.
 
-Estado: **diseño aprobado el 2026-11-03.** Se implementa así:
-- el nivel de instancia, recreando `pg-main` mientras está vacía;
-- las bases de las aplicaciones, en la fase 2.
-
-Lo marcado como *por comprobar* se valida en el workflow `lifecycle` antes de darlo por bueno.
+Estado: **diseño aprobado el 2026-11-03.**
+- El nivel de instancia está implementado desde la fase 1d (rol `postgres`) y comprobado con Podman 4.9 en el workflow `lifecycle`. `pg-main` se recrea con él ([`SETUP.md`](SETUP.md), paso 15).
+- Las bases de las aplicaciones llegan en la fase 2. Lo marcado como *por comprobar* se valida en `lifecycle` antes de darlo por bueno.
 
 ## 1. Instancia
 
@@ -17,17 +15,21 @@ Igual en todas las instancias, para que copias, restauraciones y migraciones ent
 | Parámetro | Valor | Por qué |
 | --- | --- | --- |
 | Imagen | `pgvector/pgvector:pg18`, por digest (R27) | PostgreSQL 18 con la extensión `vector` |
-| Superusuario | `laperl`, configurable (`postgres_superuser`) | El administrador. Nunca lo usan las aplicaciones |
+| Superusuario | El que declares en el repo de datos (`superuser:` de cada instancia). Sin valor por defecto en el código (R41) | El administrador. Nunca lo usan las aplicaciones. No existe ningún rol `postgres` |
 | Base principal | `postgres` (`POSTGRES_DB=postgres`) | Sin base extra con el nombre del superusuario |
 | Codificación | `UTF8` | Cualquier idioma y cualquier emoji |
-| Locale | Proveedor `builtin`, `C.UTF-8` | Mayúsculas y minúsculas correctas en cualquier idioma, y un orden que **no cambia nunca** al actualizar el sistema, porque no depende de glibc ni de ICU. Orden por código Unicode; si una consulta necesita orden de idioma, se pide en esa consulta. *Por comprobar:* `initdb --locale-provider=builtin --builtin-locale=C.UTF-8` con esta imagen |
+| Locale | `C.UTF-8` con proveedor `builtin`: el de PostgreSQL, no el de glibc | Mayúsculas y minúsculas correctas en cualquier idioma, y un orden que **no cambia nunca** al actualizar el sistema, porque no depende de glibc ni de ICU. Orden por código Unicode; si una consulta necesita orden de idioma, se pide en esa consulta. Comprobado en `lifecycle` |
 | Zona horaria | `UTC` (`timezone` y `log_timezone`) | Lo estándar. Las aplicaciones guardan `timestamptz` y muestran la hora en su zona |
-| Checksums de datos | Activados (por defecto en PostgreSQL 18) | Detectan corrupción en disco. *Por comprobar:* `SHOW data_checksums` |
+| Checksums de datos | Activados (por defecto en PostgreSQL 18, y además pedidos explícitamente) | Detectan corrupción en disco. Comprobado en `lifecycle` |
 | Contraseñas | `scram-sha-256` | Por defecto en PostgreSQL 18 |
 
-Estos parámetros solo se fijan al crear la base por primera vez. Cambiarlos después obliga a volcar y restaurar.
+Estos parámetros solo se fijan al crear la base por primera vez. Cambiarlos después obliga a volcar y restaurar. Ansible los lee en cada `apply` y, si una instancia se creó de otra forma, **se para** con un mensaje y no toca nada (D11).
 
-**La base `postgres`:** nadie puede conectar salvo el superusuario y `backup` (`REVOKE CONNECT … FROM PUBLIC`). Lleva la extensión `vector`.
+**La base `postgres`:**
+- nadie puede conectar salvo el superusuario y `backup` (`REVOKE CONNECT … FROM PUBLIC`; aquí `PUBLIC` significa «todos los usuarios»);
+- sin esquema `public` ni extensión `vector`: allí solo entran el administrador y los backups (R41).
+
+**La plantilla `template1`:** sin esquema `public`, así que toda base nueva nace sin él.
 
 **Rol `backup`:**
 - LOGIN, miembro de `pg_read_all_data`;
@@ -36,11 +38,12 @@ Estos parámetros solo se fijan al crear la base por primera vez. Cambiarlos des
 - solo lee: no puede modificar ni borrar nada;
 - los backups lo usan para volcar **todas** las bases de cada instancia, una a una.
 
-**Contenedor endurecido** (el mismo que el operador ya usaba con Podman; *por comprobar* con Podman 4.9):
+**Contenedor endurecido** (el mismo que el operador ya usaba con Podman; comprobado con Podman 4.9 en `lifecycle`):
 - `ReadOnly=true`, con `Tmpfs` para `/var/run/postgresql` y `/tmp`;
 - `DropCapability=all` y `AddCapability=CHOWN SETUID SETGID FOWNER DAC_OVERRIDE`;
 - `NoNewPrivileges=true`;
-- límites de memoria, CPU y procesos.
+- límites de memoria, CPU y procesos;
+- healthcheck por el socket: por TCP cada comprobación quedaría rechazada y apuntada en el log.
 
 ## 2. Bases de las aplicaciones (un solo modelo)
 
@@ -48,7 +51,7 @@ Para cada aplicación `<app>` (nombre elegido por el operador, `^[a-z][a-z0-9_]{
 
 - **Base** `<app>`, cuyo dueño es `<app>_owner`.
 - **Tres grupos sin LOGIN:** `<app>_owner`, `<app>_writer` y `<app>_reader`.
-- **Esquema** `<app>`, cuyo dueño es `<app>_owner`, con la extensión `vector`. El esquema `public` se borra: la aplicación solo ve el suyo.
+- **Esquema** `<app>`, cuyo dueño es `<app>_owner`, con la extensión `vector`. No hay esquema `public`: la base nace sin él, porque `template1` no lo tiene. La aplicación solo ve el suyo.
 - **Conexión:** nadie puede conectar por defecto (`REVOKE CONNECT … FROM PUBLIC`). Pueden los tres grupos, sus usuarios y `backup`.
 - **Usuarios LOGIN a demanda,** cada uno miembro de **un** grupo, con `search_path = <app>` en su base.
 
@@ -78,7 +81,7 @@ A los usuarios de `_owner` se les fija que, al conectar, trabajen ya como `_owne
 
 ## 3. Acceso (`pg_hba.conf`)
 
-Lo genera Ansible a partir del inventario y se monta en solo lectura. Gana la primera regla que encaja:
+Lo genera Ansible a partir del inventario y se monta en solo lectura. Si cambia, Ansible lo recarga sin reiniciar PostgreSQL y comprueba que no tiene errores. Gana la primera regla que encaja:
 
 1. `local all all trust`: solo por el socket, dentro del contenedor. Quien llega ahí ya es `svc_runner`.
 2. El superusuario por TCP: `reject`, **salvo desde la subred de pgAdmin** (R37), con `scram-sha-256`.
@@ -99,7 +102,7 @@ No hay red compartida entre consumidores: cada aplicación tiene su red con `iso
 
 ## 5. Cómo se conecta el operador
 
-- **Consola:** `svc podman exec -it <entorno>-pg-<instancia> psql -U <superusuario>`, con la función `svc` de [`SETUP.md`](SETUP.md), paso 12. Entra por el socket, sin contraseña.
+- **Consola:** `svc podman exec -it <entorno>-pg-<instancia> psql -U <superusuario> -d postgres`, con la función `svc` de [`SETUP.md`](SETUP.md), paso 12. Entra por el socket, sin contraseña.
 - **pgAdmin (R37):**
   - es una aplicación más de `svc_runner`, desplegada con Ansible en la fase 2;
   - tiene su propia red aislada hacia la instancia;
@@ -117,7 +120,7 @@ Ejemplo de cómo se declararán (se concreta en la fase 2):
 ```yaml
 postgres_instances:
   - name: main
-    superuser: laperl
+    superuser: tu_usuario     # el administrador; obligatorio desde la fase 1d
     databases:
       - name: app1            # nombre elegido por el operador
         consumers: [app1]     # aplicaciones con red propia hacia esta instancia

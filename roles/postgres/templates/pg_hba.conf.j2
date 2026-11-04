@@ -1,0 +1,20 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Access to {{ postgres_name }} (docs/POSTGRES.md, section 3). The first matching line wins.
+# TYPE  DATABASE  USER  ADDRESS  METHOD
+
+# 1. The socket inside the container: whoever gets here is already the service user.
+local   all  all  trust
+
+# 2. The superuser never over TCP (pgAdmin's exception arrives in phase 2, R37).
+host    all  {{ postgres_superuser }}  0.0.0.0/0  reject
+host    all  {{ postgres_superuser }}  ::/0       reject
+
+# 3. backup never over TCP: it reads through the socket only.
+host    all  backup  0.0.0.0/0  reject
+host    all  backup  ::/0       reject
+
+# 4. One line per application user, limited to its database and its network (phase 2).
+
+# 5. Anything else.
+host    all  all  0.0.0.0/0  reject
+host    all  all  ::/0       reject

@@ -5,6 +5,11 @@
 postgres_instance: main
 postgres_state: present
 
+# The administrator role (docs/POSTGRES.md, section 1). A name chosen by the operator, so
+# it is DATA: each instance declares it in the data repository (superuser:). No default
+# here, the role refuses to run without it. Applications never use it.
+postgres_superuser: ""
+
 # Consumers that will get a network of their own (D9, SPEC 4.4). Empty in phase 1: the
 # container then runs with Network=none, reachable only through podman exec.
 postgres_consumers: []
@@ -17,6 +22,23 @@ postgres_pids_limit: 500
 # PostgreSQL uses /dev/shm for parallel queries; Podman's default is 64m.
 postgres_shm_size: 256m
 
+# Fixed parameters of every instance (R34, docs/POSTGRES.md, section 1). They only take
+# effect when the data directory is created; the role checks them on every run and stops
+# if an instance was created differently. Do not override.
+#   locale provider builtin: PostgreSQL's own C.UTF-8, independent of glibc and ICU.
+#   PostgreSQL 18 enables data checksums by default; written anyway, to be explicit.
+postgres_initdb_args: >-
+  --encoding=UTF8 --locale=C.UTF-8 --locale-provider=builtin --builtin-locale=C.UTF-8
+  --data-checksums
+postgres_timezone: UTC
+# What the check reads back from the database postgres, in this order:
+# provider|locale|collate|ctype|encoding|checksums|timezone|log_timezone
+postgres_expected_instance: b|C.UTF-8|C.UTF-8|C.UTF-8|UTF8|on|UTC|UTC
+
+# Home of the service user. Overwritten by the role with the real one (getent); this value
+# only serves to render the templates in CI.
+postgres_service_home: /home/svc_runner
+
 # Names (SPEC 4.12). Derived; do not override.
 postgres_name: "{{ infra_env }}-pg-{{ postgres_instance }}"
 postgres_volume: "{{ postgres_name }}-data"
@@ -24,6 +46,9 @@ postgres_volume: "{{ postgres_name }}-data"
 # environment in front.
 postgres_secret_key: pg-{{ postgres_instance }}-superuser-password
 postgres_secret: "{{ infra_env }}-{{ postgres_secret_key }}"
+# pg_hba.conf, generated from the inventory and mounted read-only (docs/POSTGRES.md, 3).
+postgres_config_dir: "{{ postgres_service_home }}/.config/infra-podman/{{ postgres_name }}"
+postgres_hba_file: "{{ postgres_config_dir }}/pg_hba.conf"
 
 # What quadlet_deploy installs, and what CI renders (scripts/render-quadlets.yml).
 postgres_quadlet_units:

@@ -69,6 +69,10 @@ El 2026-11-03, en `ubuntu-24.04` con Podman 4.9.3 sin root y systemd de usuario:
 
 - `pgvector/pgvector:pg18` arranca con `Network=none`, pasa el healthcheck, no publica puertos y sobrevive a un reinicio del servicio. Tras destruirlo, el volumen sigue y un nuevo despliegue encuentra los mismos datos.
 - PostgreSQL 18 guarda los datos en `/var/lib/postgresql/18/docker`: el volumen se monta en `/var/lib/postgresql`.
+- **Endurecimiento de Postgres (fase 1d):** la imagen arranca y se inicializa con `ReadOnly=true`, `Tmpfs=` para `/var/run/postgresql` y `/tmp`, `DropCapability=all` más `CHOWN SETUID SETGID FOWNER DAC_OVERRIDE` y `NoNewPrivileges=true`. Dentro del contenedor, el conjunto de capacidades es exactamente esas cinco y no se puede escribir fuera del volumen.
+- **`Exec=`** sustituye el comando de la imagen y mantiene su punto de entrada: `Exec=postgres -c …` añade opciones al arranque.
+- **`HealthCmd=`** con comillas y una tubería: Quadlet 4.9 lo pasa entero a `--health-cmd` y Podman lo ejecuta con `sh -c`.
+- **Un fichero montado en una ruta que no existe en la imagen** (`/etc/postgresql/pg_hba.conf`) funciona también con `ReadOnly=true`.
 - **Salvedad del runner de GitHub, no de los servidores:** su `/etc/environment` fija `XDG_CONFIG_HOME` y otras `XDG_*` para su propio usuario, y PAM se las pasa al systemd de **cualquier** usuario. El generador de Quadlet de `svc_runner` buscaba entonces sus unidades en `/home/runner/.config`. El workflow borra esas líneas antes de crear el usuario. Si alguna vez un servidor tuviera lo mismo, el síntoma sería `Could not find the requested service` justo después de instalar una unidad.
 
 ## Versiones más nuevas

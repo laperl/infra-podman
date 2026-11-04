@@ -8,8 +8,13 @@
       - postgres_state in ['present', 'absent']
       - postgres_image is match('^[^ ]+@sha256:[0-9a-f]{64}$')
       - postgres_consumers | length == 0
+      - postgres_superuser is match('^[a-z_][a-z0-9_]{0,62}$')
+      - postgres_superuser not in ['backup', 'public']
+      - postgres_superuser is not match('^pg_')
     fail_msg: >-
       postgres_instance must be lower case letters and digits, postgres_image pinned by digest (D6).
+      Each instance needs its superuser in the data repository (superuser: <name>, lower case,
+      not backup, public or pg_*; docs/POSTGRES.md, section 6).
       Consumers and their networks arrive in phase 2.
     quiet: true
 
@@ -18,14 +23,19 @@
     database: passwd
     key: "{{ service_user }}"
 
+- name: Set the paths and environment of the service user
+  ansible.builtin.set_fact:
+    postgres_service_home: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
+    postgres_env:
+      HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
+      XDG_CONFIG_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.config"
+      XDG_DATA_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.local/share"
+      XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+
 - name: Check that the superuser password exists as a Podman secret
   ansible.builtin.command:
     cmd: podman secret exists {{ postgres_secret }}
-  environment:
-    HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
-    XDG_CONFIG_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.config"
-    XDG_DATA_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.local/share"
-    XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+  environment: "{{ postgres_env }}"
   become: true
   become_user: "{{ service_user }}"
   register: postgres_secret_exists
@@ -42,6 +52,28 @@
       Create it first: ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
       (KeePassXC entry Infra_Podman/{{ postgres_secret_key }}).
     quiet: true
+  when: postgres_state == 'present'
+
+# Written before the container starts: it is mounted read-only into it. A change is
+# applied with a reload in setup.yml, without restarting PostgreSQL.
+- name: Create the configuration directory of the instance
+  ansible.builtin.file:
+    path: "{{ postgres_config_dir }}"
+    state: directory
+    mode: "0755"
+  become: true
+  become_user: "{{ service_user }}"
+  when: postgres_state == 'present'
+
+- name: Write pg_hba.conf
+  ansible.builtin.template:
+    src: pg_hba.conf.j2
+    dest: "{{ postgres_hba_file }}"
+    # Readable by the postgres user inside the container (a subordinate UID).
+    mode: "0644"
+  become: true
+  become_user: "{{ service_user }}"
+  register: postgres_hba
   when: postgres_state == 'present'
 
 # Absolute paths, resolved here: role_path passed lazily to quadlet_deploy would point
@@ -66,3 +98,7 @@
     quadlet_deploy_wait_healthy:
       - "{{ postgres_name }}"
     quadlet_deploy_state: "{{ postgres_state }}"
+
+- name: Check and set up the instance
+  ansible.builtin.include_tasks: setup.yml
+  when: postgres_state == 'present'

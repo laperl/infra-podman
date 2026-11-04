@@ -1,0 +1,183 @@
+---
+# Included by main.yml once the container is installed and healthy. Everything runs
+# through psql inside the container, on its socket, as the superuser (docs/POSTGRES.md):
+# the container has no network to connect to from outside.
+#
+# 1. Check how the instance was created (R34). Those parameters only take effect on an
+#    empty volume: if they differ, stop and tell the operator. Never recreate (D11).
+# 2. Converge what can be fixed at any time: the backup role, who may connect to the
+#    database postgres, and no schema public. Only what is missing is applied, so a
+#    second apply gives zero changes.
+# 3. Reload pg_hba.conf if it changed.
+
+- name: Find whether the instance is running
+  ansible.builtin.command:
+    argv: [podman, container, inspect, --format, "{% raw %}{{.State.Running}}{% endraw %}", "{{ postgres_name }}"]
+  environment: "{{ postgres_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: postgres_running
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# In a plan the container may not exist yet, or may be about to restart with a new unit.
+- name: Say what a plan cannot check
+  ansible.builtin.debug:
+    msg: >-
+      {{ postgres_name }} is not running: the plan cannot read its parameters. apply checks
+      them once it starts.
+  when: ansible_check_mode and postgres_running.stdout != 'true'
+
+- name: Check and converge the instance
+  when: not ansible_check_mode or postgres_running.stdout == 'true'
+  vars:
+    postgres_psql: [podman, exec, -i, "{{ postgres_name }}", psql, -X, -q, -t, -A, -v, ON_ERROR_STOP=1, -U, "{{ postgres_superuser }}"]
+    # What may be missing in the database postgres, in the order it is fixed. Each query
+    # line returns its key only when that fix is needed.
+    postgres_fixes:
+      - key: backup_role
+        sql: CREATE ROLE backup LOGIN;
+      - key: backup_attrs
+        sql: ALTER ROLE backup LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD NULL;
+      - key: backup_read
+        sql: GRANT pg_read_all_data TO backup;
+      - key: public_connect
+        sql: REVOKE CONNECT, TEMPORARY ON DATABASE postgres FROM PUBLIC;
+      - key: backup_connect
+        sql: GRANT CONNECT ON DATABASE postgres TO backup;
+      - key: public_schema
+        sql: DROP SCHEMA public;
+    postgres_pending_query: >-
+      SELECT k FROM (
+        SELECT 1 AS o, 'backup_role' AS k
+          WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'backup')
+        UNION ALL SELECT 2, 'backup_attrs'
+          WHERE EXISTS (SELECT FROM pg_authid WHERE rolname = 'backup' AND (NOT rolcanlogin OR rolsuper
+            OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls OR rolpassword IS NOT NULL))
+        UNION ALL SELECT 3, 'backup_read'
+          WHERE NOT EXISTS (SELECT FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.member
+            JOIN pg_roles g ON g.oid = m.roleid WHERE r.rolname = 'backup' AND g.rolname = 'pg_read_all_data')
+        UNION ALL SELECT 4, 'public_connect'
+          WHERE has_database_privilege('public', 'postgres', 'CONNECT')
+        UNION ALL SELECT 5, 'backup_connect'
+          WHERE NOT EXISTS (SELECT FROM pg_database d CROSS JOIN LATERAL aclexplode(d.datacl) a
+            JOIN pg_roles r ON r.oid = a.grantee
+            WHERE d.datname = 'postgres' AND r.rolname = 'backup' AND a.privilege_type = 'CONNECT')
+        UNION ALL SELECT 6, 'public_schema'
+          WHERE EXISTS (SELECT FROM pg_namespace WHERE nspname = 'public')
+      ) t ORDER BY o
+  block:
+    - name: Read how the instance was created
+      ansible.builtin.command:
+        argv: "{{ postgres_psql + ['-d', 'postgres', '-c', postgres_query] }}"
+      vars:
+        postgres_query: >-
+          SELECT concat_ws('|', d.datlocprovider, d.datlocale, d.datcollate, d.datctype,
+          pg_encoding_to_char(d.encoding), current_setting('data_checksums'),
+          current_setting('TimeZone'), current_setting('log_timezone'))
+          FROM pg_database d WHERE d.datname = 'postgres'
+          AND (SELECT rolsuper FROM pg_roles WHERE rolname = current_user)
+      environment: "{{ postgres_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      register: postgres_created
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Stop if the instance was created with other parameters (R34)
+      ansible.builtin.assert:
+        that:
+          - postgres_created.rc == 0
+          - postgres_created.stdout == postgres_expected_instance
+        fail_msg: >-
+          {{ postgres_name }} was not created with the platform's parameters
+          (expected {{ postgres_expected_instance }} as superuser {{ postgres_superuser }},
+          got: {{ postgres_created.stdout | default('') or postgres_created.stderr | default('') | trim }}).
+          They only take effect on an empty volume and Ansible never deletes data (D11).
+          To recreate it, see docs/SETUP.md, section 15.
+        quiet: true
+
+    - name: Read what is missing in the database postgres
+      ansible.builtin.command:
+        argv: "{{ postgres_psql + ['-d', 'postgres', '-c', postgres_pending_query] }}"
+      environment: "{{ postgres_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      register: postgres_pending
+      changed_when: false
+      check_mode: false
+
+    - name: Read whether template1 still has the schema public
+      ansible.builtin.command:
+        argv: "{{ postgres_psql + ['-d', 'template1', '-c', postgres_query] }}"
+      vars:
+        postgres_query: SELECT count(*) FROM pg_namespace WHERE nspname = 'public'
+      environment: "{{ postgres_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      register: postgres_template1_public
+      changed_when: false
+      check_mode: false
+
+    - name: Choose the fixes
+      ansible.builtin.set_fact:
+        postgres_sql: >-
+          {{ postgres_fixes | selectattr('key', 'in', postgres_pending.stdout_lines)
+             | map(attribute='sql') | list }}
+
+    - name: Show what a plan would fix
+      ansible.builtin.debug:
+        msg: >-
+          Would run in {{ postgres_name }}: {{ postgres_sql | join(' ') }}
+          {{ 'DROP SCHEMA public in template1.' if postgres_template1_public.stdout != '0' else '' }}
+      changed_when: true
+      when: ansible_check_mode and (postgres_sql | length > 0 or postgres_template1_public.stdout != '0')
+
+    # One transaction: either everything is applied or nothing.
+    - name: Fix the database postgres
+      ansible.builtin.command:
+        argv: "{{ postgres_psql + ['-1', '-d', 'postgres', '-f', '-'] }}"
+        stdin: "{{ postgres_sql | join('\n') }}"
+      environment: "{{ postgres_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      changed_when: true
+      when: postgres_sql | length > 0
+
+    # New databases are copies of template1: they are born without the schema public.
+    - name: Drop the schema public from template1
+      ansible.builtin.command:
+        argv: "{{ postgres_psql + ['-d', 'template1', '-c', 'DROP SCHEMA public'] }}"
+      environment: "{{ postgres_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      changed_when: true
+      when: postgres_template1_public.stdout != '0'
+
+    # Not a handler: it has to run here, after the container is up and healthy, and the
+    # handlers of quadlet_deploy are flushed earlier, inside its include.
+    - name: Reload pg_hba.conf  # noqa: no-handler
+      ansible.builtin.command:
+        argv: "{{ postgres_psql + ['-d', 'postgres', '-c', 'SELECT pg_reload_conf()'] }}"
+      environment: "{{ postgres_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      changed_when: true
+      when: postgres_hba is changed
+
+    - name: Check that PostgreSQL accepts every line of pg_hba.conf
+      ansible.builtin.command:
+        argv: "{{ postgres_psql + ['-d', 'postgres', '-c', postgres_query] }}"
+      vars:
+        postgres_query: >-
+          SELECT coalesce(string_agg(line_number || ': ' || error, '; '), 'ok')
+          FROM pg_hba_file_rules WHERE error IS NOT NULL
+      environment: "{{ postgres_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      register: postgres_hba_errors
+      changed_when: false
+      failed_when: postgres_hba_errors.rc != 0 or postgres_hba_errors.stdout != 'ok'
+      check_mode: false
