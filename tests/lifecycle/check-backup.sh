@@ -15,6 +15,11 @@ home=$(getent passwd svc_runner | cut -d: -f6)
 status=/var/lib/infra-podman/backup-status/$unit.status
 image=$(sed -n 's/^restic_image: *"\([^"]*\)".*/\1/p' "$here/../../playbooks/group_vars/all/images.yml")
 fail() { echo "::error title=check-backup::$*"; exit 1; }
+# Any unexpected failure names its line, command and error: the job log is not readable
+# from the checks API.
+errlog=$(mktemp)
+exec 2> >(tee "$errlog" >&2)
+trap 'fail "line $LINENO: $BASH_COMMAND: $(tail -5 "$errlog" | tr "\n" " ")"' ERR
 field() { sed -n "s/^$1=//p" "$status"; }
 restic_cli() { # restic_cli <args...>: restic on the real repository, with the real secret
   "$as" podman run --rm --network=none -v dev-backup-repo:/repo \
