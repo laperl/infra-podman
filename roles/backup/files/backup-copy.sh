@@ -73,7 +73,7 @@ case $? in
       || fail "no se ha podido crear el repositorio en el servidor: $(explain 'restic init')"
     ;;
   12) fail "la clave de restic no abre el repositorio del servidor. Tiene que ser la misma que la del repositorio local (backup-restic-password)." ;;
-  *) fail "no se puede abrir el repositorio del servidor: $(explain 'restic cat config')" ;;
+  *) fail "$(explain 'restic cat config')" ;;
 esac
 
 # 3. The copy. --no-lock: the local repository is mounted read-only. If the daily backup
