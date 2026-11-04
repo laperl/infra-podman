@@ -1,0 +1,39 @@
+---
+# Server for the copy of the backups (SPEC 4.11, R44). See defaults/main.yml.
+
+- name: Check the backup server settings
+  ansible.builtin.assert:
+    that:
+      - backup_server_state in ['present', 'absent']
+      - rest_server_image is match('^[^ ]+@sha256:[0-9a-f]{64}$')
+      - infra_site is defined and infra_site is match('^[a-z][a-z0-9-]{1,30}$')
+      - backup_server_port | int > 1024 and backup_server_port | int < 65536
+      - backup_server_max_size_gb | float > 0
+      - backup_server_tailscale is boolean
+    fail_msg: >-
+      rest_server_image pinned by digest (D6), infra_site declared in the data repository (R42),
+      backup_server_port between 1025 and 65535, backup_server_max_size_gb above 0 and
+      backup_server_tailscale true or false.
+    quiet: true
+
+- name: Read the service user
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ service_user }}"
+
+- name: Set the paths and environment of the service user
+  ansible.builtin.set_fact:
+    backup_server_home: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
+    backup_server_env:
+      HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
+      XDG_CONFIG_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.config"
+      XDG_DATA_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.local/share"
+      XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+
+- name: Install the backup server
+  ansible.builtin.include_tasks: install.yml
+  when: backup_server_state == 'present'
+
+- name: Remove the backup server, keeping the copies
+  ansible.builtin.include_tasks: remove.yml
+  when: backup_server_state == 'absent'

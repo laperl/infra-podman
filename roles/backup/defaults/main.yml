@@ -23,6 +23,24 @@ backup_data_repo: false
 backup_notify: false
 backup_notify_max_age_hours: 36
 
+# Copy to the backup server (phase 1e2, R44): only when backup_remote_url is set, in
+# host_vars of the data repository. Every hour, if the server answers, restic copies
+# there the snapshots it does not have yet. The local repository is never changed.
+#   backup_remote_url: the server, without a path. In prod, the GX10 through Tailscale:
+#     http://<Tailscale name or IP of the GX10>:<backup_server_port>. In dev and CI, where
+#     server and client are the same machine: http://127.0.0.1:8000, with
+#   backup_remote_network: container:<env>-backup-server (it shares the server's network).
+#   The repository there is <infra_site>/<infra_env>/<this machine>, and the user infra_site.
+backup_remote_url: ""
+backup_remote_network: ""
+# The server's size limit (group_vars/all.yml, shared with the server) and when to warn.
+backup_remote_max_size_gb: "{{ backup_server_max_size_gb | default(30) }}"
+backup_remote_warn_percent: 80
+# Notification when the last good copy to the server is older than this (7 days).
+backup_remote_max_age_hours: 168
+# Minute of every hour when the copy runs: away from the local backup at backup_time.
+backup_copy_minute: 30
+
 # Limit for the restic container (docs/COMPATIBILITY.md: no Memory= key in 4.9).
 backup_memory: 1g
 backup_timeout: 2h
@@ -44,10 +62,17 @@ backup_secret: "{{ infra_env }}-{{ backup_secret_key }}"
 backup_scripts_dir: "{{ backup_home }}/.local/share/infra-podman/backup"
 backup_config_dir: "{{ backup_home }}/.config/infra-podman/backup"
 backup_staging_dir: "{{ backup_home }}/.local/state/infra-podman/backup/staging"
+backup_copy_name: "{{ backup_name }}-copy"
+backup_copy_secret_key: backup-server-password
+backup_copy_secret: "{{ infra_env }}-{{ backup_copy_secret_key }}"
+backup_copy_state_dir: "{{ backup_home }}/.local/state/infra-podman/backup-copy"
 
-# What quadlet_deploy installs, and what CI renders (scripts/render-quadlets.yml).
+# What quadlet_deploy installs, and what CI renders (scripts/render-quadlets.yml). The
+# copy container is installed only with backup_remote_url (tasks/install.yml).
 backup_quadlet_units:
   - template: backup.container.j2
     name: "{{ backup_name }}.container"
   - template: backup-repo.volume.j2
     name: "{{ backup_volume }}.volume"
+  - template: backup-copy.container.j2
+    name: "{{ backup_copy_name }}.container"

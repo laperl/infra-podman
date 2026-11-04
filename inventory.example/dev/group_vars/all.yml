@@ -20,6 +20,12 @@ infra_secrets:
     group: postgres_hosts
   - name: backup-restic-password  # key of the restic repositories: lose it, lose the backups
     group: backup_clients
+  - name: backup-server-password  # user <infra_site> of the backup server: both ends need it
+    group: [backup_clients, backup_servers]
+
+# Size limit of the backup server, in GB: the server enforces it and the clients warn at
+# 80 % (R44). Here because both ends use it.
+backup_server_max_size_gb: 30
 
 # Never forward the operator's SSH agent to a server: any process there (an AI included)
 # could use the operator's keys, the signing key among them (D14, R17). On the command line

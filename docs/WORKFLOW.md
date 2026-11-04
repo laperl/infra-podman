@@ -111,6 +111,7 @@ Después puedes seguir trabajando en `main` con normalidad. El siguiente desplie
 | `Incorrect sudo password` o `Missing sudo password` | Contraseña de sudo de otra máquina, o falta `--limit` | Repite con `--limit` y la contraseña de esa máquina |
 | `UNREACHABLE` en `laptop` | sshd parado o el alias `laptop` no está bien | `ssh laptop true`; [`SETUP.md`](SETUP.md), paso 9 |
 | `UNREACHABLE` en `gx10` | GX10 apagado o fuera de Tailscale | `ssh gx10 true` |
+| Avisos de la copia al GX10 («no responde», «no acepta el usuario o la contraseña», «está lleno»…) | La copia externa tiene un problema; tus copias locales siguen bien | [`SETUP.md`](SETUP.md), paso 18.6 |
 | `apply --env prod necesita un terminal interactivo` | Lo has lanzado sin terminal | Lánzalo tú desde una terminal |
 
 ## Cambiar datos
@@ -151,7 +152,8 @@ Y después, desde tu copia del código, `plan` y `apply` como siempre (paso 6).
 | `base` | Usuario de servicio `svc_runner` con linger (fase 1) | `laptop`, `gx10` (DEV: `vmiadev`) |
 | `secrets` | Solo con `./deploy.sh secrets`: crea en cada máquina los secretos que le faltan, leyéndolos de KeePassXC. Pide la contraseña maestra y la de sudo | Una cada vez, con `--limit` |
 | `postgres` | Las instancias de Postgres (`pg-main`). Necesita antes `base` y `secrets`. Si cambia la imagen, hace antes un backup y se para si falla | `laptop` (DEV: `vmiadev`) |
-| `backup` | Backup diario local, a las 13:00, y el aviso de escritorio en el portátil. Necesita antes `base` y `secrets` ([`SETUP.md`](SETUP.md), paso 17) | `laptop` (DEV: `vmiadev`) |
+| `backup` | Backup diario local, a las 13:00, y el aviso de escritorio en el portátil. Con `backup_remote_url`, también la copia al GX10 cada hora. Necesita antes `base` y `secrets` ([`SETUP.md`](SETUP.md), pasos 17 y 18) | `laptop` (DEV: `vmiadev`) |
+| `backup-server` | El servidor que guarda la copia de los backups, solo para añadir, y su puerto en Tailscale. Necesita antes `base` y `secrets` ([`SETUP.md`](SETUP.md), paso 18) | `gx10` (DEV: `vmiadev`) |
 
 ## Versiones de los tags
 

@@ -58,8 +58,11 @@ jobs:
       - name: deploy.sh tests (signed tags, environments, secrets launcher)
         run: tests/deploy/run.sh
 
-      - name: Backup status and notifier tests
+      - name: Backup status, copy and notifier tests
         run: tests/backup/run.sh
+
+      - name: Which secrets each machine gets (secrets.yml)
+        run: tests/secrets/run.sh
 
   quadlet-forward:
     # Same Quadlet checks with a newer Podman, to see early what would break when the

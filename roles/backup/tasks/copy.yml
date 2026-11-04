@@ -1,0 +1,39 @@
+---
+# Copy to the backup server (R44): its folder for the result and its hourly timer. The
+# container unit is installed by quadlet_deploy with the others (install.yml).
+- name: Create the folder for the result of the copy
+  ansible.builtin.file:
+    path: "{{ backup_copy_state_dir }}"
+    state: directory
+    mode: "0700"
+  become: true
+  become_user: "{{ service_user }}"
+
+- name: Install the hourly copy timer
+  ansible.builtin.template:
+    src: backup-copy.timer.j2
+    dest: "{{ backup_home }}/.config/systemd/user/{{ backup_copy_name }}.timer"
+    mode: "0644"
+  become: true
+  become_user: "{{ service_user }}"
+  register: backup_copy_timer
+
+- name: Reload the service user's systemd for the copy timer
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+    scope: user
+  environment: "{{ backup_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  when: backup_copy_timer is changed and not ansible_check_mode
+
+- name: Enable and start the hourly copy timer
+  ansible.builtin.systemd_service:
+    name: "{{ backup_copy_name }}.timer"
+    enabled: true
+    state: started
+    scope: user
+  environment: "{{ backup_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  when: not (ansible_check_mode and backup_copy_timer is changed)

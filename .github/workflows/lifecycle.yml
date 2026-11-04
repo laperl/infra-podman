@@ -333,3 +333,155 @@ jobs:
           tests/lifecycle/diagnose.sh
           out=$(sudo journalctl _SYSTEMD_USER_UNIT=dev-backup.service --no-pager -n 30 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
           echo "::warning title=backup journal::$out"
+
+  # Phase 1e2 (R44): the server for the copy of the backups and the hourly copy, with
+  # server and client on the same runner, as in DEV. Tailscale is not tested here.
+  backup-copy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      INV: tests/lifecycle/inventory.yml
+      COPY: -e @tests/lifecycle/copy-vars.yml
+      CHECK: tests/lifecycle/check-backup-copy.sh
+      AS: tests/lifecycle/as-svc.sh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same reason as in the base job.
+      - name: Make the runner look like a normal server
+        run: sudo sed -i '/^XDG_/d' /etc/environment
+
+      - name: Install Podman 4.9 from Ubuntu 24.04
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq podman
+          podman --version | grep -Eq ' 4\.9\.' || { echo "Expected Podman 4.9"; exit 1; }
+
+      - name: Install pinned ansible-core
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --requirement scripts/requirements-lint.txt
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      # Random, thrown away with the runner. Never KeePassXC (SPEC 5.4).
+      - name: Service user, PostgreSQL with some data, and the random secrets
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/base.yml > base.log
+          for f in pw rpw spw; do
+            v=$(openssl rand -hex 24)
+            echo "::add-mask::$v"
+            echo "$v" > "$RUNNER_TEMP/$f"
+          done
+          tr -d '\n' < "$RUNNER_TEMP/pw" | $AS podman secret create dev-pg-main-superuser-password -
+          tr -d '\n' < "$RUNNER_TEMP/rpw" | $AS podman secret create dev-backup-restic-password -
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml 2>&1 | tee -a all.log
+          $AS podman exec dev-pg-main psql -X -U ci_admin -d postgres -v ON_ERROR_STOP=1 -q -c "CREATE DATABASE lifecycle_app"
+          $AS podman exec dev-pg-main psql -X -U ci_admin -d lifecycle_app -v ON_ERROR_STOP=1 -q \
+            -c "CREATE SCHEMA app; CREATE TABLE app.t (n int); INSERT INTO app.t SELECT generate_series(1, 1000)"
+
+      - name: Server plan before its secret exists, expecting a clear refusal
+        run: |
+          if ansible-playbook -i "$INV" playbooks/backup-server.yml --check > refusal.log 2>&1; then
+            echo "::error::the backup server ran without its secret"; exit 1
+          fi
+          grep -q 'deploy.sh secrets' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+          tr -d '\n' < "$RUNNER_TEMP/spw" | $AS podman secret create dev-backup-server-password -
+
+      - name: Server plan, apply, apply again (zero changes), plan again (zero changes)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup-server.yml --check --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup-server.yml --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup-server.yml 2>&1 | tee second.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second server apply changed something"; exit 1; }
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup-server.yml --check 2>&1 | tee plan.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' plan.log || { echo "::error::the server plan after apply shows changes"; exit 1; }
+
+      - name: Server running, only on 127.0.0.1, append-only, with a password
+        run: $CHECK server
+
+      - name: Client with the copy, plan, apply, apply again (zero changes), plan again (zero changes)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup.yml $COPY --check --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup.yml $COPY --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup.yml $COPY 2>&1 | tee second.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second client apply changed something"; exit 1; }
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup.yml $COPY --check 2>&1 | tee plan.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' plan.log || { echo "::error::the client plan after apply shows changes"; exit 1; }
+
+      - name: Copy timer on, nothing run yet
+        run: $CHECK installed
+
+      # What deploy.sh does on the laptop after a successful run.
+      - name: A copy of the data repository, as deploy.sh leaves it
+        run: |
+          git init -q "$RUNNER_TEMP/data"
+          git -C "$RUNNER_TEMP/data" -c user.name=ci -c user.email=ci@example.invalid commit -q --allow-empty -m "lifecycle data"
+          git -C "$RUNNER_TEMP/data" bundle create --quiet /var/lib/infra-podman/data-repo/infra-podman-data.bundle --all
+          chmod 0640 /var/lib/infra-podman/data-repo/infra-podman-data.bundle
+
+      - name: Back up, copy to the server and restore from its volume
+        run: |
+          $AS systemctl --user start dev-backup.service
+          $AS systemctl --user start dev-backup-copy.service
+          $CHECK ok
+
+      - name: A second copy with nothing new changes nothing
+        run: |
+          before=$($CHECK count)
+          $AS systemctl --user start dev-backup-copy.service
+          [[ $($CHECK count) == "$before" ]] || { echo "::error::a copy with nothing new added snapshots"; exit 1; }
+          $CHECK ok
+
+      - name: A new backup reaches the server on the next copy
+        run: |
+          before=$($CHECK count)
+          $AS systemctl --user start dev-backup.service
+          $AS systemctl --user start dev-backup-copy.service
+          [[ $($CHECK count) -gt $before ]] || { echo "::error::the new backup did not reach the server"; exit 1; }
+          $CHECK ok
+
+      - name: The client cannot delete anything on the server (append-only)
+        run: $CHECK append-only
+
+      - name: A server that does not answer is not a failure
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup.yml $COPY -e backup_remote_url=http://127.0.0.1:9 2>&1 | tee -a all.log
+          $AS systemctl --user start dev-backup-copy.service || { echo "::error::an unreachable server failed the copy service"; exit 1; }
+          $CHECK unreachable
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup.yml $COPY 2>&1 | tee -a all.log
+
+      - name: A full server fails the copy with a clear message
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup-server.yml -e backup_server_max_size_gb=0.00001 2>&1 | tee -a all.log
+          $AS systemctl --user start dev-backup.service
+          if $AS systemctl --user start dev-backup-copy.service; then echo "::error::the copy succeeded on a full server"; exit 1; fi
+          $CHECK failed "está lleno"
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup-server.yml 2>&1 | tee -a all.log
+          $AS systemctl --user start dev-backup-copy.service
+          $CHECK ok
+
+      - name: Remove the server, keeping the copies (SPEC 4.2)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup-server.yml -e backup_server_state=absent 2>&1 | tee -a all.log
+          $CHECK destroyed
+
+      - name: The passwords never appear in the output or the journal (SPEC 4.5)
+        run: |
+          sudo journalctl _UID="$(id -u svc_runner)" --no-pager > journal.log
+          for f in pw rpw spw; do
+            if grep -qF -f "$RUNNER_TEMP/$f" all.log journal.log; then echo "::error::a password ($f) appears in the logs"; exit 1; fi
+          done
+          echo "ok"
+
+      - name: Diagnose
+        if: failure()
+        run: |
+          tests/lifecycle/diagnose.sh
+          for u in dev-backup-server dev-backup-copy dev-backup; do
+            out=$(sudo journalctl _SYSTEMD_USER_UNIT=$u.service --no-pager -n 30 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::warning title=$u journal::$out"
+          done
+          echo "::warning title=copy status::$(cat /var/lib/infra-podman/backup-status/dev-backup-copy.status 2>/dev/null | tr '\n' ' ')"

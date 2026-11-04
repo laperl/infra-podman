@@ -1,21 +1,28 @@
 ---
-# Stop the daily backups. The repository volume and its unit stay (SPEC 4.2, 8). The
+# Stop the daily backups and the copy to the backup server. The repository volume and its
+# unit stay (SPEC 4.2, 8), and so do the copies on the server. The
 # operator's notifier stays too: remove it by hand (docs/SETUP.md, step 17).
-- name: Stop and disable the daily timer
+- name: Stop and disable the timers
   ansible.builtin.systemd_service:
-    name: "{{ backup_name }}.timer"
+    name: "{{ item }}"
     enabled: false
     state: stopped
     scope: user
+  loop:
+    - "{{ backup_name }}.timer"
+    - "{{ backup_copy_name }}.timer"
   environment: "{{ backup_env }}"
   become: true
   become_user: "{{ service_user }}"
   failed_when: false
 
-- name: Remove the timer
+- name: Remove the timers
   ansible.builtin.file:
-    path: "{{ backup_home }}/.config/systemd/user/{{ backup_name }}.timer"
+    path: "{{ backup_home }}/.config/systemd/user/{{ item }}"
     state: absent
+  loop:
+    - "{{ backup_name }}.timer"
+    - "{{ backup_copy_name }}.timer"
   become: true
   become_user: "{{ service_user }}"
 

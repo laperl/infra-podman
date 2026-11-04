@@ -14,3 +14,7 @@ postgres_image: "docker.io/pgvector/pgvector@sha256:c29f30688a9ad961691bdf0ec165
 # restic, for the backups (R19, SPEC 4.11). linux/amd64 and linux/arm64, checked by the
 # operator on 2026-11-03 (ROADMAP). Alpine based: the backup runs a shell script inside.
 restic_image: "docker.io/restic/restic@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510"  # track: 0.19.1
+
+# restic's rest-server, the copy of the backups on the GX10 (R19, R44). linux/amd64 and
+# linux/arm64, checked by the operator on 2026-11-03 (ROADMAP). Alpine based, with htpasswd.
+rest_server_image: "docker.io/restic/rest-server@sha256:d2aff06f47eb38637dff580c3e6bce4af98f386c396a25d32eb6727ec96214a5"  # track: 0.14.0

@@ -1,0 +1,37 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Server for the copy of the backups (SPEC 4.11, R44): restic's rest-server.
+#   --append-only    clients can add backups, never delete or change them
+#   --private-repos  each user only reaches its own folder: user <installation>,
+#                    repositories <installation>/<env>/<machine>
+#   --max-size       limit of everything it stores, in bytes
+# Only on 127.0.0.1; other machines reach it through `tailscale serve` (R25).
+# The image's entrypoint passes OPTIONS and PASSWORD_FILE to rest-server.
+[Unit]
+Description=Backup server, restic rest-server ({{ infra_env }})
+
+[Container]
+ContainerName={{ backup_server_name }}
+Image={{ rest_server_image }}
+Label=infra.env={{ infra_env }}
+Label=infra.app=backup
+Label=infra.component=backup-server
+Label=infra.managed-by=infra-podman
+
+Volume={{ backup_server_volume }}.volume:/data:Z
+Volume={{ backup_server_auth_dir }}:/auth:ro,Z
+Environment=PASSWORD_FILE=/auth/htpasswd
+Environment="OPTIONS=--append-only --private-repos --max-size {{ ((backup_server_max_size_gb | float) * 1073741824) | int }}"
+PublishPort=127.0.0.1:{{ backup_server_port }}:8000
+
+PodmanArgs=--memory={{ backup_server_memory }}
+ReadOnly=true
+Tmpfs=/tmp
+DropCapability=all
+NoNewPrivileges=true
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

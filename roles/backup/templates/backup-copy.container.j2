@@ -1,0 +1,55 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Copy of the local backups to the backup server (SPEC 4.11, R44). Started only by
+# {{ backup_copy_name }}.timer, every hour; never at boot and never by an apply.
+#   - It sees only the local repository (encrypted, read-only), its scripts, a folder
+#     for its result and the two passwords. Not PostgreSQL, not the operator's files.
+#   - If the server does not answer, it ends at once with code 75 (not a failure).
+#   - ExecStopPost, on the host, writes the status for the notifier.
+# SecurityLabelDisable: the local repository is marked private for SELinux by
+# {{ backup_name }} (:Z); relabelling it from here would lock that container out. Without
+# a label of its own this container can read it (docs/COMPATIBILITY.md). Still rootless,
+# read-only, with no capabilities.
+[Unit]
+Description=Copy of the backups to the backup server ({{ infra_env }})
+
+[Container]
+ContainerName={{ backup_copy_name }}
+Image={{ restic_image }}
+Label=infra.env={{ infra_env }}
+Label=infra.app=backup
+Label=infra.component=backup-copy
+Label=infra.managed-by=infra-podman
+
+Volume={{ backup_volume }}.volume:/repo:ro
+Volume={{ backup_scripts_dir }}:/scripts:ro
+Volume={{ backup_copy_state_dir }}:/state
+SecurityLabelDisable=true
+
+Secret={{ backup_secret }},type=mount,target=/run/secrets/restic-password,mode=0400
+Secret={{ backup_copy_secret }},type=mount,target=/run/secrets/server-password,mode=0400
+Environment=RESTIC_PASSWORD_FILE=/run/secrets/restic-password
+Environment=RESTIC_CACHE_DIR=/tmp/restic-cache
+Environment=BACKUP_SITE={{ infra_site }}
+Environment=BACKUP_REMOTE_URL={{ backup_remote_url | default('', true) or 'http://unset.invalid' }}
+Environment=BACKUP_REMOTE_PATH={{ infra_site }}/{{ infra_env }}/{{ inventory_hostname | default('ci') }}
+Environment=BACKUP_REMOTE_MAX_BYTES={{ ((backup_remote_max_size_gb | float) * 1073741824) | int }}
+Environment=BACKUP_REMOTE_WARN_PERCENT={{ backup_remote_warn_percent }}
+
+# Entrypoint= does not exist in Quadlet 4.9 (docs/COMPATIBILITY.md).
+PodmanArgs=--entrypoint=/bin/sh --memory={{ backup_memory }}
+Exec=/scripts/backup-copy.sh
+{% if backup_remote_network %}
+Network={{ backup_remote_network }}
+{% endif %}
+
+ReadOnly=true
+Tmpfs=/tmp
+DropCapability=all
+NoNewPrivileges=true
+
+[Service]
+Type=oneshot
+# 75: the server did not answer. Not a failure: it tries again in an hour.
+SuccessExitStatus=75
+ExecStopPost={{ backup_scripts_dir }}/backup-copy-status.sh {{ backup_copy_name }} {{ backup_remote_max_age_hours }}
+TimeoutStartSec={{ backup_timeout }}

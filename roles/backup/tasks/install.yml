@@ -19,6 +19,29 @@
       (KeePassXC entry {{ infra_site | default('<infra_site>') }}/{{ backup_secret_key }}).
     quiet: true
 
+- name: Check that the backup server password exists as a Podman secret
+  ansible.builtin.command:
+    cmd: podman secret exists {{ backup_copy_secret }}
+  environment: "{{ backup_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: backup_copy_secret_exists
+  changed_when: false
+  failed_when: backup_copy_secret_exists.rc not in [0, 1]
+  check_mode: false
+  when: backup_remote_url | length > 0
+
+- name: Require it for the copy (deploy.sh secrets creates it from KeePassXC)
+  ansible.builtin.assert:
+    that: backup_copy_secret_exists.rc == 0
+    fail_msg: >-
+      The Podman secret {{ backup_copy_secret }} does not exist on {{ inventory_hostname }}, and
+      backup_remote_url asks for a copy to the backup server. Create it first:
+      ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
+      (KeePassXC entry {{ infra_site | default('<infra_site>') }}/{{ backup_copy_secret_key }}).
+    quiet: true
+  when: backup_remote_url | length > 0
+
 # Shared with deploy.sh and the operator's notifier, outside every home directory.
 - name: Create the shared directory
   ansible.builtin.file:
@@ -81,6 +104,8 @@
     - backup-prepare.sh
     - backup-run.sh
     - backup-status.sh
+    - backup-copy.sh
+    - backup-copy-status.sh
   become: true
   become_user: "{{ service_user }}"
 
@@ -92,12 +117,13 @@
   become: true
   become_user: "{{ service_user }}"
 
-- name: Resolve the templates
+- name: Resolve the templates (the copy container only with backup_remote_url)
   ansible.builtin.set_fact:
     backup_units_resolved: >-
       {{ ([] if ansible_loop.first else backup_units_resolved)
          + [{'name': item.name, 'template': role_path ~ '/templates/' ~ item.template}] }}
-  loop: "{{ backup_quadlet_units }}"
+  loop: "{{ backup_quadlet_units | rejectattr('name', 'equalto', backup_copy_name ~ '.container') | list
+            if backup_remote_url | length == 0 else backup_quadlet_units }}"
   loop_control:
     extended: true
     label: "{{ item.name }}"
@@ -142,6 +168,9 @@
   become: true
   become_user: "{{ service_user }}"
   when: not (ansible_check_mode and backup_timer is changed)
+
+- name: Copy to the backup server, or no copy
+  ansible.builtin.include_tasks: "{{ 'copy.yml' if backup_remote_url | length > 0 else 'copy_remove.yml' }}"
 
 - name: Install the operator's notifier
   ansible.builtin.include_tasks: notify.yml
