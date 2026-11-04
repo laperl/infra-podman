@@ -480,8 +480,11 @@ jobs:
         if: failure()
         run: |
           tests/lifecycle/diagnose.sh
+          # Without podman's own event lines, which fill the annotation.
           for u in dev-backup-server dev-backup-copy dev-backup; do
-            out=$(sudo journalctl _SYSTEMD_USER_UNIT=$u.service --no-pager -n 30 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
-            echo "::warning title=$u journal::$out"
+            out=$(sudo journalctl _SYSTEMD_USER_UNIT=$u.service --no-pager -o cat | grep -v -e '^[0-9-]* [0-9:.]* +0000 UTC' \
+              | tail -40 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::warning title=$u journal::${out:-<empty>}"
           done
-          echo "::warning title=copy status::$(cat /var/lib/infra-podman/backup-status/dev-backup-copy.status 2>/dev/null | tr '\n' ' ')"
+          out=$(sed -e 's/%/%25/g' /var/lib/infra-podman/backup-status/dev-backup-copy.status 2>&1 | awk 'BEGIN{ORS="%0A"} {print}')
+          echo "::warning title=copy status::${out:-<empty>}"
