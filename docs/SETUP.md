@@ -574,12 +574,12 @@ svc systemctl --user start prod-backup.service          # vuelve a result=ok
 - **Resumen** de la última copia: `cat /var/lib/infra-podman/backup-status/prod-backup.status`.
 - **Lista de copias:**
   ```bash
-  svc podman run --rm --network=none -v prod-backup-repo:/repo \
+  svc podman run --rm --network=none --security-opt label=disable -v prod-backup-repo:/repo \
     --secret prod-backup-restic-password,type=mount,target=/run/secrets/restic-password \
     -e RESTIC_REPOSITORY=/repo -e RESTIC_PASSWORD_FILE=/run/secrets/restic-password \
     "$(sed -n 's/^restic_image: *"\([^"]*\)".*/\1/p' playbooks/group_vars/all/images.yml)" snapshots
   ```
-  Desde tu copia del código. Cada copia lleva las etiquetas `site=` (`laperl`), `env=`, `app=`, `type=` (`pgdump` o `files`) y `reason=` (`daily`, o `pre-upgrade` si se hizo antes de cambiar la imagen de Postgres).
+  Desde tu copia del código. `--security-opt label=disable` hace falta en Fedora: el backup marca su volumen como privado para SELinux (`:Z`) y, sin esa opción, otro contenedor recibe `permission denied`. No cambia la marca del volumen. Cada copia lleva las etiquetas `site=` (`laperl`), `env=`, `app=`, `type=` (`pgdump` o `files`) y `reason=` (`daily`, o `pre-upgrade` si se hizo antes de cambiar la imagen de Postgres).
 
 La guía de restauración paso a paso, probada, llega en la fase 1f. Lo esencial ya está comprobado en el CI: una base volcada se restaura y queda igual.
 
