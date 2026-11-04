@@ -51,7 +51,7 @@ podman login ghcr.io --username laperl   # pega el token cuando lo pida
 
 Con KeePassXC 2.8 crea `infra-dev.kdbx` **fuera del repo** (el `.gitignore` excluye `*.kdbx` igualmente):
 
-- grupo `Infra_Podman`;
+- un grupo con el **nombre de tu instalación**, `laperl` (el mismo que pondrás en `infra_site` del repo de datos, paso 16);
 - entrada `test_dummy` con una contraseña ficticia cualquiera;
 - contraseña maestra distinta de la de `infra-pro.kdbx`.
 
@@ -68,13 +68,13 @@ read -rs -p 'Contraseña de infra-dev.kdbx: ' P; echo
 printf '%s\n' "$P" | podman run --rm -i --user root \
   -v "$PWD:/work:ro,z" -w /work \
   -v "$KDBX:/kdbx/infra-dev.kdbx:ro,z" \
-  "$IMAGE" bash -c 'IFS= read -r KDBX_PASSWORD; export KDBX_PASSWORD KDBX_DATABASE=/kdbx/infra-dev.kdbx; exec ansible-playbook tests/ee/operator_selftest.yml'
+  "$IMAGE" bash -c 'IFS= read -r KDBX_PASSWORD; export KDBX_PASSWORD KDBX_DATABASE=/kdbx/infra-dev.kdbx; exec ansible-playbook -e infra_site=laperl tests/ee/operator_selftest.yml'
 unset P
 ```
 
 `--user root` hace falta porque, en Podman sin root, el root del contenedor es tu propio usuario en el portátil: así puede leer tu `.kdbx`, que normalmente solo tú puedes leer. ansible-navigator hace lo mismo.
 
-Resultado esperado: `OK: read Infra_Podman/test_dummy (N characters)`. El valor no se muestra.
+Resultado esperado: `OK: read laperl/test_dummy (N characters)`. El valor no se muestra.
 
 La contraseña viaja así: `read -s` (no se ve ni queda en el historial) → `printf`, que es una orden interna de bash y por tanto no aparece en la lista de procesos → entrada estándar del contenedor → variable de entorno solo dentro del contenedor → entrada estándar de `keepassxc-cli`. No toca el disco.
 
@@ -256,7 +256,7 @@ El `cd /` evita un error de permisos: `svc_runner` no puede entrar en tu carpeta
 
 ### 13.1 La contraseña en KeePassXC
 
-En **`infra-dev.kdbx`**, grupo `Infra_Podman`: entrada `pg-main-superuser-password` con cualquier valor ficticio.
+En **`infra-dev.kdbx`**, grupo `laperl` (el nombre de tu instalación, paso 16): entrada `pg-main-superuser-password` con cualquier valor ficticio.
 
 En **`infra-pro.kdbx`**, la misma entrada con una contraseña generada por KeePassXC (32 caracteres o más). Solo se usa al crear la base por primera vez; cambiarla después tiene su procedimiento (`docs/SECRETS_INVENTORY.md`).
 
@@ -437,3 +437,52 @@ svc podman healthcheck run prod-pg-main && echo sano
 Después, reinicia el portátil y repite la última línea: forma parte del criterio de hecho de la fase 1 («sobrevive a un reinicio»).
 
 Desde ahora, la consola es `svc podman exec -it prod-pg-main psql -U laperl -d postgres` ([`POSTGRES.md`](POSTGRES.md), sección 5).
+
+## 16. El nombre de la instalación
+
+Cada instalación de esta plataforma tiene un **nombre propio**: la tuya, `laperl`; la de un cliente, el nombre del cliente. Es obligatorio y se escribe una sola vez, en el repo de datos. De él salen:
+
+- **el grupo de KeePassXC** donde están sus secretos: `laperl/pg-main-superuser-password`, `laperl/backup-restic-password`…;
+- más adelante, la identificación de sus backups (fase 1e1) y su carpeta en el GX10 (fase 1e2).
+
+Sin él, `deploy.sh secrets` se para antes de leer nada. Con él, nunca puede leer el secreto de otra instalación, y si en el grupo hay **dos entradas con el mismo título** se para en vez de elegir una (R42).
+
+### 16.1 Pasar de `Infra_Podman` a `laperl` (una vez)
+
+Hasta ahora el grupo se llamaba `Infra_Podman`, un nombre fijo en el código. Con KeePassXC abierto:
+
+1. En **`infra-dev.kdbx`**: clic derecho en el grupo `Infra_Podman` → **Editar grupo** → nombre `laperl` → Aceptar. Guarda.
+2. Lo mismo en **`infra-pro.kdbx`**.
+
+Las entradas y sus valores no cambian; solo el nombre del grupo.
+
+Después, en el repo de datos, añade el nombre en `inventory/dev/group_vars/all.yml` **y** en `inventory/prod/group_vars/all.yml`, debajo de `infra_env`:
+
+```yaml
+infra_site: laperl
+```
+
+```bash
+cd ~/Documents/SECURE_vc/ansible/infra-podman
+git diff                                   # solo esas dos líneas
+git commit -am "infra_site: laperl (infra-podman R42)"
+git verify-commit HEAD                     # Good "git" signature
+```
+
+### 16.2 Comprobación
+
+Desde tu copia del código, en la rama del PR para DEV y en el tag para producción:
+
+```bash
+./deploy.sh secrets --env dev --limit vmiadev   # «1 check-only secret(s) readable … for dev»
+./deploy.sh secrets --limit laptop              # no crea nada: los secretos ya existen
+```
+
+`secrets` solo lee KeePassXC para lo que falta y para `test_dummy`, así que la primera orden comprueba de verdad que el grupo nuevo se lee. En las máquinas no cambia nada.
+
+Si sale `cannot list the group 'laperl'`, el grupo no está renombrado en ese fichero. Si sale `the name of the installation is missing`, falta `infra_site` en el repo de datos.
+
+### 16.3 Si algún día cambias el nombre
+
+Cambias `infra_site` en el repo de datos y renombras el grupo en KeePassXC con el mismo nombre. Nada más: ni el código ni los secretos de las máquinas dependen de él.
+

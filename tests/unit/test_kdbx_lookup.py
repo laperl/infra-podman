@@ -27,11 +27,19 @@ FAKE_SECRET = "NotARealSecret-123"  # fictitious, test only
 FAKE_CLI = textwrap.dedent(
     f"""\
     #!{sys.executable}
-    # Fake keepassxc-cli: records argv and stdin, then behaves like 'show -a password'.
+    # Fake keepassxc-cli: records argv and stdin, then behaves like 'ls' (titles of
+    # FAKE_CLI_LS, comma separated) or 'show -a password'.
     import json, os, sys
     stdin = sys.stdin.read()
     with open(os.environ["FAKE_CLI_LOG"], "a") as log:
         log.write(json.dumps({{"argv": sys.argv[1:], "stdin": stdin}}) + "\\n")
+    if sys.argv[1] == "ls":
+        if os.environ.get("FAKE_CLI_MODE") == "nogroup":
+            sys.stderr.write("Cannot find group " + sys.argv[-1] + ".\\n")
+            sys.exit(1)
+        listing = os.environ.get("FAKE_CLI_LS", "a,b,postgres_password,Sub/")
+        sys.stdout.write("\\n".join(listing.split(",")) + "\\n")
+        sys.exit(0)
     mode = os.environ.get("FAKE_CLI_MODE", "ok")
     if mode == "fail":
         sys.stdout.write("{FAKE_SECRET}\\n")
@@ -65,46 +73,82 @@ class KdbxLookupTest(unittest.TestCase):
         self.env.stop()
         self.tmp.cleanup()
 
-    def run_lookup(self, *terms, **options):
+    def run_lookup(self, *terms, variables=None, **options):
         options.setdefault("database", str(self.database))
         options.setdefault("cli", str(self.cli))
-        return self.lookup.run(list(terms), variables={}, **options)
+        if variables is None:
+            variables = {"infra_site": "test-site"}
+        return self.lookup.run(list(terms), variables=variables, **options)
 
-    def calls(self):
-        return [json.loads(line) for line in self.log.read_text().splitlines()]
+    def calls(self, command=None):
+        calls = [json.loads(line) for line in self.log.read_text().splitlines()]
+        return [c for c in calls if command is None or c["argv"][0] == command]
 
     def test_password_goes_through_stdin_never_argv(self):
         self.run_lookup("postgres_password")
-        (call,) = self.calls()
-        self.assertEqual(call["stdin"], FAKE_PASSWORD + "\n")
-        self.assertNotIn(FAKE_PASSWORD, " ".join(call["argv"]))
+        for call in self.calls():
+            self.assertEqual(call["stdin"], FAKE_PASSWORD + "\n")
+            self.assertNotIn(FAKE_PASSWORD, " ".join(call["argv"]))
 
     def test_command_line_matches_spec(self):
         self.run_lookup("postgres_password")
-        (call,) = self.calls()
         self.assertEqual(
-            call["argv"],
-            ["show", "-q", "-s", "-a", "password", str(self.database),
-             "Infra_Podman/postgres_password"],
+            [c["argv"] for c in self.calls()],
+            [["ls", "-q", str(self.database), "test-site"],
+             ["show", "-q", "-s", "-a", "password", str(self.database),
+              "test-site/postgres_password"]],
         )
+
+    def test_group_is_the_installation_name(self):
+        self.run_lookup("a", variables={"infra_site": "laperl"})
+        self.assertEqual(self.calls("show")[0]["argv"][-1], "laperl/a")
+
+    def test_missing_installation_name_fails_without_calling_cli(self):
+        for variables in ({}, {"infra_site": ""}, {"infra_site": "Infra_Podman"},
+                          {"infra_site": "a/b"}, {"infra_site": "-x"}):
+            with self.subTest(variables=variables):
+                with self.assertRaisesRegex(AnsibleError, "name of the installation"):
+                    self.run_lookup("a", variables=variables)
+        self.assertFalse(self.log.exists())
+
+    def test_missing_group_explains_the_rename(self):
+        with mock.patch.dict(os.environ, {"FAKE_CLI_MODE": "nogroup"}):
+            with self.assertRaisesRegex(AnsibleError, "group named exactly 'test-site'"):
+                self.run_lookup("a")
+        self.assertEqual(self.calls("show"), [])
+
+    def test_missing_entry_fails_before_reading(self):
+        with self.assertRaisesRegex(AnsibleError, "no entry 'zzz' in the group 'test-site'"):
+            self.run_lookup("zzz")
+        self.assertEqual(self.calls("show"), [])
+
+    def test_duplicate_title_fails_before_reading(self):
+        with mock.patch.dict(os.environ, {"FAKE_CLI_LS": "a,b,a"}):
+            with self.assertRaisesRegex(AnsibleError, "2 entries titled 'a'"):
+                self.run_lookup("a")
+        self.assertEqual(self.calls("show"), [])
+
+    def test_a_subgroup_is_not_an_entry(self):
+        with self.assertRaisesRegex(AnsibleError, "no entry 'Sub'"):
+            self.run_lookup("Sub")
 
     def test_returns_value_without_trailing_newline(self):
         self.assertEqual(self.run_lookup("a"), [f"{FAKE_SECRET}-a"])
 
-    def test_one_call_per_term(self):
+    def test_one_read_per_term(self):
         self.assertEqual(self.run_lookup("a", "b"), [f"{FAKE_SECRET}-a", f"{FAKE_SECRET}-b"])
-        self.assertEqual(len(self.calls()), 2)
+        self.assertEqual(len(self.calls("show")), 2)
 
-    def test_custom_group_and_attribute(self):
-        self.run_lookup("x", group="Other/Sub", attribute="username")
-        (call,) = self.calls()
+    def test_explicit_group_and_attribute(self):
+        self.run_lookup("b", group="other-site", attribute="username")
+        (call,) = self.calls("show")
         self.assertEqual(call["argv"][4], "username")
-        self.assertEqual(call["argv"][-1], "Other/Sub/x")
+        self.assertEqual(call["argv"][-1], "other-site/b")
 
     def test_database_from_environment(self):
         with mock.patch.dict(os.environ, {"KDBX_DATABASE": str(self.database)}):
-            self.lookup.run(["a"], variables={}, cli=str(self.cli))
-        self.assertEqual(self.calls()[0]["argv"][5], str(self.database))
+            self.lookup.run(["a"], variables={"infra_site": "test-site"}, cli=str(self.cli))
+        self.assertEqual(self.calls("show")[0]["argv"][5], str(self.database))
 
     def test_missing_password_fails_without_calling_cli(self):
         del os.environ["KDBX_PASSWORD"]
