@@ -26,6 +26,7 @@ Secret={{ backup_secret }},type=mount,target=/run/secrets/restic-password,mode=0
 Environment=RESTIC_REPOSITORY=/repo
 Environment=RESTIC_PASSWORD_FILE=/run/secrets/restic-password
 Environment=RESTIC_CACHE_DIR=/tmp/restic-cache
+Environment=BACKUP_SITE={{ infra_site }}
 Environment=BACKUP_ENV={{ infra_env }}
 Environment=BACKUP_HOST={{ inventory_hostname | default('ci') }}
 Environment=BACKUP_KEEP_DAILY={{ backup_keep_daily }}

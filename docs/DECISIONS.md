@@ -362,15 +362,26 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 
 ## 2026-11-04
 
-### R42. Backups locales (fase 1e1)
+### R42. Nombre de la instalación, obligatorio, y grupo de KeePassXC
+
+- **Decisión:**
+  - Cada instalación de la plataforma tiene un nombre propio, `infra_site`, en `group_vars/all.yml` de su repo de datos: `laperl` para la del operador y, por ejemplo, el de un cliente para la suya. Obligatorio, igual en dev y prod, minúsculas, números y guiones.
+  - **El grupo de KeePassXC es ese nombre:** `laperl/<secreto>`. Se acaba el `Infra_Podman` fijo en el código. El lookup lo toma del inventario; sin él, no lee nada, y `playbooks/secrets.yml` se para al empezar.
+  - **Sin ambigüedad:** antes de leer, el lookup lista el grupo (`keepassxc-cli ls`) y se para si la entrada no existe o si hay dos con el mismo título. KeePassXC permite títulos repetidos, y entonces no estaba claro cuál se usaba.
+  - **Se aplaza, con su disparador en el ROADMAP:** gestionar varias instalaciones desde el portátil (cuando llegue el primer cliente) y alojar backups de clientes en el GX10 (1e2 o después).
+- **Motivo:** el operador quiere gestionar en el futuro su infraestructura y la de clientes, con secretos y backups separados por nombre, sin duplicados y sin depender de que no haya errores humanos. Ahora es buen momento: en las máquinas no cambia nada, porque los secretos de Podman no llevan el grupo en su nombre.
+- **Corrección incluida:** `secrets.yml` empieza con una parte en `localhost` (comprueba `infra_site` y `--rotate` y lee los secretos de prueba). Con `--limit <máquina>`, que es como se usa siempre desde R24, Ansible se la saltaba sin avisar: «skipping: no hosts matched». `deploy.sh secrets` añade ahora `localhost` al `--limit`. Detectado por el operador en DEV el 2026-11-04.
+- **Comprobado:** pruebas unitarias con un `keepassxc-cli` falso; en el sandbox, con `keepassxc-cli` 2.7.6 real y una base con dos entradas de título repetido, creada con pykeepass porque `keepassxc-cli add` no permite crearlas: `ls` lista el título dos veces y el lookup se para. En el CI, `tests/ee` con la 2.8.0 de la imagen.
+
+### R43. Backups locales (fase 1e1)
 
 - **Decisión:**
   - **La fase 1e se divide en dos PR:** 1e1, copias locales; 1e2, copia al GX10. El GX10 tiene sus propios riesgos: disco al 97 %, otra contraseña de sudo y `tailscale serve --tcp` sin comprobar.
   - **Un contenedor Quadlet de un solo uso** (`<entorno>-backup`, `Type=oneshot`), arrancado solo por `<entorno>-backup.timer` a las 13:00, con `Persistent=true`. Así se cumple D1 también para los backups. Ni un `apply` ni el arranque de la máquina lanzan una copia: `quadlet_deploy` gana `quadlet_deploy_start: false` para no arrancarlo ni reiniciarlo.
   - **Separación de permisos:** los volcados los hace el servicio en el host (`ExecStartPre`), con `podman exec` y el rol `backup`. El contenedor de restic no tiene red y solo ve la carpeta temporal, sus scripts y el repositorio; no puede llegar a Postgres. Al terminar, `ExecStopPost` borra los volcados sin cifrar.
-  - **Una copia por cosa**, etiquetada `env`, `app`, `type` y `reason`. La retención 7/12/5 se agrupa también por etiquetas. Sin eso, la copia diaria del mismo día sustituía a la hecha antes de un cambio de imagen, que es justo la que permite volver atrás. Lo destapó el CI.
+  - **Una copia por cosa**, etiquetada `site` (el nombre de la instalación, R42), `env`, `app`, `type` y `reason`. La retención 7/12/5 se agrupa también por etiquetas. Sin eso, la copia diaria del mismo día sustituía a la hecha antes de un cambio de imagen, que es justo la que permite volver atrás. Lo destapó el CI.
   - **Repo de datos:** `deploy.sh` deja tras cada ejecución correcta una copia (`git bundle`, de git) en `/var/lib/infra-podman/data-repo`, legible solo por el operador y `svc_runner`. El servicio de backup no puede leer la carpeta del operador, y `SECURE_vc` puede no estar montado a esa hora. Esa copia queda fuera de VeraCrypt, protegida por el LUKS del portátil; solo contiene el inventario, sin secretos. Aprobado por el operador.
-  - **Aviso:** `<entorno>-backup.status` en `/var/lib/infra-podman/backup-status` (fechas y un mensaje en español, nunca datos). Un temporizador en la sesión del operador lo lee cada hora y muestra una notificación de escritorio (`notify-send`, ya presente en Sway) si la última copia falló o tiene más de 36 horas. Se instala en la cuenta del operador; `SETUP.md`, paso 16, dice cómo quitarlo. Todo queda en journald.
+  - **Aviso:** `<entorno>-backup.status` en `/var/lib/infra-podman/backup-status` (fechas y un mensaje en español, nunca datos). Un temporizador en la sesión del operador lo lee cada hora y muestra una notificación de escritorio (`notify-send`, ya presente en Sway) si la última copia falló o tiene más de 36 horas. Se instala en la cuenta del operador; `SETUP.md`, paso 17, dice cómo quitarlo. Todo queda en journald.
   - **Antes de cambiar la imagen de Postgres**, el rol `postgres` lanza el backup (`reason=pre-upgrade`) y espera; si falla, no cambia la imagen (D11).
   - **Restauración con `--exclude-xattr '*'`:** restic guarda los atributos extendidos de las carpetas y, si el destino no los admite, termina con error aunque restaure los ficheros.
   - **Sin copia de volúmenes de aplicaciones todavía:** no hay ninguno y, en Fedora, montar el volumen de otro contenedor choca con SELinux. Pasa a la fase 2 (ROADMAP).

@@ -51,7 +51,7 @@ podman login ghcr.io --username laperl   # pega el token cuando lo pida
 
 Con KeePassXC 2.8 crea `infra-dev.kdbx` **fuera del repo** (el `.gitignore` excluye `*.kdbx` igualmente):
 
-- grupo `Infra_Podman`;
+- un grupo con el **nombre de tu instalación**, `laperl` (el mismo que pondrás en `infra_site` del repo de datos, paso 16);
 - entrada `test_dummy` con una contraseña ficticia cualquiera;
 - contraseña maestra distinta de la de `infra-pro.kdbx`.
 
@@ -68,13 +68,13 @@ read -rs -p 'Contraseña de infra-dev.kdbx: ' P; echo
 printf '%s\n' "$P" | podman run --rm -i --user root \
   -v "$PWD:/work:ro,z" -w /work \
   -v "$KDBX:/kdbx/infra-dev.kdbx:ro,z" \
-  "$IMAGE" bash -c 'IFS= read -r KDBX_PASSWORD; export KDBX_PASSWORD KDBX_DATABASE=/kdbx/infra-dev.kdbx; exec ansible-playbook tests/ee/operator_selftest.yml'
+  "$IMAGE" bash -c 'IFS= read -r KDBX_PASSWORD; export KDBX_PASSWORD KDBX_DATABASE=/kdbx/infra-dev.kdbx; exec ansible-playbook -e infra_site=laperl tests/ee/operator_selftest.yml'
 unset P
 ```
 
 `--user root` hace falta porque, en Podman sin root, el root del contenedor es tu propio usuario en el portátil: así puede leer tu `.kdbx`, que normalmente solo tú puedes leer. ansible-navigator hace lo mismo.
 
-Resultado esperado: `OK: read Infra_Podman/test_dummy (N characters)`. El valor no se muestra.
+Resultado esperado: `OK: read laperl/test_dummy (N characters)`. El valor no se muestra.
 
 La contraseña viaja así: `read -s` (no se ve ni queda en el historial) → `printf`, que es una orden interna de bash y por tanto no aparece en la lista de procesos → entrada estándar del contenedor → variable de entorno solo dentro del contenedor → entrada estándar de `keepassxc-cli`. No toca el disco.
 
@@ -256,7 +256,7 @@ El `cd /` evita un error de permisos: `svc_runner` no puede entrar en tu carpeta
 
 ### 13.1 La contraseña en KeePassXC
 
-En **`infra-dev.kdbx`**, grupo `Infra_Podman`: entrada `pg-main-superuser-password` con cualquier valor ficticio.
+En **`infra-dev.kdbx`**, grupo `laperl` (el nombre de tu instalación, paso 16): entrada `pg-main-superuser-password` con cualquier valor ficticio.
 
 En **`infra-pro.kdbx`**, la misma entrada con una contraseña generada por KeePassXC (32 caracteres o más). Solo se usa al crear la base por primera vez; cambiarla después tiene su procedimiento (`docs/SECRETS_INVENTORY.md`).
 
@@ -438,19 +438,67 @@ Después, reinicia el portátil y repite la última línea: forma parte del crit
 
 Desde ahora, la consola es `svc podman exec -it prod-pg-main psql -U laperl -d postgres` ([`POSTGRES.md`](POSTGRES.md), sección 5).
 
-## 16. Backups locales (fase 1e1)
+## 16. El nombre de la instalación
+
+Cada instalación de esta plataforma tiene un **nombre propio**: la tuya, `laperl`; la de un cliente, el nombre del cliente. Es obligatorio y se escribe una sola vez, en el repo de datos. De él salen:
+
+- **el grupo de KeePassXC** donde están sus secretos: `laperl/pg-main-superuser-password`, `laperl/backup-restic-password`…;
+- más adelante, la identificación de sus backups (fase 1e1) y su carpeta en el GX10 (fase 1e2).
+
+Sin él, `deploy.sh secrets` se para antes de leer nada. Con él, nunca puede leer el secreto de otra instalación, y si en el grupo hay **dos entradas con el mismo título** se para en vez de elegir una (R42).
+
+### 16.1 Pasar de `Infra_Podman` a `laperl` (una vez)
+
+Hasta ahora el grupo se llamaba `Infra_Podman`, un nombre fijo en el código. Con KeePassXC abierto:
+
+1. En **`infra-dev.kdbx`**: clic derecho en el grupo `Infra_Podman` → **Editar grupo** → nombre `laperl` → Aceptar. Guarda.
+2. Lo mismo en **`infra-pro.kdbx`**.
+
+Las entradas y sus valores no cambian; solo el nombre del grupo.
+
+Después, en el repo de datos, añade el nombre en `inventory/dev/group_vars/all.yml` **y** en `inventory/prod/group_vars/all.yml`, debajo de `infra_env`:
+
+```yaml
+infra_site: laperl
+```
+
+```bash
+cd ~/Documents/SECURE_vc/ansible/infra-podman
+git diff                                   # solo esas dos líneas
+git commit -am "infra_site: laperl (infra-podman R42)"
+git verify-commit HEAD                     # Good "git" signature
+```
+
+### 16.2 Comprobación
+
+Desde tu copia del código, en la rama del PR para DEV y en el tag para producción:
+
+```bash
+./deploy.sh secrets --env dev --limit vmiadev   # tiene que salir «1 check-only secret(s) readable from KeePassXC for dev»
+./deploy.sh secrets --limit laptop              # no crea nada: los secretos ya existen
+```
+
+`secrets` solo lee KeePassXC para lo que falta y para `test_dummy`, así que la primera orden comprueba de verdad que el grupo nuevo se lee. En las máquinas no cambia nada.
+
+Si sale `cannot list the group 'laperl'`, el grupo no está renombrado en ese fichero. Si sale `the name of the installation is missing`, falta `infra_site` en el repo de datos.
+
+### 16.3 Si algún día cambias el nombre
+
+Cambias `infra_site` en el repo de datos y renombras el grupo en KeePassXC con el mismo nombre. Nada más: ni el código ni los secretos de las máquinas dependen de él.
+
+## 17. Backups locales (fase 1e1)
 
 Una copia diaria, a las 13:00, de todas las bases de cada instancia y, en el portátil, de tu repo de datos (SPEC 4.11). Se guarda cifrada con restic en el volumen `<entorno>-backup-repo`. Si a esa hora la máquina estaba apagada, la copia se hace al encenderla. La copia al GX10 llega en la fase 1e2.
 
-### 16.1 La clave de restic en KeePassXC
+### 17.1 La clave de restic en KeePassXC
 
-En **`infra-dev.kdbx`**, grupo `Infra_Podman`: entrada `backup-restic-password` con cualquier valor ficticio.
+En **`infra-dev.kdbx`**, grupo `laperl` (el nombre de tu instalación, paso 16): entrada `backup-restic-password` con cualquier valor ficticio.
 
 En **`infra-pro.kdbx`**, la misma entrada con una contraseña generada por KeePassXC (32 caracteres o más).
 
 **Sin esta clave, las copias no se pueden leer.** No hay forma de recuperarlas. Vive en `infra-pro.kdbx`, así que la copia manual de ese fichero (ROADMAP) es lo que protege tus backups.
 
-### 16.2 El repo de datos
+### 17.2 El repo de datos
 
 En `~/Documents/SECURE_vc/ansible/infra-podman` (con `vmiadev` y `laptop`, tus alias):
 
@@ -474,7 +522,7 @@ En `~/Documents/SECURE_vc/ansible/infra-podman` (con `vmiadev` y `laptop`, tus a
 
 Hay un ejemplo de cada fichero en [`inventory.example/`](../inventory.example/README.md). Después, commit firmado (`docs/WORKFLOW.md`, «Cambiar datos»).
 
-### 16.3 En DEV, desde la rama del PR
+### 17.3 En DEV, desde la rama del PR
 
 ```bash
 ./deploy.sh secrets       --env dev --limit vmiadev    # crea dev-backup-restic-password
@@ -491,7 +539,7 @@ cat /var/lib/infra-podman/backup-status/dev-backup.status   # result=ok
 svc systemctl --user list-timers dev-backup.timer       # la próxima, mañana a las 13:00
 ```
 
-### 16.4 En el portátil, después del merge y del tag
+### 17.4 En el portátil, después del merge y del tag
 
 ```bash
 ./deploy.sh secrets      --limit laptop
@@ -513,7 +561,7 @@ svc systemctl --user start prod-pg-main.service
 svc systemctl --user start prod-backup.service          # vuelve a result=ok
 ```
 
-### 16.5 Mirar las copias
+### 17.5 Mirar las copias
 
 - **Logs** de cada copia: qué ha volcado, qué ha guardado, cuánto ocupa y cualquier error. Nunca la clave.
   ```bash
@@ -531,11 +579,11 @@ svc systemctl --user start prod-backup.service          # vuelve a result=ok
     -e RESTIC_REPOSITORY=/repo -e RESTIC_PASSWORD_FILE=/run/secrets/restic-password \
     "$(sed -n 's/^restic_image: *"\([^"]*\)".*/\1/p' playbooks/group_vars/all/images.yml)" snapshots
   ```
-  Desde tu copia del código. Cada copia lleva las etiquetas `env=`, `app=`, `type=` (`pgdump` o `files`) y `reason=` (`daily`, o `pre-upgrade` si se hizo antes de cambiar la imagen de Postgres).
+  Desde tu copia del código. Cada copia lleva las etiquetas `site=` (`laperl`), `env=`, `app=`, `type=` (`pgdump` o `files`) y `reason=` (`daily`, o `pre-upgrade` si se hizo antes de cambiar la imagen de Postgres).
 
 La guía de restauración paso a paso, probada, llega en la fase 1f. Lo esencial ya está comprobado en el CI: una base volcada se restaura y queda igual.
 
-### 16.6 Qué instala en tu cuenta, y cómo quitarlo
+### 17.6 Qué instala en tu cuenta, y cómo quitarlo
 
 Para que el aviso salga en tu escritorio, Ansible instala en **tu** usuario, no en `svc_runner`:
 

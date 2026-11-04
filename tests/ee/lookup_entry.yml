@@ -1,0 +1,15 @@
+---
+# Run by tests/ee/run.sh: read one entry (-e kdbx_test_entry=...) and show only its length.
+- name: Kdbx lookup reads one entry
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Read the entry
+      ansible.builtin.set_fact:
+        kdbx_entry_value: "{{ lookup('kdbx', kdbx_test_entry) }}"
+      no_log: true
+
+    - name: Report without the value
+      ansible.builtin.debug:
+        msg: "read {{ kdbx_entry_value | length }} characters"

@@ -1,11 +1,12 @@
 #!/bin/sh
 # Runs INSIDE the restic container (<env>-backup), with no network (SPEC 4.11).
 # Every item prepared by backup-prepare.sh is /backup/<app>/<type>/<name>: one restic
-# snapshot each, tagged env=, app=, type= and reason= (daily, or pre-upgrade before a
-# PostgreSQL image change). Then retention (R28) and a quick check.
+# snapshot each, tagged site= (the installation, R42), env=, app=, type= and reason=
+# (daily, or pre-upgrade before a PostgreSQL image change). Then retention (R28) and a
+# quick check.
 # restic reads the password from a file (RESTIC_PASSWORD_FILE) and never prints it.
 set -eu
-: "${BACKUP_ENV:?}" "${BACKUP_HOST:?}" "${BACKUP_KEEP_DAILY:?}" "${BACKUP_KEEP_MONTHLY:?}" "${BACKUP_KEEP_YEARLY:?}"
+: "${BACKUP_SITE:?}" "${BACKUP_ENV:?}" "${BACKUP_HOST:?}" "${BACKUP_KEEP_DAILY:?}" "${BACKUP_KEEP_MONTHLY:?}" "${BACKUP_KEEP_YEARLY:?}"
 
 log() { echo "backup: $*"; }
 
@@ -33,7 +34,7 @@ for dir in /backup/*/*/*; do
   type=${rest%%/*}
   name=${rest#*/}
   log "$app/$type/$name"
-  restic backup --host "$BACKUP_HOST" --tag "env=$BACKUP_ENV" --tag "app=$app" --tag "type=$type" --tag "reason=$reason" "$dir"
+  restic backup --host "$BACKUP_HOST" --tag "site=$BACKUP_SITE" --tag "env=$BACKUP_ENV" --tag "app=$app" --tag "type=$type" --tag "reason=$reason" "$dir"
   count=$((count + 1))
 done
 if [ "$count" -eq 0 ]; then

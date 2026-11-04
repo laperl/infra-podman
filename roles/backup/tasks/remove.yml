@@ -1,6 +1,6 @@
 ---
 # Stop the daily backups. The repository volume and its unit stay (SPEC 4.2, 8). The
-# operator's notifier stays too: remove it by hand (docs/SETUP.md, step 16).
+# operator's notifier stays too: remove it by hand (docs/SETUP.md, step 17).
 - name: Stop and disable the daily timer
   ansible.builtin.systemd_service:
     name: "{{ backup_name }}.timer"

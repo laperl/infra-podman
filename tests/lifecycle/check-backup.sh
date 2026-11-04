@@ -56,8 +56,8 @@ case $1 in
       "app=infra-podman type=files /backup/infra-podman/files/data-repo"; do
       read -r app type path <<<"$want"
       jq -e --arg a "$app" --arg t "$type" --arg p "$path" \
-        'any(.[]; (.tags | index("env=dev") and index($a) and index($t)) and .paths == [$p])' <<<"$snaps" >/dev/null \
-        || fail "no snapshot $want with env=dev"
+        'any(.[]; (.tags | index("site=ci-site") and index("env=dev") and index($a) and index($t)) and .paths == [$p])' \
+        <<<"$snaps" >/dev/null || fail "no snapshot $want with site=ci-site and env=dev"
     done
     echo "::notice title=Backup snapshots::$(jq -r '[.[] | .paths[0]] | unique | join(", ")' <<<"$snaps")"
 

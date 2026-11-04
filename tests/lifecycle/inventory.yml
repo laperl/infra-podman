@@ -4,6 +4,7 @@
 all:
   vars:
     infra_env: dev
+    infra_site: ci-site  # fictitious installation name (R42)
     service_user: svc_runner
   children:
     servers:
