@@ -474,7 +474,7 @@ git verify-commit HEAD                     # Good "git" signature
 Desde tu copia del código, en la rama del PR para DEV y en el tag para producción:
 
 ```bash
-./deploy.sh secrets --env dev --limit vmiadev   # «1 check-only secret(s) readable … for dev»
+./deploy.sh secrets --env dev --limit vmiadev   # tiene que salir «1 check-only secret(s) readable from KeePassXC for dev»
 ./deploy.sh secrets --limit laptop              # no crea nada: los secretos ya existen
 ```
 
