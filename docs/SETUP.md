@@ -583,14 +583,16 @@ svc systemctl --user start prod-backup.service          # vuelve a result=ok
 
 La guía de restauración paso a paso, probada, llega en la fase 1f. Lo esencial ya está comprobado en el CI: una base volcada se restaura y queda igual.
 
-### 17.6 Qué instala en tu cuenta, y cómo quitarlo
+### 17.6 Lo que instala en tu cuenta (y si algún día quieres quitar el aviso)
+
+**No tienes que hacer nada aquí.** Solo es para que sepas qué hay en tu usuario.
 
 Para que el aviso salga en tu escritorio, Ansible instala en **tu** usuario, no en `svc_runner`:
 
 - `~/.local/libexec/infra-podman/backup-notify.sh`;
 - `~/.config/systemd/user/infra-podman-backup-notify.service` y `.timer`: miran cada hora el estado de `/var/lib/infra-podman/backup-status/` y no cambian nada.
 
-Solo afecta a ese aviso. Para quitarlo:
+Solo afecta a ese aviso. **Si algún día no lo quieres**, quítalo así:
 
 ```bash
 systemctl --user disable --now infra-podman-backup-notify.timer
