@@ -30,7 +30,8 @@ backup_notify_max_age_hours: 36
 #     http://<Tailscale name or IP of the GX10>:<backup_server_port>. In dev and CI, where
 #     server and client are the same machine: http://127.0.0.1:8000, with
 #   backup_remote_network: container:<env>-backup-server (it shares the server's network).
-#   The repository there is <infra_site>/<infra_env>/<this machine>, and the user infra_site.
+#   The repository there is <infra_site>/<infra_env>-<this machine>, and the user infra_site
+#   (rest-server accepts at most two folder levels).
 backup_remote_url: ""
 backup_remote_network: ""
 # The server's size limit (group_vars/all.yml, shared with the server) and when to warn.

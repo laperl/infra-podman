@@ -18,7 +18,7 @@ server=dev-backup-server
 copy=dev-backup-copy
 port=18000
 site=ci-site
-path=$site/dev/localhost
+path=$site/dev-localhost
 home=$(getent passwd svc_runner | cut -d: -f6)
 status=/var/lib/infra-podman/backup-status/$copy.status
 images=$here/../../playbooks/group_vars/all/images.yml
@@ -61,7 +61,7 @@ case $1 in
     [[ $(http -u "$site:wrong" "http://127.0.0.1:$port/$path/config") == 401 ]] || fail "the server accepts a wrong password"
     code=$(http -u "$site:$spw" "http://127.0.0.1:$port/$path/config")
     [[ $code == 404 ]] || fail "with the right password, its own repository gives $code instead of 404 (not created yet)"
-    code=$(http -u "$site:$spw" "http://127.0.0.1:$port/other-site/dev/x/config")
+    code=$(http -u "$site:$spw" "http://127.0.0.1:$port/other-site/dev-x/config")
     [[ $code == 401 || $code == 403 ]] || fail "the user reaches another installation's folder ($code)"
     hash=$("$as" cat "$home/.config/infra-podman/$server/htpasswd")
     [[ $hash == "$site:\$2"* ]] || fail "the password file is not a bcrypt hash for $site"

@@ -608,7 +608,7 @@ Cada hora, si el GX10 responde, el portátil le manda las copias que le falten (
 
 | Pieza | Dónde | Qué hace |
 | --- | --- | --- |
-| `prod-backup-server` | GX10 | Guarda las copias en el volumen `prod-backup-server-data`. Solo deja **añadir**: nadie puede borrar ni cambiar nada a través de él. Pide usuario (`laperl`) y contraseña, y cada instalación solo ve su carpeta (`laperl/prod/laptop`). Tope: 30 GB |
+| `prod-backup-server` | GX10 | Guarda las copias en el volumen `prod-backup-server-data`. Solo deja **añadir**: nadie puede borrar ni cambiar nada a través de él. Pide usuario (`laperl`) y contraseña, y cada instalación solo ve su carpeta (`laperl/prod-laptop`). Tope: 30 GB |
 | Puerto 18000 | GX10 | Solo en `127.0.0.1`. Desde fuera, solo por Tailscale (`tailscale serve`), nunca por la red de casa |
 | `prod-backup-copy` | Portátil | Cada hora, a y media. Solo ve el repositorio local, cifrado y en solo lectura. Si el GX10 no responde, no pasa nada: lo intenta a la hora siguiente |
 | Aviso de escritorio | Portátil | El del paso 17. Salta si una copia falla, si pasan **7 días** sin una copia buena en el GX10 o si el GX10 pasa del **80 %** del tope |
@@ -719,7 +719,7 @@ cat /var/lib/infra-podman/backup-status/prod-backup-copy.status   # result=ok
     --secret prod-backup-restic-password,type=mount,target=/run/secrets/restic-password \
     --secret prod-backup-server-password,type=env,target=RESTIC_REST_PASSWORD \
     -e RESTIC_PASSWORD_FILE=/run/secrets/restic-password -e RESTIC_REST_USERNAME=laperl \
-    -e RESTIC_REPOSITORY=rest:http://<nombre del GX10>.<tu red>.ts.net:18000/laperl/prod/laptop/ \
+    -e RESTIC_REPOSITORY=rest:http://<nombre del GX10>.<tu red>.ts.net:18000/laperl/prod-laptop/ \
     "$(sed -n 's/^restic_image: *"\([^"]*\)".*/\1/p' playbooks/group_vars/all/images.yml)" snapshots
   ```
   Desde tu copia del código. Las contraseñas llegan desde los secretos de Podman: no aparecen en la orden ni en el historial.
@@ -734,7 +734,7 @@ cat /var/lib/infra-podman/backup-status/prod-backup-copy.status   # result=ok
 | Aviso «la clave de restic no abre el repositorio del servidor» | `backup-restic-password` no es la misma con la que se creó la copia del GX10 | **No borres nada.** Comprueba en KeePassXC el historial de esa entrada: la buena es la que abre las copias. Nunca se crea un repositorio nuevo encima de uno que existe |
 | Aviso «el servidor de copias está al … % de su tope» o «está lleno» | Las copias del GX10 se acercan a los 30 GB o los han alcanzado. Lleno no copia nada nuevo; tus copias locales siguen bien | Mira el espacio del GX10 (`df -h /`). Sube `backup_server_max_size_gb` en `group_vars/all.yml` del repo de datos, commit firmado, y `apply backup-server --limit gx10` y `apply backup --limit laptop`. En el GX10 no se borra nada solo (R26) |
 | Aviso «el servidor de copias no deja escribir en …» | El usuario solo puede escribir en su carpeta, y la carpeta no empieza por su nombre | Comprueba que `infra_site` es el mismo en el repo de datos que la carpeta del mensaje |
-| El servidor no arranca o has perdido su contraseña | — | Tus copias siguen en el volumen. Para leerlas sin el servidor, en el GX10 (pega la clave de restic de KeePassXC cuando la pida; no se guarda): <br>`svc podman run --rm -it --network=none -v prod-backup-server-data:/data:ro -e RESTIC_REPOSITORY=/data/laperl/prod/laptop <restic_image de images.yml> --no-lock snapshots` <br>Para una contraseña nueva: cambia la entrada en KeePassXC y sigue la fila de «no acepta el usuario o la contraseña» |
+| El servidor no arranca o has perdido su contraseña | — | Tus copias siguen en el volumen. Para leerlas sin el servidor, en el GX10 (pega la clave de restic de KeePassXC cuando la pida; no se guarda): <br>`svc podman run --rm -it --network=none -v prod-backup-server-data:/data:ro -e RESTIC_REPOSITORY=/data/laperl/prod-laptop <restic_image de images.yml> --no-lock snapshots` <br>Para una contraseña nueva: cambia la entrada en KeePassXC y sigue la fila de «no acepta el usuario o la contraseña» |
 
 La guía de restauración paso a paso, desde la copia local y desde la del GX10, llega en la fase 1f.
 

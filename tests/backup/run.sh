@@ -99,7 +99,7 @@ copy() { # copy <expected exit code> [VAR=value...]: one run of backup-copy.sh w
   : >"$calls"
   env PATH="$bin:$PATH" FAKE_CALLS="$calls" BACKUP_RESULT_FILE="$copy_result" BACKUP_SERVER_PASSWORD_FILE="$work/server-password" \
     BACKUP_LOCAL_REPO=/repo RESTIC_PASSWORD_FILE=/run/secrets/restic-password BACKUP_SITE=ci-site \
-    BACKUP_REMOTE_URL=http://server.invalid:18000 BACKUP_REMOTE_PATH=ci-site/dev/ci \
+    BACKUP_REMOTE_URL=http://server.invalid:18000 BACKUP_REMOTE_PATH=ci-site/dev-ci \
     BACKUP_REMOTE_MAX_BYTES=10737418240 BACKUP_REMOTE_WARN_PERCENT=80 "$@" sh "$src/backup-copy.sh" >"$work/copy.log" 2>&1 || got=$?
   [[ $got == "$want" ]] || { echo "  backup-copy.sh exited $got, expected $want:"; sed 's/^/    /' "$work/copy.log"; }
   [[ $got == "$want" ]]
@@ -109,7 +109,7 @@ said() { sed -n "s/^$1=//p" "$copy_result"; }
 check "an existing repository: copies, from the read-only local one" \
   'copy 0 && grep -q "^copy --from-repo /repo --from-password-file /run/secrets/restic-password --no-lock" "$calls" && ! grep -q "^init" "$calls"'
 check "it goes to <site>/<env>/<machine>, as the installation's user" \
-  'grep -q "user=ci-site repo=rest:http://server.invalid:18000/ci-site/dev/ci/" "$calls"'
+  'grep -q "user=ci-site repo=rest:http://server.invalid:18000/ci-site/dev-ci/" "$calls"'
 check "it reports the usage and no warning below 80 %" '[[ $(said usage) == "1.0 GB de 10.0 GB (10 %)" && -z $(said warning) ]]'
 check "the server password never reaches the output" '! grep -q server-secret "$work/copy.log" "$copy_result" "$calls"'
 check "a new server: the repository is created with the local chunker parameters" \

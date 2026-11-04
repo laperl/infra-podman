@@ -31,7 +31,7 @@ Environment=RESTIC_PASSWORD_FILE=/run/secrets/restic-password
 Environment=RESTIC_CACHE_DIR=/tmp/restic-cache
 Environment=BACKUP_SITE={{ infra_site }}
 Environment=BACKUP_REMOTE_URL={{ backup_remote_url | default('', true) or 'http://unset.invalid' }}
-Environment=BACKUP_REMOTE_PATH={{ infra_site }}/{{ infra_env }}/{{ inventory_hostname | default('ci') }}
+Environment=BACKUP_REMOTE_PATH={{ infra_site }}/{{ infra_env }}-{{ inventory_hostname | default('ci') }}
 Environment=BACKUP_REMOTE_MAX_BYTES={{ ((backup_remote_max_size_gb | float) * 1073741824) | int }}
 Environment=BACKUP_REMOTE_WARN_PERCENT={{ backup_remote_warn_percent }}
 
