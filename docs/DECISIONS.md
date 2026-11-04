@@ -359,3 +359,20 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
   - **Ansible no recrea nunca una instancia.** Lee en cada `apply` cómo se creó y, si no coincide con R34, se para con un mensaje que remite a `SETUP.md`, paso 15. Recrear es un paso manual del operador, porque borra datos (D11).
 - **Por qué `backup` sigue sin contraseña** (pregunta del operador): solo entra por el socket de dentro del contenedor, y para llegar ahí hay que ser `svc_runner`. Quien puede eso ya lee los ficheros del volumen y la contraseña del superusuario, que Podman guarda sin cifrar (SPEC 4.5). Una contraseña no protegería nada más. Por TCP está rechazado, y el CI lo comprueba.
 - **Aprobada por:** el operador, el 2026-11-03.
+
+## 2026-11-04
+
+### R42. Backups locales (fase 1e1)
+
+- **Decisión:**
+  - **La fase 1e se divide en dos PR:** 1e1, copias locales; 1e2, copia al GX10. El GX10 tiene sus propios riesgos: disco al 97 %, otra contraseña de sudo y `tailscale serve --tcp` sin comprobar.
+  - **Un contenedor Quadlet de un solo uso** (`<entorno>-backup`, `Type=oneshot`), arrancado solo por `<entorno>-backup.timer` a las 13:00, con `Persistent=true`. Así se cumple D1 también para los backups. Ni un `apply` ni el arranque de la máquina lanzan una copia: `quadlet_deploy` gana `quadlet_deploy_start: false` para no arrancarlo ni reiniciarlo.
+  - **Separación de permisos:** los volcados los hace el servicio en el host (`ExecStartPre`), con `podman exec` y el rol `backup`. El contenedor de restic no tiene red y solo ve la carpeta temporal, sus scripts y el repositorio; no puede llegar a Postgres. Al terminar, `ExecStopPost` borra los volcados sin cifrar.
+  - **Una copia por cosa**, etiquetada `env`, `app`, `type` y `reason`. La retención 7/12/5 se agrupa también por etiquetas. Sin eso, la copia diaria del mismo día sustituía a la hecha antes de un cambio de imagen, que es justo la que permite volver atrás. Lo destapó el CI.
+  - **Repo de datos:** `deploy.sh` deja tras cada ejecución correcta una copia (`git bundle`, de git) en `/var/lib/infra-podman/data-repo`, legible solo por el operador y `svc_runner`. El servicio de backup no puede leer la carpeta del operador, y `SECURE_vc` puede no estar montado a esa hora. Esa copia queda fuera de VeraCrypt, protegida por el LUKS del portátil; solo contiene el inventario, sin secretos. Aprobado por el operador.
+  - **Aviso:** `<entorno>-backup.status` en `/var/lib/infra-podman/backup-status` (fechas y un mensaje en español, nunca datos). Un temporizador en la sesión del operador lo lee cada hora y muestra una notificación de escritorio (`notify-send`, ya presente en Sway) si la última copia falló o tiene más de 36 horas. Se instala en la cuenta del operador; `SETUP.md`, paso 16, dice cómo quitarlo. Todo queda en journald.
+  - **Antes de cambiar la imagen de Postgres**, el rol `postgres` lanza el backup (`reason=pre-upgrade`) y espera; si falla, no cambia la imagen (D11).
+  - **Restauración con `--exclude-xattr '*'`:** restic guarda los atributos extendidos de las carpetas y, si el destino no los admite, termina con error aunque restaure los ficheros.
+  - **Sin copia de volúmenes de aplicaciones todavía:** no hay ninguno y, en Fedora, montar el volumen de otro contenedor choca con SELinux. Pasa a la fase 2 (ROADMAP).
+- **Comprobado en `lifecycle`** (Ubuntu 24.04, Podman 4.9.3): copia, restauración de una base con los mismos datos, roles sin contraseñas, repo de datos clonable, fallo con mensaje, retención R28 con 37 copias de fechas inventadas (quedan las 20 esperadas), copia antes del cambio de imagen que sobrevive a la diaria, segundo `apply` con cero cambios y la clave nunca en los logs ni en el journal.
+- **Aprobada por:** el operador, el 2026-11-04.

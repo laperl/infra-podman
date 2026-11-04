@@ -437,3 +437,117 @@ svc podman healthcheck run prod-pg-main && echo sano
 Después, reinicia el portátil y repite la última línea: forma parte del criterio de hecho de la fase 1 («sobrevive a un reinicio»).
 
 Desde ahora, la consola es `svc podman exec -it prod-pg-main psql -U laperl -d postgres` ([`POSTGRES.md`](POSTGRES.md), sección 5).
+
+## 16. Backups locales (fase 1e1)
+
+Una copia diaria, a las 13:00, de todas las bases de cada instancia y, en el portátil, de tu repo de datos (SPEC 4.11). Se guarda cifrada con restic en el volumen `<entorno>-backup-repo`. Si a esa hora la máquina estaba apagada, la copia se hace al encenderla. La copia al GX10 llega en la fase 1e2.
+
+### 16.1 La clave de restic en KeePassXC
+
+En **`infra-dev.kdbx`**, grupo `Infra_Podman`: entrada `backup-restic-password` con cualquier valor ficticio.
+
+En **`infra-pro.kdbx`**, la misma entrada con una contraseña generada por KeePassXC (32 caracteres o más).
+
+**Sin esta clave, las copias no se pueden leer.** No hay forma de recuperarlas. Vive en `infra-pro.kdbx`, así que la copia manual de ese fichero (ROADMAP) es lo que protege tus backups.
+
+### 16.2 El repo de datos
+
+En `~/Documents/SECURE_vc/ansible/infra-podman` (con `vmiadev` y `laptop`, tus alias):
+
+1. `inventory/dev/hosts.yml` y `inventory/prod/hosts.yml`: un grupo nuevo, `backup_clients`, con la máquina que hace copias:
+   ```yaml
+       backup_clients:
+         hosts:
+           vmiadev: {}      # en prod: laptop: {}
+   ```
+2. `inventory/dev/group_vars/all.yml` y `inventory/prod/group_vars/all.yml`: en `infra_secrets`, debajo de `pg-main-superuser-password`:
+   ```yaml
+     - name: backup-restic-password
+       group: backup_clients
+   ```
+3. `inventory/prod/host_vars/laptop.yml`, un fichero nuevo, solo para el portátil:
+   ```yaml
+   ---
+   backup_data_repo: true   # copia también el repo de datos
+   backup_notify: true      # aviso de escritorio si una copia falla o es antigua
+   ```
+
+Hay un ejemplo de cada fichero en [`inventory.example/`](../inventory.example/README.md). Después, commit firmado (`docs/WORKFLOW.md`, «Cambiar datos»).
+
+### 16.3 En DEV, desde la rama del PR
+
+```bash
+./deploy.sh secrets       --env dev --limit vmiadev    # crea dev-backup-restic-password
+./deploy.sh plan  backup  --env dev --limit vmiadev
+./deploy.sh apply backup  --env dev --limit vmiadev
+./deploy.sh apply backup  --env dev --limit vmiadev    # changed=0
+```
+
+En `vmiadev`, con la función `svc` del paso 12, lanza una copia sin esperar a las 13:00 y mira el resultado:
+
+```bash
+svc systemctl --user start dev-backup.service           # tarda unos segundos; sin salida si va bien
+cat /var/lib/infra-podman/backup-status/dev-backup.status   # result=ok
+svc systemctl --user list-timers dev-backup.timer       # la próxima, mañana a las 13:00
+```
+
+### 16.4 En el portátil, después del merge y del tag
+
+```bash
+./deploy.sh secrets      --limit laptop
+./deploy.sh plan  backup --limit laptop
+./deploy.sh apply backup --limit laptop                 # al final: «copia del repo de datos lista para el backup»
+./deploy.sh apply backup --limit laptop                 # changed=0
+
+svc systemctl --user start prod-backup.service
+cat /var/lib/infra-podman/backup-status/prod-backup.status  # result=ok
+```
+
+**Comprueba el aviso de escritorio una vez**, provocando un fallo a propósito (Postgres parado):
+
+```bash
+svc systemctl --user stop prod-pg-main.service
+svc systemctl --user start prod-backup.service          # falla: es lo esperado
+systemctl --user start infra-podman-backup-notify.service   # tiene que salir la notificación
+svc systemctl --user start prod-pg-main.service
+svc systemctl --user start prod-backup.service          # vuelve a result=ok
+```
+
+### 16.5 Mirar las copias
+
+- **Logs** de cada copia: qué ha volcado, qué ha guardado, cuánto ocupa y cualquier error. Nunca la clave.
+  ```bash
+  sudo journalctl _SYSTEMD_USER_UNIT=prod-backup.service -n 100
+  ```
+- **Logs del aviso**, en tu propio journal:
+  ```bash
+  journalctl --user -u infra-podman-backup-notify -n 20
+  ```
+- **Resumen** de la última copia: `cat /var/lib/infra-podman/backup-status/prod-backup.status`.
+- **Lista de copias:**
+  ```bash
+  svc podman run --rm --network=none -v prod-backup-repo:/repo \
+    --secret prod-backup-restic-password,type=mount,target=/run/secrets/restic-password \
+    -e RESTIC_REPOSITORY=/repo -e RESTIC_PASSWORD_FILE=/run/secrets/restic-password \
+    "$(sed -n 's/^restic_image: *"\([^"]*\)".*/\1/p' playbooks/group_vars/all/images.yml)" snapshots
+  ```
+  Desde tu copia del código. Cada copia lleva las etiquetas `env=`, `app=`, `type=` (`pgdump` o `files`) y `reason=` (`daily`, o `pre-upgrade` si se hizo antes de cambiar la imagen de Postgres).
+
+La guía de restauración paso a paso, probada, llega en la fase 1f. Lo esencial ya está comprobado en el CI: una base volcada se restaura y queda igual.
+
+### 16.6 Qué instala en tu cuenta, y cómo quitarlo
+
+Para que el aviso salga en tu escritorio, Ansible instala en **tu** usuario, no en `svc_runner`:
+
+- `~/.local/libexec/infra-podman/backup-notify.sh`;
+- `~/.config/systemd/user/infra-podman-backup-notify.service` y `.timer`: miran cada hora el estado de `/var/lib/infra-podman/backup-status/` y no cambian nada.
+
+Solo afecta a ese aviso. Para quitarlo:
+
+```bash
+systemctl --user disable --now infra-podman-backup-notify.timer
+rm ~/.config/systemd/user/infra-podman-backup-notify.{service,timer} ~/.local/libexec/infra-podman/backup-notify.sh
+systemctl --user daemon-reload
+```
+
+Y pon `backup_notify: false` en `host_vars/laptop.yml` del repo de datos, o el siguiente `apply backup` lo volverá a instalar.

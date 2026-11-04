@@ -147,7 +147,8 @@ Y después, desde tu copia del código, `plan` y `apply` como siempre (paso 6).
 | `check` | Solo lee: comprueba que llega a cada máquina y su versión de Podman | Todas |
 | `base` | Usuario de servicio `svc_runner` con linger (fase 1) | `laptop`, `gx10` (DEV: `vmiadev`) |
 | `secrets` | Solo con `./deploy.sh secrets`: crea en cada máquina los secretos que le faltan, leyéndolos de KeePassXC. Pide la contraseña maestra y la de sudo | Una cada vez, con `--limit` |
-| `postgres` | Las instancias de Postgres (`pg-main`). Necesita antes `base` y `secrets` | `laptop` (DEV: `vmiadev`) |
+| `postgres` | Las instancias de Postgres (`pg-main`). Necesita antes `base` y `secrets`. Si cambia la imagen, hace antes un backup y se para si falla | `laptop` (DEV: `vmiadev`) |
+| `backup` | Backup diario local, a las 13:00, y el aviso de escritorio en el portátil. Necesita antes `base` y `secrets` ([`SETUP.md`](SETUP.md), paso 16) | `laptop` (DEV: `vmiadev`) |
 
 ## Versiones de los tags
 

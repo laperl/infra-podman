@@ -1,6 +1,6 @@
 # Especificación: plataforma Podman + Ansible
 
-Versión 1.7 · 3 de noviembre de 2026 · Operador: @Jau
+Versión 1.8 · 4 de noviembre de 2026 · Operador: @Jau
 
 Los cambios respecto a la versión 1, con su motivo, están en [`DECISIONS.md`](DECISIONS.md).
 
@@ -174,13 +174,15 @@ Para OpenClaw, SearXNG y el servicio de audio: `NoNewPrivileges=true`, `DropCapa
 Sin réplica entre máquinas: una réplica copia también los errores, como un borrado equivocado, una migración rota o un ransomware (R18).
 
 - **Herramienta:** restic (R19). Cifra en origen y la clave de cada repositorio vive en KeePassXC.
-- **Qué se copia:** todas las bases de cada instancia, una a una, con el rol `backup` de solo lectura ([`POSTGRES.md`](POSTGRES.md)); los volúmenes de datos de las aplicaciones; y el **repo de datos** del operador (4.13).
+- **Qué se copia:** todas las bases de cada instancia, una a una, con el rol `backup` de solo lectura ([`POSTGRES.md`](POSTGRES.md)), y sus roles sin contraseñas; los volúmenes de datos de las aplicaciones (desde la fase 2); y el **repo de datos** del operador (4.13), a partir de la copia que `deploy.sh` deja en `/var/lib/infra-podman/data-repo` tras cada ejecución correcta (R42).
+- **Cómo (fase 1e1, R42):** un contenedor Quadlet de un solo uso (`<entorno>-backup`), arrancado solo por su temporizador. Antes de arrancarlo, el propio servicio vuelca las bases en una carpeta temporal. El contenedor, sin red, guarda una copia por cosa con las etiquetas `env`, `app`, `type` y `reason` (`daily` o `pre-upgrade`) y la ruta `<app>/<tipo>/<nombre>`. Al terminar, se borran los volcados sin cifrar y se escribe un resumen para el aviso.
+- **Avisos:** si una copia falla o la última correcta tiene más de 36 horas, una notificación en el escritorio del operador (un temporizador en su sesión). Todo queda en journald, sin secretos.
 - **En el portátil:** un temporizador de systemd de usuario, **una vez al día** y con `Persistent=true` para ponerse al día si el portátil estaba apagado, vuelca cada base con `pg_dump` y guarda los volúmenes de datos en un repositorio restic local, en el disco cifrado.
-- **Copia externa:** cuando el GX10 es alcanzable por Tailscale, el repositorio se copia a un **rest-server de restic en el GX10** en modo `--append-only`. El portátil puede añadir copias pero no borrarlas. **Retención (R26, R28):** automática solo en el repositorio local del portátil: 7 copias diarias, 12 mensuales y 5 anuales. En el GX10 no se borra nada en la fase 1: borrar exige la clave del repositorio, que no debe vivir en un disco sin cifrar; se decide más adelante con el tamaño real.
+- **Copia externa:** cuando el GX10 es alcanzable por Tailscale, el repositorio se copia a un **rest-server de restic en el GX10** en modo `--append-only`. El portátil puede añadir copias pero no borrarlas. **Retención (R26, R28):** automática solo en el repositorio local del portátil: 7 copias diarias, 12 mensuales y 5 anuales, por separado para cada motivo (`reason`), de forma que una copia diaria nunca borra la hecha antes de un cambio de imagen. En el GX10 no se borra nada en la fase 1: borrar exige la clave del repositorio, que no debe vivir en un disco sin cifrar; se decide más adelante con el tamaño real.
 - **El GX10 no necesita disco cifrado para esto:** solo recibe datos cifrados. Puede usar un disco USB externo por capacidad.
 - **restic y rest-server** corren como contenedores Quadlet (D1), fijados por digest.
 - **Pérdida aceptada:** lo hecho desde la última copia diaria; y si se pierde el portátil, desde el último contacto con el GX10.
-- **Restauración:** se prueba al cerrar la fase 1, desde la copia local y desde la del GX10.
+- **Restauración:** se prueba al cerrar la fase 1, desde la copia local y desde la del GX10. Con `--exclude-xattr '*'` (`docs/COMPATIBILITY.md`).
 
 
 ### 4.12 Nombres y etiquetas
