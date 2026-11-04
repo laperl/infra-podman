@@ -1,0 +1,11 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# In the OPERATOR's account (not the service user's): reads the backup status and shows a
+# desktop notification if something is wrong. To remove it, see docs/SETUP.md, step 16.
+[Unit]
+Description=infra-podman: backup check for the operator
+
+[Service]
+Type=oneshot
+Environment=INFRA_BACKUP_STATUS_DIR={{ backup_status_dir }}
+Environment=INFRA_BACKUP_MAX_AGE_HOURS={{ backup_notify_max_age_hours }}
+ExecStart=%h/.local/libexec/infra-podman/backup-notify.sh

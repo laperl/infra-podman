@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  author: laperl
+  description: Daily local backup with restic as a one-shot Quadlet container (SPEC 4.11)
+  license: MIT
+  min_ansible_version: "2.18"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+    - name: Fedora
+      versions:
+        - "44"
+dependencies: []

@@ -16,6 +16,10 @@ quadlet_deploy_wait_healthy: []
 quadlet_deploy_health_retries: 30
 quadlet_deploy_health_delay: 5
 
+# false for one-shot containers started by a timer (the backup): install and validate
+# only; never start them, nor restart them when their unit changes.
+quadlet_deploy_start: true
+
 # present: install, validate and start. absent: stop and remove the .container files only;
 # the .volume and .network files and the data stay (SPEC 4.2, 8).
 quadlet_deploy_state: present

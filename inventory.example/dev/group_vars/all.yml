@@ -13,6 +13,8 @@ infra_secrets:
   - name: test_dummy  # only checked, never installed
   - name: pg-main-superuser-password
     group: postgres_hosts
+  - name: backup-restic-password  # key of the restic repositories: lose it, lose the backups
+    group: backup_clients
 
 # Never forward the operator's SSH agent to a server: any process there (an AI included)
 # could use the operator's keys, the signing key among them (D14, R17). On the command line

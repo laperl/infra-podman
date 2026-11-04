@@ -76,6 +76,12 @@
   register: postgres_hba
   when: postgres_state == 'present'
 
+# Before PostgreSQL restarts on a new image, a backup, so the operator can go back by hand
+# (D11, ROADMAP). Only when the instance is running: a stopped one cannot be dumped.
+- name: Back up before an image change
+  ansible.builtin.include_tasks: backup_before_image_change.yml
+  when: postgres_state == 'present'
+
 # Absolute paths, resolved here: role_path passed lazily to quadlet_deploy would point
 # at quadlet_deploy itself.
 - name: Resolve the templates of this instance

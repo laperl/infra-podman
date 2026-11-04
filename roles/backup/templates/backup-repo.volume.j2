@@ -1,0 +1,9 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Local restic repository of {{ backup_name }}, encrypted by restic. Never removed when
+# the service is destroyed (SPEC 4.2).
+[Volume]
+VolumeName={{ backup_volume }}
+Label=infra.env={{ infra_env }}
+Label=infra.app=backup
+Label=infra.component=data
+Label=infra.managed-by=infra-podman

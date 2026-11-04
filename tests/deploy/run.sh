@@ -31,6 +31,8 @@ printf 'stdin %s\n' "$(cat)" >>"$FAKE_CALLS"
 EOF
 chmod +x "$work/fake-navigator" "$work/fake-podman"
 export INFRA_NAVIGATOR_BIN=$work/fake-navigator INFRA_PODMAN_BIN=$work/fake-podman FAKE_CALLS=$calls
+# Where deploy.sh leaves the copy of the data repository; absent until a test creates it.
+export INFRA_DATA_COPY_DIR=$work/data-copy
 
 # --- a throwaway copy of the repository, without inventory (SPEC 4.13) ---------------
 repo=$work/repo
@@ -140,6 +142,23 @@ if grep -q -- '"--network=host"' "$src/ansible-navigator.yml"; then
 else
   fail "the Ansible container uses the host network, to reach the laptop on 127.0.0.1 (R23)"
 fi
+
+# --- the copy of the data repository for the backup (SPEC 4.11) -----------------------
+expect ok "without the copy directory nothing is copied, and nothing fails" plan check --env dev
+if [[ ! -e $INFRA_DATA_COPY_DIR ]]; then pass "deploy.sh does not create the copy directory"; else fail "deploy.sh does not create the copy directory"; fi
+mkdir -p "$INFRA_DATA_COPY_DIR"
+expect ok "with the copy directory, a successful run leaves the copy" plan check --env dev
+bundle=$INFRA_DATA_COPY_DIR/infra-podman-data.bundle
+if git bundle verify "$bundle" >/dev/null 2>&1 && git clone -q "$bundle" "$work/restored" 2>/dev/null \
+  && [[ $(git -C "$work/restored" rev-parse HEAD) == $(git -C "$data" rev-parse HEAD) ]]; then
+  pass "the copy is a bundle of the data repository that git can clone"
+else
+  fail "the copy is a bundle of the data repository that git can clone"
+fi
+if [[ $(stat -c %a "$bundle") == 640 ]]; then pass "the copy is readable by owner and group only"; else fail "the copy is readable by owner and group only ($(stat -c %a "$bundle"))"; fi
+rm -rf "$work/restored" "$bundle"
+FAKE_RC=3 "$repo/deploy.sh" plan check --env dev </dev/null >/dev/null 2>&1 || true
+if [[ ! -e $bundle ]]; then pass "a failed run leaves no copy"; else fail "a failed run leaves no copy"; fi
 
 # --- input validation -------------------------------------------------------------------
 expect refused "unknown environment is refused" plan check --env staging

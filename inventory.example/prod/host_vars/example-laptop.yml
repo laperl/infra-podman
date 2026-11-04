@@ -1,0 +1,9 @@
+---
+# EXAMPLE (SPEC 4.13). The real file is inventory/prod/host_vars/<laptop alias>.yml in the
+# data repository. Variables of this machine only.
+
+# The laptop is where deploy.sh runs: its backup also saves the copy of the data
+# repository that deploy.sh leaves in /var/lib/infra-podman/data-repo (SPEC 4.11).
+backup_data_repo: true
+# Desktop notification in the operator's session when a backup fails or is too old.
+backup_notify: true

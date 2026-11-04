@@ -13,6 +13,7 @@
       - quadlet_deploy_units | selectattr('name', 'undefined') | list | length == 0
       - quadlet_deploy_units | map(attribute='name') | map('regex_search', '\.(container|network|volume)$') | select('none') | list | length == 0
       - not quadlet_deploy_purge or quadlet_deploy_state == 'absent'
+      - quadlet_deploy_start or quadlet_deploy_wait_healthy | length == 0
     fail_msg: "quadlet_deploy needs quadlet_deploy_units (template, name), only .container, .network and .volume; purge only with state absent"
     quiet: true
 

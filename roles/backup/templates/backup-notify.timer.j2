@@ -1,0 +1,11 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Every hour while the operator's session is open, and a few minutes after it starts.
+[Unit]
+Description=infra-podman: hourly backup check for the operator
+
+[Timer]
+OnStartupSec=5min
+OnCalendar=hourly
+
+[Install]
+WantedBy=timers.target

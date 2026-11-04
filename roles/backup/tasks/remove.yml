@@ -1,0 +1,37 @@
+---
+# Stop the daily backups. The repository volume and its unit stay (SPEC 4.2, 8). The
+# operator's notifier stays too: remove it by hand (docs/SETUP.md, step 16).
+- name: Stop and disable the daily timer
+  ansible.builtin.systemd_service:
+    name: "{{ backup_name }}.timer"
+    enabled: false
+    state: stopped
+    scope: user
+  environment: "{{ backup_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  failed_when: false
+
+- name: Remove the timer
+  ansible.builtin.file:
+    path: "{{ backup_home }}/.config/systemd/user/{{ backup_name }}.timer"
+    state: absent
+  become: true
+  become_user: "{{ service_user }}"
+
+- name: Resolve the templates
+  ansible.builtin.set_fact:
+    backup_units_resolved: >-
+      {{ ([] if ansible_loop.first else backup_units_resolved)
+         + [{'name': item.name, 'template': role_path ~ '/templates/' ~ item.template}] }}
+  loop: "{{ backup_quadlet_units }}"
+  loop_control:
+    extended: true
+    label: "{{ item.name }}"
+
+- name: Remove the container unit with quadlet_deploy
+  ansible.builtin.include_role:
+    name: quadlet_deploy
+  vars:
+    quadlet_deploy_units: "{{ backup_units_resolved }}"
+    quadlet_deploy_state: absent
