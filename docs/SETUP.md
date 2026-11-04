@@ -574,23 +574,25 @@ svc systemctl --user start prod-backup.service          # vuelve a result=ok
 - **Resumen** de la última copia: `cat /var/lib/infra-podman/backup-status/prod-backup.status`.
 - **Lista de copias:**
   ```bash
-  svc podman run --rm --network=none -v prod-backup-repo:/repo \
+  svc podman run --rm --network=none --security-opt label=disable -v prod-backup-repo:/repo \
     --secret prod-backup-restic-password,type=mount,target=/run/secrets/restic-password \
     -e RESTIC_REPOSITORY=/repo -e RESTIC_PASSWORD_FILE=/run/secrets/restic-password \
     "$(sed -n 's/^restic_image: *"\([^"]*\)".*/\1/p' playbooks/group_vars/all/images.yml)" snapshots
   ```
-  Desde tu copia del código. Cada copia lleva las etiquetas `site=` (`laperl`), `env=`, `app=`, `type=` (`pgdump` o `files`) y `reason=` (`daily`, o `pre-upgrade` si se hizo antes de cambiar la imagen de Postgres).
+  Desde tu copia del código. `--security-opt label=disable` hace falta en Fedora: el backup marca su volumen como privado para SELinux (`:Z`) y, sin esa opción, otro contenedor recibe `permission denied`. No cambia la marca del volumen. Cada copia lleva las etiquetas `site=` (`laperl`), `env=`, `app=`, `type=` (`pgdump` o `files`) y `reason=` (`daily`, o `pre-upgrade` si se hizo antes de cambiar la imagen de Postgres).
 
 La guía de restauración paso a paso, probada, llega en la fase 1f. Lo esencial ya está comprobado en el CI: una base volcada se restaura y queda igual.
 
-### 17.6 Qué instala en tu cuenta, y cómo quitarlo
+### 17.6 Lo que instala en tu cuenta (y si algún día quieres quitar el aviso)
+
+**No tienes que hacer nada aquí.** Solo es para que sepas qué hay en tu usuario.
 
 Para que el aviso salga en tu escritorio, Ansible instala en **tu** usuario, no en `svc_runner`:
 
 - `~/.local/libexec/infra-podman/backup-notify.sh`;
 - `~/.config/systemd/user/infra-podman-backup-notify.service` y `.timer`: miran cada hora el estado de `/var/lib/infra-podman/backup-status/` y no cambian nada.
 
-Solo afecta a ese aviso. Para quitarlo:
+Solo afecta a ese aviso. **Si algún día no lo quieres**, quítalo así:
 
 ```bash
 systemctl --user disable --now infra-podman-backup-notify.timer
