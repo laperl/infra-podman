@@ -7,7 +7,7 @@
 #   retention  R28 on fake-dated snapshots, with the values of the installed unit
 #   count      prints the number of pgdump snapshots of pg-main
 #   destroyed  timer and container unit gone, repository kept (SPEC 4.2)
-set -euo pipefail
+set -Eeuo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 as=$here/as-svc.sh
 unit=dev-backup
