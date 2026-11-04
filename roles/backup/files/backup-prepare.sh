@@ -6,6 +6,8 @@
 #                             role backup through the socket (docs/POSTGRES.md), and the
 #                             roles without passwords (they live in KeePassXC)
 #   file <app> <name> <path>  a copy of that file
+# The reason of the run is daily, or what the file next-reason says (the postgres role
+# writes pre-upgrade there before an image change); restic tags the snapshots with it.
 # On failure the reason goes to prepare-error, for backup-status.sh and the notifier.
 set -euo pipefail
 
@@ -27,6 +29,15 @@ rm -rf "$staging"
 mkdir "$staging"
 chmod 700 "$staging"
 umask 077
+
+reason=daily
+if [[ -f $state/next-reason ]]; then
+  reason=$(head -n 1 "$state/next-reason")
+  rm -f "$state/next-reason"
+fi
+[[ $reason =~ ^[a-z][a-z-]{0,30}$ ]] || fail "motivo de copia no válido en next-reason: $reason"
+printf '%s\n' "$reason" >"$staging/.reason"
+echo "backup-prepare: reason $reason"
 
 dump_instance() { # dump_instance <app> <container>
   local app=$1 container=$2 running dbs db dir
@@ -66,5 +77,5 @@ while read -r kind app a b; do
   esac
 done <"$conf"
 
-[[ -n $(ls -A "$staging") ]] || fail "no hay nada que copiar en $conf."
+[[ -n $(find "$staging" -mindepth 1 -maxdepth 1 -not -name .reason) ]] || fail "no hay nada que copiar en $conf."
 echo "backup-prepare: ready"

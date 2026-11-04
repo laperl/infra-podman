@@ -278,9 +278,9 @@ jobs:
 
       - name: A second run adds snapshots and keeps working
         run: |
-          before=$($CHECK count)
+          before=$($CHECK latest)
           $AS systemctl --user start dev-backup.service
-          [[ $($CHECK count) -gt $before ]] || { echo "::error::the second run saved nothing"; exit 1; }
+          [[ $($CHECK latest) > $before ]] || { echo "::error::the second run saved nothing"; exit 1; }
           $CHECK ok
 
       - name: A failed run is recorded with its reason
@@ -296,7 +296,6 @@ jobs:
 
       - name: A new PostgreSQL image is backed up first (D11)
         run: |
-          before=$($CHECK count)
           restic=$(sed -n 's/^restic_image: *"\([^"]*\)".*/\1/p' playbooks/group_vars/all/images.yml)
           # Any other image will do: this one cannot run PostgreSQL, so the deploy then
           # fails its healthcheck and is stopped, without touching the data (D11).
@@ -306,8 +305,12 @@ jobs:
           fi
           cat image.log >> all.log
           grep -A1 'Run the backup now' image.log | grep -q '^changed:' || { echo "::error::no backup before the image change"; exit 1; }
-          [[ $($CHECK count) -gt $before ]] || { echo "::error::the backup before the image change saved nothing"; exit 1; }
+          $CHECK kept pre-upgrade
           tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml 2>&1 | tee -a all.log
+          # The daily run that follows, the same day, must not remove it.
+          $AS systemctl --user start dev-backup.service
+          $CHECK kept pre-upgrade
+          $CHECK kept daily
           $AS podman exec dev-pg-main psql -X -U ci_admin -d lifecycle_app -tAq -c "SELECT count(*) FROM app.t" | grep -qx 1000 \
             || { echo "::error::the data did not survive"; exit 1; }
 

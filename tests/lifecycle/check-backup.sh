@@ -5,7 +5,8 @@
 #              repository, roles saved, no plain dump left on disk
 #   failed     last run failed and the status explains why
 #   retention  R28 on fake-dated snapshots, with the values of the installed unit
-#   count      prints the number of pgdump snapshots of pg-main
+#   latest     prints the time of the newest pgdump snapshot of pg-main
+#   kept <r>   there is a pgdump snapshot of lifecycle_app tagged reason=<r>
 #   destroyed  timer and container unit gone, repository kept (SPEC 4.2)
 set -Eeuo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -49,7 +50,7 @@ case $1 in
     [[ $(stat -c %a "$status") == 644 ]] || fail "status file not readable by the operator"
     ! "$as" test -e "$home/.local/state/infra-podman/backup/staging" || fail "the plain dumps were left on disk"
     snaps=$(restic_cli snapshots --json)
-    for want in "app=pg-main type=pgdump /backup/pg-main/pgdump/lifecycle_app" \
+    for want in "app=pg-main reason=daily /backup/pg-main/pgdump/lifecycle_app" \
       "app=pg-main type=pgdump /backup/pg-main/pgdump/postgres" \
       "app=pg-main type=pgdump /backup/pg-main/pgdump/_roles" \
       "app=infra-podman type=files /backup/infra-podman/files/data-repo"; do
@@ -114,8 +115,13 @@ case $1 in
     [[ $kept == "$expected" ]] || fail "retention kept: $kept"
     echo "::notice title=Retention R28::37 snapshots, 20 kept: $kept"
     ;;
-  count)
-    restic_cli snapshots --json --tag app=pg-main,type=pgdump | jq length
+  latest)
+    restic_cli snapshots --json --tag app=pg-main,type=pgdump | jq -r 'map(.time) | max'
+    ;;
+  kept)
+    restic_cli snapshots --json --tag "app=pg-main,type=pgdump,reason=$2" \
+      | jq -e 'any(.[]; .paths == ["/backup/pg-main/pgdump/lifecycle_app"])' >/dev/null \
+      || fail "no pgdump snapshot tagged reason=$2"
     ;;
   destroyed)
     ! "$as" systemctl --user is-enabled "$unit.timer" >/dev/null 2>&1 || fail "the timer is still enabled"
@@ -124,6 +130,6 @@ case $1 in
     "$as" podman volume exists dev-backup-repo || fail "the repository volume was removed (SPEC 4.2)"
     [[ $(restic_cli snapshots --json | jq length) -gt 0 ]] || fail "the snapshots are gone"
     ;;
-  *) echo "usage: $0 installed|ok|failed <text>|retention|count|destroyed" >&2; exit 2 ;;
+  *) echo "usage: $0 installed|ok|failed <text>|retention|latest|kept <reason>|destroyed" >&2; exit 2 ;;
 esac
-[[ $1 == count ]] || echo "ok: $1"
+[[ $1 == latest ]] || echo "ok: $1"

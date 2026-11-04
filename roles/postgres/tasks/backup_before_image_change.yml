@@ -59,6 +59,16 @@
         msg: "{{ postgres_name }} changes image: apply will run {{ infra_env }}-backup.service first."
       when: ansible_check_mode
 
+    # Tagged reason=pre-upgrade: its own retention group, so a daily run never removes it.
+    - name: Mark the next backup as made before an image change
+      ansible.builtin.copy:
+        content: "pre-upgrade\n"
+        dest: "{{ postgres_service_home }}/.local/state/infra-podman/backup/next-reason"
+        mode: "0600"
+      become: true
+      become_user: "{{ service_user }}"
+      when: not ansible_check_mode
+
     # Waits until the one-shot service ends; a failed backup stops the playbook here.
     - name: Run the backup now
       ansible.builtin.command:
