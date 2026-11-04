@@ -60,11 +60,14 @@ case $1 in
     done
     echo "::notice title=Backup snapshots::$(jq -r '[.[] | .paths[0]] | unique | join(", ")' <<<"$snaps")"
 
+    # --exclude-xattr '*': the saved folders carry extended attributes (ACLs here, SELinux
+    # labels on Fedora) that the target may not accept; restic then restores the files but
+    # ends with an error. Dumps and bundles need none (docs/COMPATIBILITY.md).
     OUT=$("$as" mktemp -d)
     export OUT
-    restic_cli restore latest --path /backup/pg-main/pgdump/lifecycle_app --target /out >/dev/null
-    restic_cli restore latest --path /backup/pg-main/pgdump/_roles --target /out >/dev/null
-    restic_cli restore latest --path /backup/infra-podman/files/data-repo --target /out >/dev/null
+    restic_cli restore latest --path /backup/pg-main/pgdump/lifecycle_app --target /out --exclude-xattr '*' >/dev/null
+    restic_cli restore latest --path /backup/pg-main/pgdump/_roles --target /out --exclude-xattr '*' >/dev/null
+    restic_cli restore latest --path /backup/infra-podman/files/data-repo --target /out --exclude-xattr '*' >/dev/null
     sql() { "$as" podman exec -i dev-pg-main psql -X -U ci_admin -v ON_ERROR_STOP=1 -tAq "$@"; }
     sql -d postgres -c "DROP DATABASE IF EXISTS lifecycle_restored" -c "CREATE DATABASE lifecycle_restored"
     "$as" cat "$OUT/backup/pg-main/pgdump/lifecycle_app/lifecycle_app.dump" \
