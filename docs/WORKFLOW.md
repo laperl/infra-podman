@@ -100,7 +100,10 @@ Después puedes seguir trabajando en `main` con normalidad. El siguiente desplie
 | Mensaje | Qué pasa | Qué hacer |
 | --- | --- | --- |
 | `HEAD no tiene ningún tag firmado…` | El tag está en otro commit (creado antes del `git pull`) o no está firmado. El mensaje dice en qué commit estás y dónde está el último tag | Si el tag no se ha subido: `git tag -d <tag>` y repite el paso 5. Comprueba con `git tag --points-at HEAD` y `git verify-tag <tag>` |
-| `kdbx: cannot read 'Infra_Podman/…' … Could not find entry` | Falta esa entrada en el `.kdbx`, o tiene otro nombre o está en otro grupo | Créala en KeePassXC: grupo `Infra_Podman` y título exactamente el nombre del mensaje. Ver «Cómo desplegarlo» del PR |
+| `kdbx: there is no entry '…' in the group 'laperl'` | Falta esa entrada en el `.kdbx`, o tiene otro título | Créala en KeePassXC: grupo `laperl` (el nombre de tu instalación) y título exactamente el del mensaje. Ver «Cómo desplegarlo» del PR |
+| `kdbx: cannot list the group 'laperl'` | El grupo de KeePassXC no se llama como tu instalación | Renómbralo ([`SETUP.md`](SETUP.md), paso 16) |
+| `kdbx: … has 2 entries titled '…'` | Dos entradas con el mismo título en el grupo | Deja solo una en KeePassXC |
+| `infra_site is missing or not valid` | Falta el nombre de la instalación en el repo de datos | `infra_site: laperl` en los dos `group_vars/all.yml` ([`SETUP.md`](SETUP.md), paso 16) |
 | `hay cambios sin commit o ficheros sin seguimiento` | Hay algo modificado en tu copia | `git status`. Guarda tus cambios en otra rama o descártalos |
 | `el repo de datos tiene cambios sin commit…` | Has editado datos y no has hecho el commit | En el repo de datos: `git status`, y commit firmado o `git restore` («Cambiar datos») |
 | `el último commit del repo de datos … no está firmado…` | Commit hecho sin firma, o con otra clave | `git -C ~/Documents/SECURE_vc/ansible/infra-podman verify-commit HEAD`. Revisa la configuración de firma de ese repo ([`SETUP.md`](SETUP.md), paso 14) y rehaz el commit: `git commit --amend --no-edit -S` |

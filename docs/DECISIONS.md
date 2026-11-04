@@ -359,3 +359,17 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
   - **Ansible no recrea nunca una instancia.** Lee en cada `apply` cómo se creó y, si no coincide con R34, se para con un mensaje que remite a `SETUP.md`, paso 15. Recrear es un paso manual del operador, porque borra datos (D11).
 - **Por qué `backup` sigue sin contraseña** (pregunta del operador): solo entra por el socket de dentro del contenedor, y para llegar ahí hay que ser `svc_runner`. Quien puede eso ya lee los ficheros del volumen y la contraseña del superusuario, que Podman guarda sin cifrar (SPEC 4.5). Una contraseña no protegería nada más. Por TCP está rechazado, y el CI lo comprueba.
 - **Aprobada por:** el operador, el 2026-11-03.
+
+## 2026-11-04
+
+### R42. Nombre de la instalación, obligatorio, y grupo de KeePassXC
+
+- **Decisión:**
+  - Cada instalación de la plataforma tiene un nombre propio, `infra_site`, en `group_vars/all.yml` de su repo de datos: `laperl` para la del operador y, por ejemplo, el de un cliente para la suya. Obligatorio, igual en dev y prod, minúsculas, números y guiones.
+  - **El grupo de KeePassXC es ese nombre:** `laperl/<secreto>`. Se acaba el `Infra_Podman` fijo en el código. El lookup lo toma del inventario; sin él, no lee nada, y `playbooks/secrets.yml` se para al empezar.
+  - **Sin ambigüedad:** antes de leer, el lookup lista el grupo (`keepassxc-cli ls`) y se para si la entrada no existe o si hay dos con el mismo título. KeePassXC permite títulos repetidos, y entonces no estaba claro cuál se usaba.
+  - **Se aplaza, con su disparador en el ROADMAP:** gestionar varias instalaciones desde el portátil (cuando llegue el primer cliente) y alojar backups de clientes en el GX10 (1e2 o después).
+- **Motivo:** el operador quiere gestionar en el futuro su infraestructura y la de clientes, con secretos y backups separados por nombre, sin duplicados y sin depender de que no haya errores humanos. Ahora es buen momento: en las máquinas no cambia nada, porque los secretos de Podman no llevan el grupo en su nombre.
+- **Corrección incluida:** `secrets.yml` empieza con una parte en `localhost` (comprueba `infra_site` y `--rotate` y lee los secretos de prueba). Con `--limit <máquina>`, que es como se usa siempre desde R24, Ansible se la saltaba sin avisar: «skipping: no hosts matched». `deploy.sh secrets` añade ahora `localhost` al `--limit`. Detectado por el operador en DEV el 2026-11-04.
+- **Comprobado:** pruebas unitarias con un `keepassxc-cli` falso; en el sandbox, con `keepassxc-cli` 2.7.6 real y una base con dos entradas de título repetido, creada con pykeepass porque `keepassxc-cli add` no permite crearlas: `ls` lista el título dos veces y el lookup se para. En el CI, `tests/ee` con la 2.8.0 de la imagen.
+- **Aprobada por:** el operador, el 2026-11-04.

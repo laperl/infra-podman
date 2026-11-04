@@ -3,10 +3,15 @@
 # repository. Variables for every machine of this environment.
 infra_env: dev
 
+# Name of this installation: yours, or a client's. Required, the same in dev and prod, and
+# different for every installation. It is also the KeePassXC group of its secrets
+# (example/<secret>). Lower case letters, digits and hyphens.
+infra_site: example
+
 # The one service user on every machine that runs services (D3).
 service_user: svc_runner
 
-# Secrets this environment expects in its KeePassXC database, under Infra_Podman/<name>.
+# Secrets this environment expects in its KeePassXC database, under <infra_site>/<name>.
 # Names only, never values (docs/SECRETS_INVENTORY.md). With group: installed by
 # deploy.sh secrets as the Podman secret <env>-<name> on every machine of that group.
 infra_secrets:

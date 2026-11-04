@@ -95,7 +95,7 @@ No hay red compartida entre consumidores: cada aplicación tiene su red con `iso
 
 ## 4. Contraseñas
 
-- **KeePassXC** es la copia maestra: `Infra_Podman/pg-<instancia>-<usuario>-password`. El superusuario es `pg-<instancia>-superuser-password`. `backup` no tiene.
+- **KeePassXC** es la copia maestra: `<instalación>/pg-<instancia>-<usuario>-password` (por ejemplo `laperl/…`; SETUP, paso 16). El superusuario es `pg-<instancia>-superuser-password`. `backup` no tiene.
 - **Secretos de Podman** (`podman secret`): así llega cada contraseña a los contenedores, como fichero (SPEC 4.5). Se crean con `deploy.sh secrets`.
 - **No hay `.pgpass` ni ficheros de contraseñas.**
 - **Cambiar una contraseña:** primero `ALTER ROLE` en la base y después `deploy.sh secrets --rotate` (SPEC 4.5).

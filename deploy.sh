@@ -220,7 +220,10 @@ run_secrets() {
   [[ -d $HOME/.ssh ]] && mounts+=(-v "$HOME/.ssh:/root/.ssh:ro")
   [[ -f /etc/ssh/ssh_known_hosts ]] && mounts+=(-v /etc/ssh/ssh_known_hosts:/etc/ssh/ssh_known_hosts:ro)
   local playbook_args=(playbooks/secrets.yml -i /inventory/hosts.yml)
-  [[ -n $limit ]] && playbook_args+=(--limit "$limit")
+  # The first play of secrets.yml runs on localhost (the Ansible container): it checks
+  # infra_site and --rotate and reads the check-only secrets. A --limit without localhost
+  # would skip it silently, so it is always added.
+  [[ -n $limit ]] && playbook_args+=(--limit "$limit,localhost")
   [[ -n $rotate ]] && playbook_args+=(-e "secrets_rotate=$rotate")
 
   local become_password

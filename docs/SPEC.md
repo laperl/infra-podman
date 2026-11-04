@@ -1,6 +1,6 @@
 # Especificación: plataforma Podman + Ansible
 
-Versión 1.7 · 3 de noviembre de 2026 · Operador: @Jau
+Versión 1.8 · 4 de noviembre de 2026 · Operador: @Jau
 
 Los cambios respecto a la versión 1, con su motivo, están en [`DECISIONS.md`](DECISIONS.md).
 
@@ -125,7 +125,8 @@ Esta sección debe copiarse a `docs/COMPATIBILITY.md`.
 
 ### 4.5 Secretos
 
-- **Copia maestra:** `infra-pro.kdbx` en el portátil, con rutas `Infra_Podman/<secreto>`. En DEV, `infra-dev.kdbx` con las mismas rutas y valores ficticios. La bóveda personal nunca se toca.
+- **Copia maestra:** `infra-pro.kdbx` en el portátil, con rutas `<instalación>/<secreto>`. En DEV, `infra-dev.kdbx` con las mismas rutas y valores ficticios. La bóveda personal nunca se toca.
+- **Nombre de la instalación (R42):** `infra_site` en el repo de datos (por ejemplo `laperl`), obligatorio, igual en dev y prod y distinto en cada instalación. Es el grupo de KeePassXC de sus secretos; no hay ningún grupo fijo en el código. El lookup lista el grupo antes de leer y se para si la entrada falta o si su título está repetido.
 - **Lectura:** lookup propio `plugins/lookup/kdbx.py` que invoca `keepassxc-cli show -q -s -a password <base> <entrada>`, instalado en la imagen de Ansible. `deploy.sh secrets` pide la contraseña maestra con `read -s` y la pasa por la **entrada estándar** del contenedor de la imagen de Ansible, lanzado con `podman run -i` y no con ansible-navigator, que escribiría las variables de entorno en un fichero (R11 en `DECISIONS.md`). Dentro del contenedor queda como variable de entorno solo de ese proceso; el lookup se la entrega a `keepassxc-cli` por la entrada estándar, **nunca como argumento** (los argumentos son visibles en la lista de procesos). Nunca se escribe en disco ni en logs. Cada consulta vuelve a descifrar la base, lo que es aceptable porque solo ocurre al crear o rotar secretos. No se usa la colección `viczem.keepass`.
 - **Sustituible:** el lookup es la única pieza que sabe cómo se leen los secretos. Si `keepassxc-cli` no convence, se cambia su implementación (por ejemplo, a la librería pykeepass) sin tocar playbooks ni roles.
 - **Creación:** `deploy.sh secrets` (playbook `secrets`), máquina a máquina con `--limit`. Instala cada secreto declarado en `infra_secrets` como `<entorno>-<nombre>` en las máquinas de su grupo. Pide también la contraseña de sudo de esa máquina, que viaja por la entrada estándar como la maestra (R29). Usa `containers.podman.podman_secret` con `no_log: true`. Solo se lee KeePassXC si el secreto **no existe** en el servidor o si se pide rotarlo. Un despliegue normal no pide la contraseña.
@@ -194,7 +195,7 @@ Para saber de un vistazo de quién es cada contenedor, red o volumen, para qué 
 | Contenedor y su servicio systemd | `<entorno>-<app>[-<pieza>]` | `prod-pg-main`, `prod-firefly`, `prod-backup` |
 | Red | `<entorno>-<consumidor>-<proveedor>-net` | `prod-firefly-pg-main-net`: Firefly habla con el Postgres `main` |
 | Volumen | `<entorno>-<app>-<contenido>` | `prod-pg-main-data`, `prod-firefly-uploads`, `prod-backup-repo` |
-| Secreto de Podman | `<entorno>-<nombre en KeePassXC>` | `prod-pg-main-firefly-password` ↔ `Infra_Podman/pg-main-firefly-password` (la misma ruta en dev y prod) |
+| Secreto de Podman | `<entorno>-<nombre en KeePassXC>` | `prod-pg-main-firefly-password` ↔ `<instalación>/pg-main-firefly-password` (la misma ruta en dev y prod) |
 
 - **Postgres:** cada instancia se llama `pg-<instancia>`, por ejemplo `pg-main` o `pg-test`.
 - **Ficheros Quadlet:** se llaman como el objeto (`prod-firefly.container` crea el servicio `prod-firefly.service`).
@@ -295,7 +296,7 @@ Son supuestos razonables pero no comprobados. Si alguno falla, detente y propón
 | Fase | Qué verificar |
 | --- | --- |
 | 0 | Cómo instalar ansible-navigator en Fedora Atomic 44 y que la imagen de Ansible funcione con el Podman del portátil (5 en Fedora 44; 6 al pasar a Fedora 45) y el reenvío del agente SSH. Instalación: **comprobada** (`docs/SETUP.md`). Agente SSH: **comprobado** el 2026-11-02 con `deploy.sh plan check --env dev` y `--security-opt=label=disable` (R16) |
-| 0 | Que `keepassxc-cli` dentro de la imagen de Ansible abre un `.kdbx` guardado con KeePassXC 2.8, cómo se instala en esa imagen y qué versión trae. Se instala con el paquete `keepassxc` de Fedora 44 y trae la **2.8.0**. **Comprobado** el 2026-11-02 por el operador: el lookup lee `Infra_Podman/test_dummy` de `infra-dev.kdbx` creado con KeePassXC 2.8 de escritorio (`docs/SETUP.md`, paso 4) |
+| 0 | Que `keepassxc-cli` dentro de la imagen de Ansible abre un `.kdbx` guardado con KeePassXC 2.8, cómo se instala en esa imagen y qué versión trae. Se instala con el paquete `keepassxc` de Fedora 44 y trae la **2.8.0**. **Comprobado** el 2026-11-02 por el operador: el lookup lee `Infra_Podman/test_dummy` (hoy `<instalación>/test_dummy`, R42) de `infra-dev.kdbx` creado con KeePassXC 2.8 de escritorio (`docs/SETUP.md`, paso 4) |
 | 0 | Que `keepassxc-cli` acepta la contraseña maestra por la entrada estándar sin terminal. La documentación oficial describe `-q` (silencia la petición de contraseña) y `-s`/`-a`, pero no detalla este comportamiento. **Comprobado** con 2.7.6 en local y con 2.8.0, la que trae la imagen de Ansible, en CI (`tests/ee/run.sh`) |
 | 0 | Que Ansible no evalúa el lookup de KeePassXC en una tarea saltada (`when:` falso) cuando el secreto ya existe. **Comprobado**, salvo en `loop:` (ver 4.5) |
 | 1 | Que el runner `ubuntu-24.04` permite usar Podman 4.9 rootless con systemd de usuario para `lifecycle` (y `ubuntu-24.04-arm` cuando haya servicios del GX10 con datos). **Comprobado** el 2026-11-03 (jobs `base` y `postgres`): usuario de servicio con linger, Podman 4.9.3 rootless, Quadlet, healthcheck y reinicio. Salvedad del runner, no de los servidores: su `/etc/environment` fija `XDG_*` para su propio usuario y el workflow lo quita (`docs/COMPATIBILITY.md`) |
