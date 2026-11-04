@@ -1,0 +1,92 @@
+---
+# Included by main.yml. Compares the image of the running container with the one about
+# to be deployed (by image ID: the same digest is the same image). If they differ, runs
+# the daily backup service now and waits for it; if it fails, the image is not changed.
+- name: Read the image of the running instance
+  ansible.builtin.command:
+    argv: [podman, container, inspect, --format, "{% raw %}{{.State.Running}} {{.Image}}{% endraw %}", "{{ postgres_name }}"]
+  environment: "{{ postgres_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: postgres_current
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# Not present yet means it has to be pulled: a new image.
+- name: Read the ID of the image to deploy
+  ansible.builtin.command:
+    argv: [podman, image, inspect, --format, "{% raw %}{{.Id}}{% endraw %}", "{{ postgres_image }}"]
+  environment: "{{ postgres_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: postgres_new_image
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: postgres_current.rc == 0 and postgres_current.stdout is match('^true ')
+
+- name: Decide whether the image changes
+  ansible.builtin.set_fact:
+    postgres_image_changes: >-
+      {{ postgres_current.rc == 0 and postgres_current.stdout is match('^true ')
+         and (postgres_new_image.rc != 0 or postgres_new_image.stdout != postgres_current.stdout.split(' ')[1]) }}
+
+- name: Back up first
+  when: postgres_image_changes
+  block:
+    - name: Find the backup service of the backup playbook
+      ansible.builtin.command:
+        argv: [systemctl, --user, cat, "{{ infra_env }}-backup.service"]
+      environment: "{{ postgres_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      register: postgres_backup_unit
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Require the backup service
+      ansible.builtin.assert:
+        that: postgres_backup_unit.rc == 0
+        fail_msg: >-
+          {{ postgres_name }} would restart on a new image, and there is no backup service on
+          {{ inventory_hostname }} to make a copy first. Apply the backup playbook before (D11).
+        quiet: true
+
+    - name: Say what the plan would do
+      ansible.builtin.debug:
+        msg: "{{ postgres_name }} changes image: apply will run {{ infra_env }}-backup.service first."
+      when: ansible_check_mode
+
+    # Tagged reason=pre-upgrade: its own retention group, so a daily run never removes it.
+    - name: Mark the next backup as made before an image change
+      ansible.builtin.copy:
+        content: "pre-upgrade\n"
+        dest: "{{ postgres_service_home }}/.local/state/infra-podman/backup/next-reason"
+        mode: "0600"
+      become: true
+      become_user: "{{ service_user }}"
+      when: not ansible_check_mode
+
+    # Waits until the one-shot service ends; a failed backup stops the playbook here.
+    - name: Run the backup now
+      ansible.builtin.command:
+        argv: [systemctl, --user, start, "{{ infra_env }}-backup.service"]
+      environment: "{{ postgres_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      register: postgres_backup_run
+      changed_when: true
+      failed_when: false
+      when: not ansible_check_mode
+
+    - name: Stop if the backup failed (the image is not changed)
+      ansible.builtin.assert:
+        that: postgres_backup_run.rc == 0
+        fail_msg: >-
+          The backup before changing the image of {{ postgres_name }} failed, so the image has
+          NOT been changed (D11). Logs:
+          sudo journalctl _SYSTEMD_USER_UNIT={{ infra_env }}-backup.service -n 100
+        quiet: true
+      when: not ansible_check_mode

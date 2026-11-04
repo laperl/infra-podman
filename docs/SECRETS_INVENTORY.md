@@ -13,5 +13,6 @@ Lista de los secretos que usa la plataforma (SPEC 4.5). **Nunca valores**: solo 
 | --- | --- | --- | --- |
 | `test_dummy` | `<instalación>/test_dummy` | Solo pruebas del lookup `kdbx.py` (fase 0). Solo existe en `infra-dev.kdbx` | No aplica |
 | `<entorno>-pg-main-superuser-password` | `<instalación>/pg-main-superuser-password` | Superusuario de la instancia `pg-main`, el declarado en el repo de datos (`superuser:`; portátil en prod, `vmiadev` en dev). Solo se usa al crear la base, con el volumen vacío | Manual. Primero `ALTER ROLE <superusuario> PASSWORD …` dentro de la base, después `deploy.sh secrets --rotate pg-main-superuser-password --limit <máquina>` (SPEC 4.5). Cambiar solo el secreto no cambia la contraseña |
+| `<entorno>-backup-restic-password` | `<instalación>/backup-restic-password` | Backup diario (`<entorno>-backup`) en las máquinas de `backup_clients`: cifra el repositorio restic local y, desde la fase 1e2, el del GX10. **Sin ella, las copias no se pueden leer** | No se rota en la fase 1. Cambiarla es `restic key add` y `restic key remove` en cada repositorio, no solo el secreto |
 
 Al añadir un secreto: fila nueva aquí en el mismo PR que lo usa.

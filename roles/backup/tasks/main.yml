@@ -1,0 +1,42 @@
+---
+# Daily local backup of one machine (SPEC 4.11). See defaults/main.yml.
+
+- name: Check the backup settings
+  ansible.builtin.assert:
+    that:
+      - backup_state in ['present', 'absent']
+      - restic_image is match('^[^ ]+@sha256:[0-9a-f]{64}$')
+      - infra_site is defined and infra_site is match('^[a-z][a-z0-9-]{1,30}$')
+      - backup_time is match('^([01][0-9]|2[0-3]):[0-5][0-9]$')
+      - backup_keep_daily | int > 0
+      - backup_keep_monthly | int > 0
+      - backup_keep_yearly | int > 0
+    fail_msg: >-
+      restic_image pinned by digest (D6), infra_site declared in the data repository (R42),
+      backup_time as HH:MM and positive retention values (R28).
+    quiet: true
+
+- name: Read the service user
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ service_user }}"
+
+- name: Set the paths and environment of the service user
+  ansible.builtin.set_fact:
+    backup_home: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
+    backup_gid: "{{ ansible_facts['getent_passwd'][service_user][2] }}"
+    backup_env:
+      HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
+      XDG_CONFIG_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.config"
+      XDG_DATA_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.local/share"
+      XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+    # Instances of this machine, if it is a PostgreSQL host (playbooks/postgres.yml).
+    backup_pg_instances: "{{ postgres_instances | default([]) if 'postgres_hosts' in group_names else [] }}"
+
+- name: Install the backup
+  ansible.builtin.include_tasks: install.yml
+  when: backup_state == 'present'
+
+- name: Remove the backup, keeping the repository
+  ansible.builtin.include_tasks: remove.yml
+  when: backup_state == 'absent'

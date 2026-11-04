@@ -1,0 +1,12 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Starts {{ backup_name }}.service once a day (SPEC 4.11). Persistent: if the machine was
+# off at that time, the backup runs when it starts again.
+[Unit]
+Description=Daily backup ({{ infra_env }})
+
+[Timer]
+OnCalendar=*-*-* {{ backup_time }}:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

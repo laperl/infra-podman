@@ -1,0 +1,10 @@
+---
+# Phase 1e1: daily local backup of every machine in backup_clients (SPEC 4.11). Needs the
+# base playbook, the secret backup-restic-password and, for the databases, postgres.
+#   ./deploy.sh plan backup --limit laptop
+# Remove keeping the repository: -e backup_state=absent (not through deploy.sh yet).
+- name: Local backups
+  hosts: backup_clients
+  gather_facts: false
+  roles:
+    - backup

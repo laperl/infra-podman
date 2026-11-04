@@ -1,6 +1,7 @@
 ---
 # Fictitious values used only to render templates in CI. Never real data.
 infra_env: dev
+infra_site: ci-site
 demo_image: "ghcr.io/example/demo@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 demo_subnet: "10.89.250.0/24"
 demo_port: 8080

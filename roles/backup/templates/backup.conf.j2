@@ -1,0 +1,10 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# What backup-prepare.sh puts in the staging directory, one item per line:
+#   pg   <app> <container>         every database of that PostgreSQL instance, and its roles
+#   file <app> <name> <path>       one file
+{% for instance in backup_pg_instances %}
+pg pg-{{ instance.name }} {{ infra_env }}-pg-{{ instance.name }}
+{% endfor %}
+{% if backup_data_repo %}
+file infra-podman data-repo {{ backup_data_repo_dir }}/infra-podman-data.bundle
+{% endif %}

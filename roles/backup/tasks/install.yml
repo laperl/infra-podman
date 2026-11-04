@@ -1,0 +1,148 @@
+---
+- name: Check that the restic password exists as a Podman secret
+  ansible.builtin.command:
+    cmd: podman secret exists {{ backup_secret }}
+  environment: "{{ backup_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: backup_secret_exists
+  changed_when: false
+  failed_when: backup_secret_exists.rc not in [0, 1]
+  check_mode: false
+
+- name: Require the secret (deploy.sh secrets creates it from KeePassXC)
+  ansible.builtin.assert:
+    that: backup_secret_exists.rc == 0
+    fail_msg: >-
+      The Podman secret {{ backup_secret }} does not exist on {{ inventory_hostname }}.
+      Create it first: ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
+      (KeePassXC entry {{ infra_site | default('<infra_site>') }}/{{ backup_secret_key }}).
+    quiet: true
+
+# Shared with deploy.sh and the operator's notifier, outside every home directory.
+- name: Create the shared directory
+  ansible.builtin.file:
+    path: "{{ backup_shared_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Create the status directory (written by the service user, read by the operator)
+  ansible.builtin.file:
+    path: "{{ backup_status_dir }}"
+    state: directory
+    owner: "{{ service_user }}"
+    group: "{{ backup_gid }}"
+    mode: "0755"
+  become: true
+
+- name: Find the operator (the user Ansible logs in with)
+  ansible.builtin.command:
+    cmd: id -un
+  become: false
+  register: backup_operator
+  changed_when: false
+  check_mode: false
+  when: backup_data_repo or backup_notify
+
+# deploy.sh, run by the operator, leaves the copy of the data repository here; only the
+# operator and the service user can read it (setgid: new files get the service group).
+- name: Create the directory for the copy of the data repository
+  ansible.builtin.file:
+    path: "{{ backup_data_repo_dir }}"
+    state: directory
+    owner: "{{ backup_operator.stdout }}"
+    group: "{{ backup_gid }}"
+    mode: "2750"
+  become: true
+  when: backup_data_repo
+
+- name: Create the directories of the service user
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ backup_scripts_dir }}"
+    - "{{ backup_config_dir }}"
+    - "{{ backup_staging_dir | dirname }}"
+    - "{{ backup_home }}/.config/systemd/user"
+  become: true
+  become_user: "{{ service_user }}"
+
+- name: Install the scripts
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ backup_scripts_dir }}/{{ item }}"
+    mode: "0755"
+  loop:
+    - backup-prepare.sh
+    - backup-run.sh
+    - backup-status.sh
+  become: true
+  become_user: "{{ service_user }}"
+
+- name: Write what to back up
+  ansible.builtin.template:
+    src: backup.conf.j2
+    dest: "{{ backup_config_dir }}/backup.conf"
+    mode: "0644"
+  become: true
+  become_user: "{{ service_user }}"
+
+- name: Resolve the templates
+  ansible.builtin.set_fact:
+    backup_units_resolved: >-
+      {{ ([] if ansible_loop.first else backup_units_resolved)
+         + [{'name': item.name, 'template': role_path ~ '/templates/' ~ item.template}] }}
+  loop: "{{ backup_quadlet_units }}"
+  loop_control:
+    extended: true
+    label: "{{ item.name }}"
+
+# The container only runs when the timer starts it: quadlet_deploy must not start it,
+# nor restart it when its unit changes (that would run a backup on every apply).
+- name: Deploy with quadlet_deploy
+  ansible.builtin.include_role:
+    name: quadlet_deploy
+  vars:
+    quadlet_deploy_units: "{{ backup_units_resolved }}"
+    quadlet_deploy_images:
+      - "{{ restic_image }}"
+    quadlet_deploy_start: false
+    quadlet_deploy_state: present
+
+- name: Install the daily timer
+  ansible.builtin.template:
+    src: backup.timer.j2
+    dest: "{{ backup_home }}/.config/systemd/user/{{ backup_name }}.timer"
+    mode: "0644"
+  become: true
+  become_user: "{{ service_user }}"
+  register: backup_timer
+
+- name: Reload the service user's systemd for the timer
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+    scope: user
+  environment: "{{ backup_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  when: backup_timer is changed and not ansible_check_mode
+
+- name: Enable and start the daily timer
+  ansible.builtin.systemd_service:
+    name: "{{ backup_name }}.timer"
+    enabled: true
+    state: started
+    scope: user
+  environment: "{{ backup_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  when: not (ansible_check_mode and backup_timer is changed)
+
+- name: Install the operator's notifier
+  ansible.builtin.include_tasks: notify.yml
+  when: backup_notify

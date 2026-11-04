@@ -1,0 +1,53 @@
+---
+# Daily local backup of one machine (SPEC 4.11, R19): every database of every PostgreSQL
+# instance of the machine and, on the laptop, the operator's data repository. Copy to the
+# GX10 arrives in phase 1e2. The image lives in playbooks/group_vars/all/images.yml.
+
+backup_state: present
+
+# When the daily run starts (systemd OnCalendar). Persistent: a run missed because the
+# machine was off happens at the next start.
+backup_time: "13:00"
+
+# Retention of the local repository (R28): 7 daily, 12 monthly and 5 yearly.
+backup_keep_daily: 7
+backup_keep_monthly: 12
+backup_keep_yearly: 5
+
+# Only on the laptop, in its host_vars of the data repository:
+#   backup_data_repo: the copy of the data repository that deploy.sh leaves in
+#     backup_data_repo_dir is backed up too (SPEC 4.13).
+#   backup_notify: desktop notification for the operator when a backup failed or is older
+#     than backup_notify_max_age_hours. Installed in the OPERATOR's account.
+backup_data_repo: false
+backup_notify: false
+backup_notify_max_age_hours: 36
+
+# Limit for the restic container (docs/COMPATIBILITY.md: no Memory= key in 4.9).
+backup_memory: 1g
+backup_timeout: 2h
+
+# Paths shared with deploy.sh and the operator's notifier. Do not override.
+backup_shared_dir: /var/lib/infra-podman
+backup_data_repo_dir: "{{ backup_shared_dir }}/data-repo"
+backup_status_dir: "{{ backup_shared_dir }}/backup-status"
+
+# Home of the service user. Overwritten by the role with the real one (getent); this value
+# only serves to render the templates in CI.
+backup_home: /home/svc_runner
+
+# Names (SPEC 4.12). Derived; do not override.
+backup_name: "{{ infra_env }}-backup"
+backup_volume: "{{ backup_name }}-repo"
+backup_secret_key: backup-restic-password
+backup_secret: "{{ infra_env }}-{{ backup_secret_key }}"
+backup_scripts_dir: "{{ backup_home }}/.local/share/infra-podman/backup"
+backup_config_dir: "{{ backup_home }}/.config/infra-podman/backup"
+backup_staging_dir: "{{ backup_home }}/.local/state/infra-podman/backup/staging"
+
+# What quadlet_deploy installs, and what CI renders (scripts/render-quadlets.yml).
+backup_quadlet_units:
+  - template: backup.container.j2
+    name: "{{ backup_name }}.container"
+  - template: backup-repo.volume.j2
+    name: "{{ backup_volume }}.volume"

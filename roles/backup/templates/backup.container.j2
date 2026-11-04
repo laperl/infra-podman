@@ -1,0 +1,50 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Daily backup (SPEC 4.11). Started only by {{ backup_name }}.timer, never at boot and
+# never by an apply: no [Install] section.
+#   1. ExecStartPre, on the host: dump every database and copy the files to back up
+#      into the staging directory (backup-prepare.sh).
+#   2. The container: one restic snapshot per item, retention and check (backup-run.sh).
+#      No network: it only sees the staging directory, its scripts and the repository.
+#   3. ExecStopPost, on the host: write the status for the notifier and delete the
+#      staging directory, so no plain dump stays on disk (backup-status.sh).
+[Unit]
+Description=Backup ({{ infra_env }})
+
+[Container]
+ContainerName={{ backup_name }}
+Image={{ restic_image }}
+Label=infra.env={{ infra_env }}
+Label=infra.app=backup
+Label=infra.component=backup
+Label=infra.managed-by=infra-podman
+
+Volume={{ backup_volume }}.volume:/repo:Z
+Volume={{ backup_staging_dir }}:/backup:ro,Z
+Volume={{ backup_scripts_dir }}:/scripts:ro,Z
+
+Secret={{ backup_secret }},type=mount,target=/run/secrets/restic-password,mode=0400
+Environment=RESTIC_REPOSITORY=/repo
+Environment=RESTIC_PASSWORD_FILE=/run/secrets/restic-password
+Environment=RESTIC_CACHE_DIR=/tmp/restic-cache
+Environment=BACKUP_SITE={{ infra_site }}
+Environment=BACKUP_ENV={{ infra_env }}
+Environment=BACKUP_HOST={{ inventory_hostname | default('ci') }}
+Environment=BACKUP_KEEP_DAILY={{ backup_keep_daily }}
+Environment=BACKUP_KEEP_MONTHLY={{ backup_keep_monthly }}
+Environment=BACKUP_KEEP_YEARLY={{ backup_keep_yearly }}
+
+# Entrypoint= does not exist in Quadlet 4.9 (docs/COMPATIBILITY.md).
+PodmanArgs=--entrypoint=/bin/sh --memory={{ backup_memory }}
+Exec=/scripts/backup-run.sh
+
+Network=none
+ReadOnly=true
+Tmpfs=/tmp
+DropCapability=all
+NoNewPrivileges=true
+
+[Service]
+Type=oneshot
+ExecStartPre={{ backup_scripts_dir }}/backup-prepare.sh
+ExecStopPost={{ backup_scripts_dir }}/backup-status.sh {{ backup_name }}
+TimeoutStartSec={{ backup_timeout }}

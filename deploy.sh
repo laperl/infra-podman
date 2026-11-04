@@ -15,6 +15,9 @@
 # The inventory lives in the operator's data repository, outside this one (SPEC 4.13,
 # R38): its path is data_repo in ~/.config/infra-podman/deploy.conf. In prod that
 # repository must be clean and its last commit signed by a key of the same allowed_signers.
+# After every successful run, if /var/lib/infra-podman/data-repo exists (the laptop, once the
+# backup playbook is applied), leaves there a copy of the data repository (git bundle) for
+# the daily backup, which runs as the service user and cannot read the operator's home.
 # Every run appends one line to ~/.local/state/infra-podman/deploy.log.
 set -euo pipefail
 
@@ -27,6 +30,7 @@ LOG_FILE=$STATE_DIR/deploy.log
 # Overridable only so tests can use fakes.
 NAVIGATOR=${INFRA_NAVIGATOR_BIN:-ansible-navigator}
 PODMAN=${INFRA_PODMAN_BIN:-podman}
+DATA_COPY_DIR=${INFRA_DATA_COPY_DIR:-/var/lib/infra-podman/data-repo}
 
 action="" target="" env_name="prod" limit="" rotate="" ref="-"
 data_dir="" data_ref="-"
@@ -247,6 +251,21 @@ run_secrets() {
   return "$status"
 }
 
+copy_data_repo() {
+  # The daily backup takes the data repository from here (SPEC 4.11, 4.13). Only commits
+  # go into a bundle, with their signatures; nothing else from the operator's folders.
+  [[ -d $DATA_COPY_DIR && -w $DATA_COPY_DIR ]] || return 0
+  local tmp
+  tmp=$(mktemp "$DATA_COPY_DIR/.bundle.XXXXXX") || return 0
+  if git -C "$data_dir" bundle create --quiet "$tmp" --all 2>/dev/null \
+    && chmod 0640 "$tmp" && mv -f "$tmp" "$DATA_COPY_DIR/infra-podman-data.bundle"; then
+    echo "deploy.sh: copia del repo de datos lista para el backup ($data_ref)"
+  else
+    rm -f "$tmp"
+    echo "deploy.sh: AVISO: no se ha podido dejar la copia del repo de datos en $DATA_COPY_DIR" >&2
+  fi
+}
+
 main() {
   parse_args "$@"
   cd "$REPO_DIR"
@@ -265,7 +284,12 @@ main() {
     plan | apply) run_navigator || status=$? ;;
     secrets) run_secrets || status=$? ;;
   esac
-  if [[ $status -eq 0 ]]; then log_line "ok"; else log_line "failed($status)"; fi
+  if [[ $status -eq 0 ]]; then
+    log_line "ok"
+    copy_data_repo
+  else
+    log_line "failed($status)"
+  fi
   return "$status"
 }
 

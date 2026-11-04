@@ -69,13 +69,15 @@
     - Reload the service user's systemd (quadlet_deploy)
     - Restart the changed containers (quadlet_deploy)
 
-# Only containers are restarted. Podman does not change an existing network or volume
-# when its file changes (the generated service uses --ignore): that needs a person.
+# Only containers are restarted, and only those that run all the time (quadlet_deploy_start).
+# Podman does not change an existing network or volume when its file changes (the
+# generated service uses --ignore): that needs a person.
 - name: List the containers whose units changed
   ansible.builtin.set_fact:
     quadlet_deploy_changed_services: >-
       {{ quadlet_deploy_installed.results | selectattr('changed') | map(attribute='item.name')
-         | select('match', '.*\.container$') | map('regex_replace', '\.container$', '.service') | list }}
+         | select('match', '.*\.container$') | map('regex_replace', '\.container$', '.service') | list
+         if quadlet_deploy_start else [] }}
     quadlet_deploy_changed_other: >-
       {{ quadlet_deploy_installed.results | selectattr('changed') | map(attribute='item.name')
          | reject('match', '.*\.container$') | list }}
@@ -124,7 +126,7 @@
     name: "{{ item | regex_replace('\\.container$', '.service') }}"
     state: started
     scope: user
-  loop: "{{ quadlet_deploy_containers }}"
+  loop: "{{ quadlet_deploy_containers if quadlet_deploy_start else [] }}"
   environment: "{{ quadlet_deploy_env }}"
   become: true
   become_user: "{{ service_user }}"

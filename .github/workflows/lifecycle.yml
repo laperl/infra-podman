@@ -190,3 +190,146 @@ jobs:
       - name: Diagnose
         if: failure()
         run: tests/lifecycle/diagnose.sh
+
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      INV: tests/lifecycle/inventory.yml
+      CHECK: tests/lifecycle/check-backup.sh
+      AS: tests/lifecycle/as-svc.sh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same reason as in the base job.
+      - name: Make the runner look like a normal server
+        run: sudo sed -i '/^XDG_/d' /etc/environment
+
+      - name: Install Podman 4.9 from Ubuntu 24.04
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq podman
+          podman --version | grep -Eq ' 4\.9\.' || { echo "Expected Podman 4.9"; exit 1; }
+
+      - name: Install pinned ansible-core
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --requirement scripts/requirements-lint.txt
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Service user and PostgreSQL
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/base.yml > base.log
+          pw=$(openssl rand -hex 24)
+          echo "::add-mask::$pw"
+          echo "$pw" > "$RUNNER_TEMP/pw"
+          printf '%s' "$pw" | $AS podman secret create dev-pg-main-superuser-password -
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml 2>&1 | tee -a all.log
+
+      - name: Some data to back up
+        run: |
+          $AS podman exec dev-pg-main psql -X -U ci_admin -d postgres -v ON_ERROR_STOP=1 -q -c "CREATE DATABASE lifecycle_app"
+          $AS podman exec dev-pg-main psql -X -U ci_admin -d lifecycle_app -v ON_ERROR_STOP=1 -q \
+            -c "CREATE SCHEMA app; CREATE TABLE app.t (n int); INSERT INTO app.t SELECT generate_series(1, 1000)"
+
+      - name: Plan before the secret exists, expecting a clear refusal
+        run: |
+          if ansible-playbook -i "$INV" playbooks/backup.yml --check > refusal.log 2>&1; then
+            echo "::error::backup ran without its secret"; exit 1
+          fi
+          grep -q 'deploy.sh secrets' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+
+      # Random, thrown away with the runner. Never KeePassXC (SPEC 5.4).
+      - name: Create the restic secret with a random value
+        run: |
+          rpw=$(openssl rand -hex 24)
+          echo "::add-mask::$rpw"
+          echo "$rpw" > "$RUNNER_TEMP/rpw"
+          printf '%s' "$rpw" | $AS podman secret create dev-backup-restic-password -
+
+      - name: Plan, apply, apply again (zero changes), plan again (zero changes)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup.yml --check --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup.yml --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup.yml 2>&1 | tee second.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply changed something"; exit 1; }
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup.yml --check 2>&1 | tee plan.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' plan.log || { echo "::error::the plan after apply shows changes"; exit 1; }
+
+      - name: Installed, timer on, nothing run yet
+        run: $CHECK installed
+
+      # What deploy.sh does on the laptop after a successful run.
+      - name: A copy of the data repository, as deploy.sh leaves it
+        run: |
+          git init -q "$RUNNER_TEMP/data"
+          git -C "$RUNNER_TEMP/data" -c user.name=ci -c user.email=ci@example.invalid commit -q --allow-empty -m "lifecycle data"
+          git -C "$RUNNER_TEMP/data" bundle create --quiet /var/lib/infra-podman/data-repo/infra-podman-data.bundle --all
+          chmod 0640 /var/lib/infra-podman/data-repo/infra-podman-data.bundle
+          ls -la /var/lib/infra-podman/data-repo
+
+      - name: Run the backup and restore from it
+        run: |
+          $AS systemctl --user start dev-backup.service
+          $CHECK ok
+
+      - name: A second run adds snapshots and keeps working
+        run: |
+          before=$($CHECK latest)
+          $AS systemctl --user start dev-backup.service
+          [[ $($CHECK latest) > $before ]] || { echo "::error::the second run saved nothing"; exit 1; }
+          $CHECK ok
+
+      - name: A failed run is recorded with its reason
+        run: |
+          $AS systemctl --user stop dev-pg-main.service
+          if $AS systemctl --user start dev-backup.service; then echo "::error::backup succeeded without PostgreSQL"; exit 1; fi
+          $CHECK failed "dev-pg-main no está en marcha"
+          $AS systemctl --user start dev-pg-main.service
+          for _ in $(seq 1 30); do $AS podman healthcheck run dev-pg-main && break; sleep 3; done
+
+      - name: Retention keeps 7 daily, 12 monthly and 5 yearly (R28)
+        run: $CHECK retention
+
+      - name: A new PostgreSQL image is backed up first (D11)
+        run: |
+          restic=$(sed -n 's/^restic_image: *"\([^"]*\)".*/\1/p' playbooks/group_vars/all/images.yml)
+          # Any other image will do: this one cannot run PostgreSQL, so the deploy then
+          # fails its healthcheck and is stopped, without touching the data (D11).
+          if tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml -e "postgres_image=$restic" \
+            -e quadlet_deploy_health_retries=2 > image.log 2>&1; then
+            echo "::error::PostgreSQL ran on the restic image"; exit 1
+          fi
+          cat image.log >> all.log
+          grep -A1 'Run the backup now' image.log | grep -q '^changed:' || { echo "::error::no backup before the image change"; exit 1; }
+          $CHECK kept pre-upgrade
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml 2>&1 | tee -a all.log
+          # The daily run that follows, the same day, must not remove it.
+          $AS systemctl --user start dev-backup.service
+          $CHECK kept pre-upgrade
+          $CHECK kept daily
+          $AS podman exec dev-pg-main psql -X -U ci_admin -d lifecycle_app -tAq -c "SELECT count(*) FROM app.t" | grep -qx 1000 \
+            || { echo "::error::the data did not survive"; exit 1; }
+
+      - name: Remove the backup, keeping the repository (SPEC 4.2)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup.yml -e backup_state=absent 2>&1 | tee -a all.log
+          $CHECK destroyed
+
+      - name: The passwords never appear in the output or the journal (SPEC 4.5)
+        run: |
+          sudo journalctl _UID="$(id -u svc_runner)" --no-pager > journal.log
+          for f in pw rpw; do
+            if grep -qF -f "$RUNNER_TEMP/$f" all.log journal.log; then echo "::error::a password appears in the logs"; exit 1; fi
+          done
+          echo "ok"
+
+      - name: Diagnose
+        if: failure()
+        run: |
+          tests/lifecycle/diagnose.sh
+          out=$(sudo journalctl _SYSTEMD_USER_UNIT=dev-backup.service --no-pager -n 30 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+          echo "::warning title=backup journal::$out"

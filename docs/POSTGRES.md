@@ -36,7 +36,9 @@ Estos parámetros solo se fijan al crear la base por primera vez. Cambiarlos des
 - solo entra por el socket de dentro del contenedor y **no tiene contraseña**, porque por TCP se rechaza siempre;
 - puede conectar a todas las bases, porque cada base nueva se lo concede;
 - solo lee: no puede modificar ni borrar nada;
-- los backups lo usan para volcar **todas** las bases de cada instancia, una a una.
+- los backups lo usan para volcar **todas** las bases de cada instancia, una a una, y los roles sin sus contraseñas (fase 1e1).
+
+**Cambio de imagen:** antes de reiniciar una instancia con una imagen nueva, el `apply` hace un backup (`reason=pre-upgrade`) y se para si falla (D11).
 
 **Contenedor endurecido** (el mismo que el operador ya usaba con Podman; comprobado con Podman 4.9 en `lifecycle`):
 - `ReadOnly=true`, con `Tmpfs` para `/var/run/postgresql` y `/tmp`;
