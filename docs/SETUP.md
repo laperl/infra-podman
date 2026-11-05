@@ -574,12 +574,13 @@ svc systemctl --user start prod-backup.service          # vuelve a result=ok
 - **Resumen** de la última copia: `cat /var/lib/infra-podman/backup-status/prod-backup.status`.
 - **Lista de copias:**
   ```bash
+  img=$(svc sed -n 's/^Image=//p' "$(getent passwd svc_runner | cut -d: -f6)/.config/containers/systemd/prod-backup.container")
   svc podman run --rm --network=none --security-opt label=disable -v prod-backup-repo:/repo \
     --secret prod-backup-restic-password,type=mount,target=/run/secrets/restic-password \
     -e RESTIC_REPOSITORY=/repo -e RESTIC_PASSWORD_FILE=/run/secrets/restic-password \
-    "$(sed -n 's/^restic_image: *"\([^"]*\)".*/\1/p' playbooks/group_vars/all/images.yml)" snapshots
+    "$img" snapshots
   ```
-  Desde tu copia del código. `--security-opt label=disable` hace falta en Fedora: el backup marca su volumen como privado para SELinux (`:Z`) y, sin esa opción, otro contenedor recibe `permission denied`. No cambia la marca del volumen. Cada copia lleva las etiquetas `site=` (`laperl`), `env=`, `app=`, `type=` (`pgdump` o `files`) y `reason=` (`daily`, o `pre-upgrade` si se hizo antes de cambiar la imagen de Postgres).
+  Desde cualquier carpeta: la primera línea lee la imagen de restic del contenedor de backup ya instalado. `--security-opt label=disable` hace falta en Fedora: el backup marca su volumen como privado para SELinux (`:Z`) y, sin esa opción, otro contenedor recibe `permission denied`. No cambia la marca del volumen. Cada copia lleva las etiquetas `site=` (`laperl`), `env=`, `app=`, `type=` (`pgdump` o `files`) y `reason=` (`daily`, o `pre-upgrade` si se hizo antes de cambiar la imagen de Postgres).
 
 La guía de restauración paso a paso, probada, llega en la fase 1f. Lo esencial ya está comprobado en el CI: una base volcada se restaura y queda igual.
 
@@ -715,14 +716,15 @@ cat /var/lib/infra-podman/backup-status/prod-backup-copy.status   # result=ok
 - **Logs del servidor**, en el GX10: `sudo journalctl _SYSTEMD_USER_UNIT=prod-backup-server.service -n 100`.
 - **Lista de copias del GX10, desde el portátil**, a través del servidor (cambia el nombre del GX10):
   ```bash
+  img=$(svc sed -n 's/^Image=//p' "$(getent passwd svc_runner | cut -d: -f6)/.config/containers/systemd/prod-backup-copy.container")
   svc podman run --rm \
     --secret prod-backup-restic-password,type=mount,target=/run/secrets/restic-password \
     --secret prod-backup-server-password,type=env,target=RESTIC_REST_PASSWORD \
     -e RESTIC_PASSWORD_FILE=/run/secrets/restic-password -e RESTIC_REST_USERNAME=laperl \
     -e RESTIC_REPOSITORY=rest:http://<nombre del GX10>.<tu red>.ts.net:18000/laperl/prod-laptop/ \
-    "$(sed -n 's/^restic_image: *"\([^"]*\)".*/\1/p' playbooks/group_vars/all/images.yml)" snapshots
+    "$img" snapshots
   ```
-  Desde tu copia del código. Las contraseñas llegan desde los secretos de Podman: no aparecen en la orden ni en el historial.
+  Desde cualquier carpeta: la primera línea lee la imagen de restic del contenedor de copia ya instalado. Las contraseñas llegan desde los secretos de Podman: no aparecen en la orden ni en el historial.
 
 ### 18.6 Si algo falla
 
@@ -734,7 +736,7 @@ cat /var/lib/infra-podman/backup-status/prod-backup-copy.status   # result=ok
 | Aviso «la clave de restic no abre el repositorio del servidor» | `backup-restic-password` no es la misma con la que se creó la copia del GX10 | **No borres nada.** Comprueba en KeePassXC el historial de esa entrada: la buena es la que abre las copias. Nunca se crea un repositorio nuevo encima de uno que existe |
 | Aviso «el servidor de copias está al … % de su tope» o «está lleno» | Las copias del GX10 se acercan a los 30 GB o los han alcanzado. Lleno no copia nada nuevo; tus copias locales siguen bien | Mira el espacio del GX10 (`df -h /`). Sube `backup_server_max_size_gb` en `group_vars/all.yml` del repo de datos, commit firmado, y `apply backup-server --limit gx10` y `apply backup --limit laptop`. En el GX10 no se borra nada solo (R26) |
 | Aviso «el servidor de copias no deja escribir en …» | El usuario solo puede escribir en su carpeta, y la carpeta no empieza por su nombre | Comprueba que `infra_site` es el mismo en el repo de datos que la carpeta del mensaje |
-| El servidor no arranca o has perdido su contraseña | — | Tus copias siguen en el volumen. Para leerlas sin el servidor, en el GX10 (pega la clave de restic de KeePassXC cuando la pida; no se guarda): <br>`svc podman run --rm -it --network=none -v prod-backup-server-data:/data:ro -e RESTIC_REPOSITORY=/data/laperl/prod-laptop <restic_image de images.yml> --no-lock snapshots` <br>Para una contraseña nueva: cambia la entrada en KeePassXC y sigue la fila de «no acepta el usuario o la contraseña» |
+| El servidor no arranca o has perdido su contraseña | — | Tus copias siguen en el volumen. Para leerlas sin el servidor, en el GX10 (pega la clave de restic de KeePassXC cuando la pida; no se guarda): <br>`svc podman run --rm -it --network=none -v prod-backup-server-data:/data:ro -e RESTIC_REPOSITORY=/data/laperl/prod-laptop <restic_image de images.yml> --no-lock snapshots` <br>`<restic_image de images.yml>` es el valor de `restic_image` en `playbooks/group_vars/all/images.yml` de tu copia del código, sin comillas: en el GX10 no hay contenedor de restic de donde leerlo. <br>Para una contraseña nueva: cambia la entrada en KeePassXC y sigue la fila de «no acepta el usuario o la contraseña» |
 
 La guía de restauración paso a paso, desde la copia local y desde la del GX10, llega en la fase 1f.
 
