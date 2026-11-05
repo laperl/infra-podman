@@ -10,6 +10,8 @@ Infraestructura de un operador único: servicios en contenedores Podman gestiona
 | Desplegar en producción paso a paso | [`docs/WORKFLOW.md`, pasos 5 y 6](docs/WORKFLOW.md#5-crear-el-tag-firmado) |
 | Preparar el portátil (se hace una vez) | [`docs/SETUP.md`](docs/SETUP.md) |
 | Configurar la firma de tags y commits (una vez) | [`docs/SIGNING.md`](docs/SIGNING.md) |
+| Cómo está montada la plataforma: piezas, puertos y diagramas | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| El día a día: qué está en marcha, el estado de las copias, lanzarlas a mano, cómo se ve un sistema sano y cómo restaurar | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) |
 | Saber en qué fase estamos y qué queda pendiente | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
 | Ver qué secretos existen (sin valores) | [`docs/SECRETS_INVENTORY.md`](docs/SECRETS_INVENTORY.md) |
 | Cómo se monta Postgres: instancias, bases, grupos, usuarios y acceso | [`docs/POSTGRES.md`](docs/POSTGRES.md) |
