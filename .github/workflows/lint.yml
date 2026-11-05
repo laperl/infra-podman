@@ -64,6 +64,9 @@ jobs:
       - name: Which secrets each machine gets (secrets.yml)
         run: tests/secrets/run.sh
 
+      - name: Image update check, with a fake registry (image-updates.sh)
+        run: tests/images/run.sh
+
   quadlet-forward:
     # Same Quadlet checks with a newer Podman, to see early what would break when the
     # GX10 is upgraded. It does not change the templates: they stay 4.9-only (D5).

@@ -24,7 +24,7 @@ Las aplicaciones (Firefly III, pgAdmin…) llegan en la fase 2.
 flowchart LR
   subgraph gh["GitHub"]
     code["repo de código<br/>tags firmados"]
-    ci["Actions: CI<br/>lint · lifecycle · ee-image"]
+    ci["Actions: CI<br/>lint · lifecycle · ee-image<br/>image-updates (lunes)"]
     ghcr[("GHCR<br/>imagen de Ansible")]
   end
   hub[("Docker Hub<br/>imágenes de los servicios")]
@@ -56,6 +56,7 @@ flowchart LR
 
   code -- "git pull" --> ds
   ci -- "publica" --> ghcr
+  ci -. "image-updates:<br/>versiones nuevas" .-> hub
   ghcr -- "descarga" --> ee
   ds -- "lanza" --> ee
   data -- "inventario" --> ee
@@ -82,7 +83,7 @@ Las flechas de puntos son lecturas locales, sin red. Lo único que sale del port
 | --- | --- | --- | --- |
 | **GitHub: repo de código** | El código, la documentación y los digests de las imágenes. Privado. Solo cambia por PR mergeado | `laperl/infra-podman`; tu copia en `~/Documents/src/github.com/laperl/infra-podman` | Tu copia, con `git` por SSH (clave del agente de KeePassXC) |
 | **GitHub: tags firmados** | El control de producción: `deploy.sh` solo despliega en prod un tag firmado con tu clave (R4) | Tags del repo; la lista de claves de confianza, fuera de los repos: `~/.config/infra-podman/allowed_signers` | `deploy.sh`, que los comprueba con `git verify-tag` |
-| **GitHub: CI** | Prueba cada cambio antes del merge: `lint` (sintaxis, política de Quadlet, generador de Podman 4.9), `lifecycle` (despliega de verdad en una máquina de GitHub con Podman 4.9) y `ee-image` (construye la imagen de Ansible). Nunca toca tus máquinas ni KeePassXC | GitHub Actions, máquinas Ubuntu 24.04 sin SELinux | Solo con GitHub y GHCR |
+| **GitHub: CI** | Prueba cada cambio antes del merge: `lint` (sintaxis, política de Quadlet, generador de Podman 4.9), `lifecycle` (despliega de verdad en una máquina de GitHub con Podman 4.9) y `ee-image` (construye la imagen de Ansible). Cada lunes, `image-updates` avisa por correo si hay una versión nueva de una imagen. Nunca toca tus máquinas ni KeePassXC | GitHub Actions, máquinas Ubuntu 24.04 sin SELinux | Con GitHub y GHCR; `image-updates` lee además Docker Hub |
 | **GHCR: imagen de Ansible** (`infra-podman-ee`) | Ansible, sus colecciones y `keepassxc-cli`, con las versiones fijadas | Paquete privado en GHCR; fijada por digest en `ansible-navigator.yml` | La publica `ee-image`; la descarga tu Podman con un token de solo lectura |
 | **Docker Hub** | Las imágenes de los servicios: `pgvector/pgvector`, `restic/restic` y `restic/rest-server` | `docker.io`; fijadas por digest en `playbooks/group_vars/all/images.yml` | Las descarga `svc_runner` en cada máquina durante un `apply` |
 | **Repo de datos** | Tu inventario: máquinas, instancias, superusuario, nombre de la instalación (`infra_site`), qué secretos hay. Sin contraseñas | `~/Documents/SECURE_vc/ansible/infra-podman`, solo en el portátil, en el volumen cifrado, sin GitHub. Commits firmados (R38) | `deploy.sh` lo lee y comprueba su firma en prod. Tras cada ejecución correcta deja una copia en `/var/lib/infra-podman/data-repo` para el backup |
