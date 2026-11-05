@@ -604,7 +604,7 @@ Cada hora, si el GX10 responde, el portátil le manda las copias que le falten (
 | `prod-backup-copy` | Portátil | Cada hora, a y media. Solo ve el repositorio local, cifrado y en solo lectura. Si el GX10 no responde, no pasa nada: lo intenta a la hora siguiente |
 | Aviso de escritorio | Portátil | El del paso 17. Salta si una copia falla, si pasan **7 días** sin una copia buena en el GX10 o si el GX10 pasa del **80 %** del tope |
 
-**Lo más importante:** para recuperar tus datos solo hace falta la clave de restic (`backup-restic-password`). La contraseña del servidor solo sirve para que nadie más use el servidor. Si un día el servidor falla o pierdes esa contraseña, las copias se leen directamente del volumen del GX10 (18.6).
+**Lo más importante:** para recuperar tus datos solo hace falta la clave de restic (`backup-restic-password`). La contraseña del servidor solo sirve para que nadie más use el servidor. Si un día el servidor falla o pierdes esa contraseña, las copias se leen directamente del volumen del GX10 ([`OPERATIONS.md`](OPERATIONS.md), 5.2).
 
 ### 18.1 La contraseña del servidor en KeePassXC
 
@@ -708,15 +708,7 @@ cat /var/lib/infra-podman/backup-status/prod-backup-copy.status   # result=ok
 
 ### 18.6 Si algo falla
 
-| Lo que ves | Qué pasa | Qué hacer |
-| --- | --- | --- |
-| Aviso «la última copia correcta es de …, hace más de 168 h. El servidor de copias … no responde» | El portátil no llega al GX10 desde hace una semana | 1. ¿Está encendido el GX10? `ssh gx10 true`. 2. Desde el portátil: `curl -s -o /dev/null -w '%{http_code}\n' http://<nombre del GX10>.<tu red>.ts.net:18000/`. `401` es que responde; `000` es que no llega. 3. En el GX10: `svc systemctl --user status prod-backup-server.service` y `sudo tailscale serve status` (tiene que salir el 18000). Si falta el puerto: `./deploy.sh apply backup-server --limit gx10` |
-| El nombre del GX10 no se resuelve dentro del contenedor (`bad address` en los logs de la copia) | El contenedor no ve los nombres de Tailscale (por comprobar en el portátil) | Usa la IP de Tailscale del GX10, que no cambia: `tailscale ip -4 <nombre del GX10>`. Ponla en `backup_remote_url` del repo de datos y `apply backup --limit laptop` |
-| Aviso «el servidor de copias no acepta el usuario o la contraseña» | La contraseña del portátil y el hash del GX10 no coinciden | `./deploy.sh secrets --rotate backup-server-password --limit gx10`, `./deploy.sh secrets --rotate backup-server-password --limit laptop` y `./deploy.sh apply backup-server --limit gx10`. Ansible ve que el hash ya no corresponde y lo rehace |
-| Aviso «la clave de restic no abre el repositorio del servidor» | `backup-restic-password` no es la misma con la que se creó la copia del GX10 | **No borres nada.** Comprueba en KeePassXC el historial de esa entrada: la buena es la que abre las copias. Nunca se crea un repositorio nuevo encima de uno que existe |
-| Aviso «el servidor de copias está al … % de su tope» o «está lleno» | Las copias del GX10 se acercan a los 30 GB o los han alcanzado. Lleno no copia nada nuevo; tus copias locales siguen bien | Mira el espacio del GX10 (`df -h /`). Sube `backup_server_max_size_gb` en `group_vars/all.yml` del repo de datos, commit firmado, y `apply backup-server --limit gx10` y `apply backup --limit laptop`. En el GX10 no se borra nada solo (R26) |
-| Aviso «el servidor de copias no deja escribir en …» | El usuario solo puede escribir en su carpeta, y la carpeta no empieza por su nombre | Comprueba que `infra_site` es el mismo en el repo de datos que la carpeta del mensaje |
-| El servidor no arranca o has perdido su contraseña | — | Tus copias siguen en el volumen y se leen sin el servidor, solo con la clave de restic: [`OPERATIONS.md`](OPERATIONS.md), 5.2. Para una contraseña nueva: cambia la entrada en KeePassXC y sigue la fila de «no acepta el usuario o la contraseña» |
+Cada aviso de la copia al GX10, con su causa y qué hacer: [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md), apartados 7 (copia al GX10) y 8 (Tailscale).
 
 La restauración paso a paso, desde la copia local y desde la del GX10 (también sin su servidor), está en [`OPERATIONS.md`](OPERATIONS.md), apartado 5.
 

@@ -124,7 +124,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18000/
 
 Tiene que salir `active` y `401`: el servidor responde y pide contraseña. Además, `sudo tailscale serve status` tiene que mostrar el puerto 18000.
 
-Si algo no sale así: los logs del apartado 2 y [`SETUP.md`](SETUP.md), 18.6.
+Si algo no sale así: los logs del apartado 2 y [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
 
 ## 5. Restaurar
 

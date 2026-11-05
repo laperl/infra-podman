@@ -97,22 +97,7 @@ Después puedes seguir trabajando en `main` con normalidad. El siguiente desplie
 
 ### Si algo falla
 
-| Mensaje | Qué pasa | Qué hacer |
-| --- | --- | --- |
-| `HEAD no tiene ningún tag firmado…` | El tag está en otro commit (creado antes del `git pull`) o no está firmado. El mensaje dice en qué commit estás y dónde está el último tag | Si el tag no se ha subido: `git tag -d <tag>` y repite el paso 5. Comprueba con `git tag --points-at HEAD` y `git verify-tag <tag>` |
-| `kdbx: there is no entry '…' in the group 'laperl'` | Falta esa entrada en el `.kdbx`, o tiene otro título | Créala en KeePassXC: grupo `laperl` (el nombre de tu instalación) y título exactamente el del mensaje. Ver «Cómo desplegarlo» del PR |
-| `kdbx: cannot list the group 'laperl'` | El grupo de KeePassXC no se llama como tu instalación | Renómbralo ([`SETUP.md`](SETUP.md), paso 16) |
-| `kdbx: … has 2 entries titled '…'` | Dos entradas con el mismo título en el grupo | Deja solo una en KeePassXC |
-| `infra_site is missing or not valid` | Falta el nombre de la instalación en el repo de datos | `infra_site: laperl` en los dos `group_vars/all.yml` ([`SETUP.md`](SETUP.md), paso 16) |
-| `hay cambios sin commit o ficheros sin seguimiento` | Hay algo modificado en tu copia | `git status`. Guarda tus cambios en otra rama o descártalos |
-| `el repo de datos tiene cambios sin commit…` | Has editado datos y no has hecho el commit | En el repo de datos: `git status`, y commit firmado o `git restore` («Cambiar datos») |
-| `el último commit del repo de datos … no está firmado…` | Commit hecho sin firma, o con otra clave | `git -C ~/Documents/SECURE_vc/ansible/infra-podman verify-commit HEAD`. Revisa la configuración de firma de ese repo ([`SETUP.md`](SETUP.md), paso 14) y rehaz el commit: `git commit --amend --no-edit -S` |
-| `no existe el repo de datos …` o `define data_repo…` | Volumen `SECURE_vc` sin montar, o falta la línea en `deploy.conf` | Monta el volumen; [`SETUP.md`](SETUP.md), pasos 7 y 14 |
-| `Incorrect sudo password` o `Missing sudo password` | Contraseña de sudo de otra máquina, o falta `--limit` | Repite con `--limit` y la contraseña de esa máquina |
-| `UNREACHABLE` en `laptop` | sshd parado o el alias `laptop` no está bien | `ssh laptop true`; [`SETUP.md`](SETUP.md), paso 9 |
-| `UNREACHABLE` en `gx10` | GX10 apagado o fuera de Tailscale | `ssh gx10 true` |
-| Avisos de la copia al GX10 («no responde», «no acepta el usuario o la contraseña», «está lleno»…) | La copia externa tiene un problema; tus copias locales siguen bien | [`SETUP.md`](SETUP.md), paso 18.6 |
-| `apply --env prod necesita un terminal interactivo` | Lo has lanzado sin terminal | Lánzalo tú desde una terminal |
+Busca el mensaje en [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md): están todos los de `deploy.sh`, KeePassXC y las firmas (apartados 1 y 2), con su causa y qué hacer.
 
 ## Cambiar datos
 
