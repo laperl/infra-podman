@@ -37,11 +37,12 @@ restic_gx10() { svc podman run --rm ${net:+--network="$net"} \
   -e RESTIC_REPOSITORY="rest:$url/$repo/" "$img" --no-cache --no-lock "$@"; }
 # psql como superusuario, por el socket
 psql_pg() { svc podman exec -i "$env-pg-$inst" psql -X -v ON_ERROR_STOP=1 -U "$su" "$@"; }
-# restore_into <base nueva>: crea la base (vacía, con el dueño de $db) y carga el volcado que le llega
+# restore_into <base nueva>: crea la base (vacía, con el dueño de $db) y carga el volcado que le llega.
+# Los dos psql leen de /dev/null: si no, se comerían el volcado antes de que llegue a pg_restore
 restore_into() {
   local owner
-  owner=$(psql_pg -d postgres -tAc "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = '$db'")
-  psql_pg -d postgres -qc "CREATE DATABASE \"$1\" OWNER \"${owner:-$su}\" TEMPLATE template0"
+  owner=$(psql_pg -d postgres -tAc "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = '$db'" </dev/null)
+  psql_pg -d postgres -qc "CREATE DATABASE \"$1\" OWNER \"${owner:-$su}\" TEMPLATE template0" </dev/null
   svc podman exec -i "$env-pg-$inst" pg_restore -U "$su" -d "$1" --single-transaction --exit-on-error
 }
 # row_counts <base>: cada tabla y su número exacto de filas
