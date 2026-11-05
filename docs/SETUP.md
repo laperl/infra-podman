@@ -572,7 +572,7 @@ svc systemctl --user start prod-backup.service          # vuelve a result=ok
   journalctl --user -u infra-podman-backup-notify -n 20
   ```
 - **Resumen** de la última copia: `cat /var/lib/infra-podman/backup-status/prod-backup.status`.
-- **Lista de copias**, cómo comprobar que el GX10 las tiene todas y cómo restaurar: [`OPERATIONS.md`](OPERATIONS.md), con órdenes probadas que funcionan desde cualquier carpeta.
+- **Lista de copias:** [`OPERATIONS.md`](OPERATIONS.md), apartado 2. **Restaurar:** apartado 5. Órdenes probadas que funcionan desde cualquier carpeta.
 
 ### 17.6 Lo que instala en tu cuenta (y si algún día quieres quitar el aviso)
 
@@ -704,7 +704,7 @@ cat /var/lib/infra-podman/backup-status/prod-backup-copy.status   # result=ok
 - **Estado** de la última copia: `cat /var/lib/infra-podman/backup-status/prod-backup-copy.status`. Dice cuándo fue la última buena (`last_ok`) y cuánto ocupa (`usage`).
 - **Logs** de cada intento, en el portátil: `sudo journalctl _SYSTEMD_USER_UNIT=prod-backup-copy.service -n 100`.
 - **Logs del servidor**, en el GX10: `sudo journalctl _SYSTEMD_USER_UNIT=prod-backup-server.service -n 100`.
-- **Lista de copias del GX10**, si tiene todas las del portátil y el simulacro mensual: [`OPERATIONS.md`](OPERATIONS.md), apartado 1.
+- **Copias del GX10:** se leen directamente de su volumen, solo con la clave de restic: [`OPERATIONS.md`](OPERATIONS.md), 5.2.
 
 ### 18.6 Si algo falla
 
@@ -716,9 +716,9 @@ cat /var/lib/infra-podman/backup-status/prod-backup-copy.status   # result=ok
 | Aviso «la clave de restic no abre el repositorio del servidor» | `backup-restic-password` no es la misma con la que se creó la copia del GX10 | **No borres nada.** Comprueba en KeePassXC el historial de esa entrada: la buena es la que abre las copias. Nunca se crea un repositorio nuevo encima de uno que existe |
 | Aviso «el servidor de copias está al … % de su tope» o «está lleno» | Las copias del GX10 se acercan a los 30 GB o los han alcanzado. Lleno no copia nada nuevo; tus copias locales siguen bien | Mira el espacio del GX10 (`df -h /`). Sube `backup_server_max_size_gb` en `group_vars/all.yml` del repo de datos, commit firmado, y `apply backup-server --limit gx10` y `apply backup --limit laptop`. En el GX10 no se borra nada solo (R26) |
 | Aviso «el servidor de copias no deja escribir en …» | El usuario solo puede escribir en su carpeta, y la carpeta no empieza por su nombre | Comprueba que `infra_site` es el mismo en el repo de datos que la carpeta del mensaje |
-| El servidor no arranca o has perdido su contraseña | — | Tus copias siguen en el volumen y se leen sin el servidor, solo con la clave de restic: [`OPERATIONS.md`](OPERATIONS.md), 2.2. Para una contraseña nueva: cambia la entrada en KeePassXC y sigue la fila de «no acepta el usuario o la contraseña» |
+| El servidor no arranca o has perdido su contraseña | — | Tus copias siguen en el volumen y se leen sin el servidor, solo con la clave de restic: [`OPERATIONS.md`](OPERATIONS.md), 5.2. Para una contraseña nueva: cambia la entrada en KeePassXC y sigue la fila de «no acepta el usuario o la contraseña» |
 
-La restauración paso a paso, desde la copia local y desde la del GX10 (también sin su servidor), está en [`OPERATIONS.md`](OPERATIONS.md), apartado 2.
+La restauración paso a paso, desde la copia local y desde la del GX10 (también sin su servidor), está en [`OPERATIONS.md`](OPERATIONS.md), apartado 5.
 
 ### 18.7 Lo que se instala
 
