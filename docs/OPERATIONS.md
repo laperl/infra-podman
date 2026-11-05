@@ -7,7 +7,7 @@ El día a día: qué hay en marcha, cómo van las copias, cómo lanzar algo a ma
 - Funcionan **desde cualquier carpeta**. Cada bloque dice en qué máquina va: el portátil o el GX10.
 - Usan la función `svc` de [`SETUP.md`](SETUP.md), paso 12, que tienes en tu `~/.bashrc` del portátil y del GX10. Hace falta porque los contenedores son de `svc_runner`, no tuyos. Pide la contraseña de sudo de esa máquina.
 - Lo que va entre `<…>` lo cambias tú. Por ejemplo, `<base>` por el nombre de una base de datos.
-- **En DEV** (en `vmiadev`): cambia `prod` por `dev`. Lo del GX10 también se hace en `vmiadev`, y sobra el `ssh gx10`.
+- **En DEV** (en `vmiadev`): cambia `prod` por `dev`. Lo del GX10 también se hace en `vmiadev`, sin `ssh gx10`, y la carpeta de las copias es `<instalación>/dev-vmiadev`.
 - Los bloques de este manual están **probados**: el CI (workflow `lifecycle`) los ejecuta tal cual en cada PR. Lo que depende de SELinux o Tailscale, que el CI no tiene, está marcado **«por comprobar en el portátil»**.
 
 ## 1. Qué hay desplegado
