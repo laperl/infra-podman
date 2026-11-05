@@ -488,7 +488,7 @@ Cambias `infra_site` en el repo de datos y renombras el grupo en KeePassXC con e
 
 ## 17. Backups locales (fase 1e1)
 
-Una copia diaria, a las 13:00, de todas las bases de cada instancia y, en el portátil, de tu repo de datos (SPEC 4.11). Se guarda cifrada con restic en el volumen `<entorno>-backup-repo`. Si a esa hora la máquina estaba apagada, la copia se hace al encenderla. La copia al GX10 llega en la fase 1e2.
+Una copia diaria, a las 13:00, de todas las bases de cada instancia y, en el portátil, de tu repo de datos (SPEC 4.11). Se guarda cifrada con restic en el volumen `<entorno>-backup-repo`. Si a esa hora la máquina estaba apagada, la copia se hace al encenderla. La copia al GX10 está en el paso 18.
 
 ### 17.1 La clave de restic en KeePassXC
 
@@ -601,3 +601,147 @@ systemctl --user daemon-reload
 ```
 
 Y pon `backup_notify: false` en `host_vars/laptop.yml` del repo de datos, o el siguiente `apply backup` lo volverá a instalar.
+
+## 18. Copia de los backups al GX10 (fase 1e2)
+
+Cada hora, si el GX10 responde, el portátil le manda las copias que le falten (SPEC 4.11, R44).
+
+| Pieza | Dónde | Qué hace |
+| --- | --- | --- |
+| `prod-backup-server` | GX10 | Guarda las copias en el volumen `prod-backup-server-data`. Solo deja **añadir**: nadie puede borrar ni cambiar nada a través de él. Pide usuario (`laperl`) y contraseña, y cada instalación solo ve su carpeta (`laperl/prod-laptop`). Tope: 30 GB |
+| Puerto 18000 | GX10 | Solo en `127.0.0.1`. Desde fuera, solo por Tailscale (`tailscale serve`), nunca por la red de casa |
+| `prod-backup-copy` | Portátil | Cada hora, a y media. Solo ve el repositorio local, cifrado y en solo lectura. Si el GX10 no responde, no pasa nada: lo intenta a la hora siguiente |
+| Aviso de escritorio | Portátil | El del paso 17. Salta si una copia falla, si pasan **7 días** sin una copia buena en el GX10 o si el GX10 pasa del **80 %** del tope |
+
+**Lo más importante:** para recuperar tus datos solo hace falta la clave de restic (`backup-restic-password`). La contraseña del servidor solo sirve para que nadie más use el servidor. Si un día el servidor falla o pierdes esa contraseña, las copias se leen directamente del volumen del GX10 (18.6).
+
+### 18.1 La contraseña del servidor en KeePassXC
+
+En el grupo `laperl` de cada base, una entrada nueva, **`backup-server-password`**:
+
+- en **`infra-dev.kdbx`**, cualquier valor ficticio;
+- en **`infra-pro.kdbx`**, una contraseña generada por KeePassXC, de 32 caracteres o más.
+
+### 18.2 El repo de datos
+
+En `~/Documents/SECURE_vc/ansible/infra-podman`:
+
+1. `inventory/dev/hosts.yml` y `inventory/prod/hosts.yml`: un grupo nuevo, `backup_servers`, con la máquina que guarda las copias:
+   ```yaml
+       backup_servers:
+         hosts:
+           vmiadev: {}      # en prod: gx10: {}
+   ```
+2. `inventory/dev/group_vars/all.yml` y `inventory/prod/group_vars/all.yml`: en `infra_secrets`, debajo de `backup-restic-password`, la contraseña nueva, que necesitan las dos puntas; y, al final del fichero, el tope:
+   ```yaml
+     - name: backup-server-password
+       group: [backup_clients, backup_servers]
+   ```
+   ```yaml
+   backup_server_max_size_gb: 30
+   ```
+3. `inventory/prod/host_vars/laptop.yml`: adónde va la copia. Es el nombre de Tailscale del GX10, el que sale en `sudo tailscale serve status` sin `https://`, con `http://` delante y el puerto detrás:
+   ```yaml
+   backup_remote_url: http://<nombre del GX10>.<tu red>.ts.net:18000
+   ```
+4. `inventory/dev/host_vars/vmiadev.yml`, un fichero nuevo. La VM no tiene Tailscale: el servidor no se expone y la copia llega desde la propia VM.
+   ```yaml
+   ---
+   backup_server_tailscale: false
+   backup_remote_url: http://127.0.0.1:8000
+   backup_remote_network: container:dev-backup-server
+   ```
+
+Hay un ejemplo de cada fichero en [`inventory.example/`](../inventory.example/README.md). Después, commit firmado (`docs/WORKFLOW.md`, «Cambiar datos»).
+
+### 18.3 En DEV, desde la rama del PR
+
+```bash
+./deploy.sh secrets             --env dev --limit vmiadev   # crea dev-backup-server-password
+./deploy.sh plan  backup-server --env dev --limit vmiadev
+./deploy.sh apply backup-server --env dev --limit vmiadev
+./deploy.sh apply backup-server --env dev --limit vmiadev   # changed=0
+./deploy.sh plan  backup        --env dev --limit vmiadev   # añade dev-backup-copy y su temporizador
+./deploy.sh apply backup        --env dev --limit vmiadev
+./deploy.sh apply backup        --env dev --limit vmiadev   # changed=0
+```
+
+En `vmiadev`, una copia y su envío sin esperar:
+
+```bash
+svc systemctl --user start dev-backup.service
+svc systemctl --user start dev-backup-copy.service
+cat /var/lib/infra-podman/backup-status/dev-backup-copy.status   # result=ok y usage=…
+```
+
+### 18.4 En producción, después del merge y del tag
+
+**Primero el GX10**, con su contraseña de sudo. Si no tienes allí la función `svc`, defínela como en el paso 12.
+
+```bash
+./deploy.sh secrets             --limit gx10
+./deploy.sh plan  backup-server --limit gx10
+./deploy.sh apply backup-server --limit gx10
+./deploy.sh apply backup-server --limit gx10    # changed=0
+```
+
+En el GX10, comprueba:
+
+```bash
+sudo tailscale serve status        # sigue tu página de siempre y aparece el puerto 18000
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18000/   # 401: responde y pide contraseña
+```
+
+Mándame la salida de `sudo tailscale serve status --json` (no tiene nada secreto): cierra lo que queda por comprobar (R44).
+
+**Después el portátil**, con su contraseña de sudo:
+
+```bash
+./deploy.sh secrets      --limit laptop
+./deploy.sh plan  backup --limit laptop
+./deploy.sh apply backup --limit laptop
+./deploy.sh apply backup --limit laptop          # changed=0
+
+svc systemctl --user start prod-backup-copy.service
+cat /var/lib/infra-podman/backup-status/prod-backup-copy.status   # result=ok
+```
+
+**Comprueba una vez que un GX10 sin servicio no es un fallo:** en el GX10, `svc systemctl --user stop prod-backup-server.service`; en el portátil, `svc systemctl --user start prod-backup-copy.service` termina sin error y el estado dice `result=unreachable`. Vuelve a arrancarlo con `svc systemctl --user start prod-backup-server.service`.
+
+### 18.5 Mirar las copias del GX10
+
+- **Estado** de la última copia: `cat /var/lib/infra-podman/backup-status/prod-backup-copy.status`. Dice cuándo fue la última buena (`last_ok`) y cuánto ocupa (`usage`).
+- **Logs** de cada intento, en el portátil: `sudo journalctl _SYSTEMD_USER_UNIT=prod-backup-copy.service -n 100`.
+- **Logs del servidor**, en el GX10: `sudo journalctl _SYSTEMD_USER_UNIT=prod-backup-server.service -n 100`.
+- **Lista de copias del GX10, desde el portátil**, a través del servidor (cambia el nombre del GX10):
+  ```bash
+  svc podman run --rm \
+    --secret prod-backup-restic-password,type=mount,target=/run/secrets/restic-password \
+    --secret prod-backup-server-password,type=env,target=RESTIC_REST_PASSWORD \
+    -e RESTIC_PASSWORD_FILE=/run/secrets/restic-password -e RESTIC_REST_USERNAME=laperl \
+    -e RESTIC_REPOSITORY=rest:http://<nombre del GX10>.<tu red>.ts.net:18000/laperl/prod-laptop/ \
+    "$(sed -n 's/^restic_image: *"\([^"]*\)".*/\1/p' playbooks/group_vars/all/images.yml)" snapshots
+  ```
+  Desde tu copia del código. Las contraseñas llegan desde los secretos de Podman: no aparecen en la orden ni en el historial.
+
+### 18.6 Si algo falla
+
+| Lo que ves | Qué pasa | Qué hacer |
+| --- | --- | --- |
+| Aviso «la última copia correcta es de …, hace más de 168 h. El servidor de copias … no responde» | El portátil no llega al GX10 desde hace una semana | 1. ¿Está encendido el GX10? `ssh gx10 true`. 2. Desde el portátil: `curl -s -o /dev/null -w '%{http_code}\n' http://<nombre del GX10>.<tu red>.ts.net:18000/`. `401` es que responde; `000` es que no llega. 3. En el GX10: `svc systemctl --user status prod-backup-server.service` y `sudo tailscale serve status` (tiene que salir el 18000). Si falta el puerto: `./deploy.sh apply backup-server --limit gx10` |
+| El nombre del GX10 no se resuelve dentro del contenedor (`bad address` en los logs de la copia) | El contenedor no ve los nombres de Tailscale (por comprobar en el portátil) | Usa la IP de Tailscale del GX10, que no cambia: `tailscale ip -4 <nombre del GX10>`. Ponla en `backup_remote_url` del repo de datos y `apply backup --limit laptop` |
+| Aviso «el servidor de copias no acepta el usuario o la contraseña» | La contraseña del portátil y el hash del GX10 no coinciden | `./deploy.sh secrets --rotate backup-server-password --limit gx10`, `./deploy.sh secrets --rotate backup-server-password --limit laptop` y `./deploy.sh apply backup-server --limit gx10`. Ansible ve que el hash ya no corresponde y lo rehace |
+| Aviso «la clave de restic no abre el repositorio del servidor» | `backup-restic-password` no es la misma con la que se creó la copia del GX10 | **No borres nada.** Comprueba en KeePassXC el historial de esa entrada: la buena es la que abre las copias. Nunca se crea un repositorio nuevo encima de uno que existe |
+| Aviso «el servidor de copias está al … % de su tope» o «está lleno» | Las copias del GX10 se acercan a los 30 GB o los han alcanzado. Lleno no copia nada nuevo; tus copias locales siguen bien | Mira el espacio del GX10 (`df -h /`). Sube `backup_server_max_size_gb` en `group_vars/all.yml` del repo de datos, commit firmado, y `apply backup-server --limit gx10` y `apply backup --limit laptop`. En el GX10 no se borra nada solo (R26) |
+| Aviso «el servidor de copias no deja escribir en …» | El usuario solo puede escribir en su carpeta, y la carpeta no empieza por su nombre | Comprueba que `infra_site` es el mismo en el repo de datos que la carpeta del mensaje |
+| El servidor no arranca o has perdido su contraseña | — | Tus copias siguen en el volumen. Para leerlas sin el servidor, en el GX10 (pega la clave de restic de KeePassXC cuando la pida; no se guarda): <br>`svc podman run --rm -it --network=none -v prod-backup-server-data:/data:ro -e RESTIC_REPOSITORY=/data/laperl/prod-laptop <restic_image de images.yml> --no-lock snapshots` <br>Para una contraseña nueva: cambia la entrada en KeePassXC y sigue la fila de «no acepta el usuario o la contraseña» |
+
+La guía de restauración paso a paso, desde la copia local y desde la del GX10, llega en la fase 1f.
+
+### 18.7 Lo que se instala
+
+**No tienes que hacer nada aquí.** Solo es para que sepas qué hay en cada máquina.
+
+- **GX10**, en `svc_runner`: el contenedor `prod-backup-server`, su volumen `prod-backup-server-data` y el hash de la contraseña en `~/.config/infra-podman/prod-backup-server/htpasswd`. Con sudo: la entrada del puerto 18000 en `tailscale serve`. Ansible no toca nada más de `tailscale serve`.
+- **Portátil**, en `svc_runner`: el contenedor `prod-backup-copy`, su temporizador `prod-backup-copy.timer` y la carpeta `~/.local/state/infra-podman/backup-copy`. En tu cuenta, el script del aviso del paso 17 cambia: ahora también entiende el estado de la copia al GX10.
+- **Para dejar de copiar al GX10:** quita `backup_remote_url` de `host_vars/laptop.yml` y `apply backup --limit laptop`: borra el contenedor de copia y su temporizador. En el GX10 no se toca nada.

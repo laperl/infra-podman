@@ -18,6 +18,13 @@ all:
       vars:
         backup_data_repo: true   # the runner plays the laptop
         backup_notify: false     # no desktop session; tested in tests/backup/run.sh
+    # Server for the copy of the backups (R44). The copy itself is switched on only in the
+    # backup-copy job (copy-vars.yml), so the backup job keeps testing local copies alone.
+    backup_servers:
+      hosts:
+        localhost: {}
+      vars:
+        backup_server_tailscale: false  # no Tailscale on the runner, as in DEV
     postgres_hosts:
       hosts:
         localhost: {}

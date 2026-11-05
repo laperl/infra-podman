@@ -1,0 +1,43 @@
+---
+# Server for the copy of the backups (SPEC 4.11, R19, R44): restic's rest-server on the
+# GX10, append-only, with a size limit and a password. Published only on 127.0.0.1 and
+# reached from the other machines through `tailscale serve` (R25). The image lives in
+# playbooks/group_vars/all/images.yml (rest_server_image).
+
+backup_server_state: present
+
+# Port on 127.0.0.1 and, with Tailscale, on the machine's Tailscale name. Data: it also
+# goes into backup_remote_url of the clients. Infrastructure ports: docs/ROADMAP.md (1f).
+backup_server_port: 18000
+
+# Size limit of everything this server stores, in GB (1 GB = 1024^3 bytes; decimals
+# allowed). Data, in group_vars/all.yml of the data repository, because the clients use
+# it too, to warn before it is full. In append-only mode nothing is ever deleted, so this
+# is what keeps the backups from filling the disk.
+backup_server_max_size_gb: 30
+
+# Expose the port with `tailscale serve --bg --tcp` (R25), as root. false where there is
+# no Tailscale (the DEV VM, CI): there the client shares the server's network instead.
+backup_server_tailscale: true
+
+# Limit of the container (docs/COMPATIBILITY.md: no Memory= key in 4.9).
+backup_server_memory: 512m
+
+# Home of the service user. Overwritten by the role with the real one (getent); this value
+# only serves to render the templates in CI.
+backup_server_home: /home/svc_runner
+
+# Names (SPEC 4.12). Derived; do not override.
+backup_server_name: "{{ infra_env }}-backup-server"
+backup_server_volume: "{{ backup_server_name }}-data"
+backup_server_secret_key: backup-server-password
+backup_server_secret: "{{ infra_env }}-{{ backup_server_secret_key }}"
+# Only the hash of the password lives here (htpasswd, bcrypt), never the password.
+backup_server_auth_dir: "{{ backup_server_home }}/.config/infra-podman/{{ backup_server_name }}"
+
+# What quadlet_deploy installs, and what CI renders (scripts/render-quadlets.yml).
+backup_server_quadlet_units:
+  - template: backup-server.container.j2
+    name: "{{ backup_server_name }}.container"
+  - template: backup-server-data.volume.j2
+    name: "{{ backup_server_volume }}.volume"

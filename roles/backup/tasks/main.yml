@@ -11,9 +11,16 @@
       - backup_keep_daily | int > 0
       - backup_keep_monthly | int > 0
       - backup_keep_yearly | int > 0
+      - backup_remote_url | length == 0 or backup_remote_url is match('^https?://[A-Za-z0-9.:-]+$')
+      - backup_remote_network | length == 0 or backup_remote_network is match('^container:[a-z0-9-]+$')
+      - backup_remote_max_size_gb | float > 0
+      - backup_copy_minute | int >= 0 and backup_copy_minute | int <= 59
     fail_msg: >-
       restic_image pinned by digest (D6), infra_site declared in the data repository (R42),
-      backup_time as HH:MM and positive retention values (R28).
+      backup_time as HH:MM, positive retention values (R28) and, for the copy to the backup
+      server (R44), backup_remote_url as http://<name or IP>:<port> with no path,
+      backup_remote_network empty or container:<name>, a size limit above 0 and
+      backup_copy_minute between 0 and 59.
     quiet: true
 
 - name: Read the service user

@@ -1,0 +1,152 @@
+---
+- name: Check that the server password exists as a Podman secret
+  ansible.builtin.command:
+    cmd: podman secret exists {{ backup_server_secret }}
+  environment: "{{ backup_server_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: backup_server_secret_exists
+  changed_when: false
+  failed_when: backup_server_secret_exists.rc not in [0, 1]
+  check_mode: false
+
+- name: Require the secret (deploy.sh secrets creates it from KeePassXC)
+  ansible.builtin.assert:
+    that: backup_server_secret_exists.rc == 0
+    fail_msg: >-
+      The Podman secret {{ backup_server_secret }} does not exist on {{ inventory_hostname }}.
+      Create it first: ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
+      (KeePassXC entry {{ infra_site | default('<infra_site>') }}/{{ backup_server_secret_key }}).
+    quiet: true
+
+- name: Create the directory for the password hash
+  ansible.builtin.file:
+    path: "{{ backup_server_auth_dir }}"
+    state: directory
+    mode: "0700"
+  become: true
+  become_user: "{{ service_user }}"
+
+# htpasswd comes with the rest-server image: the image must be here before the hash.
+- name: Check whether the rest-server image is present
+  ansible.builtin.command:
+    cmd: podman image exists {{ rest_server_image }}
+  environment: "{{ backup_server_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: backup_server_image_exists
+  changed_when: false
+  failed_when: backup_server_image_exists.rc not in [0, 1]
+  check_mode: false
+
+- name: Pull the rest-server image
+  ansible.builtin.command:
+    cmd: podman pull --quiet {{ rest_server_image }}
+  environment: "{{ backup_server_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  changed_when: true
+  when: backup_server_image_exists.rc == 1
+
+# Only the hash lives on the server (bcrypt). The password reaches htpasswd through its
+# standard input, from the Podman secret: never as an argument, never in a log. Checking
+# instead of rewriting keeps a second apply at zero changes, and a rotated secret
+# (deploy.sh secrets --rotate backup-server-password) is noticed here.
+# label=disable: the server marks this folder as its own for SELinux (:Z); relabelling it
+# from another container would lock the running server out (docs/COMPATIBILITY.md).
+- name: Check that the password hash matches the secret
+  ansible.builtin.command:
+    argv:
+      - podman
+      - run
+      - --rm
+      - --network=none
+      - --security-opt
+      - label=disable
+      - --entrypoint
+      - /bin/sh
+      - -v
+      - "{{ backup_server_auth_dir }}:/auth"
+      - --secret
+      - "{{ backup_server_secret }},type=mount,target=/run/secrets/password"
+      - "{{ rest_server_image }}"
+      - -c
+      - test -s /auth/htpasswd && htpasswd -v -i /auth/htpasswd "$1" < /run/secrets/password
+      - sh
+      - "{{ infra_site }}"
+  environment: "{{ backup_server_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: backup_server_hash_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Write the password hash (new, or the secret was rotated)
+  ansible.builtin.command:
+    argv:
+      - podman
+      - run
+      - --rm
+      - --network=none
+      - --security-opt
+      - label=disable
+      - --entrypoint
+      - /bin/sh
+      - -v
+      - "{{ backup_server_auth_dir }}:/auth"
+      - --secret
+      - "{{ backup_server_secret }},type=mount,target=/run/secrets/password"
+      - "{{ rest_server_image }}"
+      - -c
+      - >-
+        htpasswd -B -i -c /auth/htpasswd.new "$1" < /run/secrets/password
+        && chmod 0600 /auth/htpasswd.new && mv -f /auth/htpasswd.new /auth/htpasswd
+      - sh
+      - "{{ infra_site }}"
+  environment: "{{ backup_server_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: backup_server_hash
+  changed_when: true
+  when: backup_server_hash_check.rc != 0
+
+- name: Resolve the templates
+  ansible.builtin.set_fact:
+    backup_server_units_resolved: >-
+      {{ ([] if ansible_loop.first else backup_server_units_resolved)
+         + [{'name': item.name, 'template': role_path ~ '/templates/' ~ item.template}] }}
+  loop: "{{ backup_server_quadlet_units }}"
+  loop_control:
+    extended: true
+    label: "{{ item.name }}"
+
+- name: Deploy with quadlet_deploy
+  ansible.builtin.include_role:
+    name: quadlet_deploy
+  vars:
+    quadlet_deploy_units: "{{ backup_server_units_resolved }}"
+    quadlet_deploy_images:
+      - "{{ rest_server_image }}"
+    quadlet_deploy_state: present
+
+- name: Restart the server to read the new password hash
+  ansible.builtin.systemd_service:
+    name: "{{ backup_server_name }}.service"
+    state: restarted
+    scope: user
+  environment: "{{ backup_server_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  when: backup_server_hash is changed and not ansible_check_mode
+
+- name: Wait until the server answers on 127.0.0.1
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ backup_server_port | int }}"
+    timeout: 60
+  when: not ansible_check_mode
+
+- name: Expose it through Tailscale
+  ansible.builtin.include_tasks: tailscale.yml
+  when: backup_server_tailscale

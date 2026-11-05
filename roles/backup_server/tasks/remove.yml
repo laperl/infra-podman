@@ -1,0 +1,26 @@
+---
+# Stop the server. The copies (the volume and its unit), the password hash and the
+# tailscale serve forwarder stay (SPEC 4.2, 8): the copies are the last line of defence.
+- name: Resolve the templates
+  ansible.builtin.set_fact:
+    backup_server_units_resolved: >-
+      {{ ([] if ansible_loop.first else backup_server_units_resolved)
+         + [{'name': item.name, 'template': role_path ~ '/templates/' ~ item.template}] }}
+  loop: "{{ backup_server_quadlet_units }}"
+  loop_control:
+    extended: true
+    label: "{{ item.name }}"
+
+- name: Remove the container unit with quadlet_deploy
+  ansible.builtin.include_role:
+    name: quadlet_deploy
+  vars:
+    quadlet_deploy_units: "{{ backup_server_units_resolved }}"
+    quadlet_deploy_state: absent
+
+- name: Say what stays
+  ansible.builtin.debug:
+    msg: >-
+      {{ backup_server_name }} is stopped and removed. The copies stay in the volume
+      {{ backup_server_volume }}.{% if backup_server_tailscale %} The Tailscale forwarder stays too; to
+      remove it by hand: sudo tailscale serve --tcp={{ backup_server_port }} tcp://localhost:{{ backup_server_port }} off{% endif %}

@@ -1,0 +1,5 @@
+---
+# Extra variables of the backup-copy job: the runner plays both the client and the
+# backup server, as the DEV VM does (R44). Fictitious values only.
+backup_remote_url: http://127.0.0.1:8000
+backup_remote_network: container:dev-backup-server

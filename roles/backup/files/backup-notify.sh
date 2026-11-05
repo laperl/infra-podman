@@ -33,17 +33,33 @@ if [[ ${#files[@]} -eq 0 ]]; then
   exit 0
 fi
 
+# Each status file may set its own limit (max_age_hours=; the copy to the server: 7 days)
+# and an extra warning (warning=; the server nearly full). result=unreachable (the server
+# did not answer) is not an alarm by itself: only when the last good copy gets too old.
 for file in "${files[@]}"; do
   unit=$(basename "$file" .status)
   result=$(sed -n 's/^result=//p' "$file")
   message=$(sed -n 's/^message=//p' "$file")
   last_ok=$(sed -n 's/^last_ok=//p' "$file")
   last_ok_epoch=$(sed -n 's/^last_ok_epoch=//p' "$file")
-  if [[ $result != ok ]]; then
+  since_epoch=$(sed -n 's/^since_epoch=//p' "$file")
+  warning=$(sed -n 's/^warning=//p' "$file")
+  limit=$(sed -n 's/^max_age_hours=//p' "$file")
+  limit=${limit:-$max_age_hours}
+  # Never a good copy yet: count from when the status was first written, if known.
+  reference=${last_ok_epoch:-$since_epoch}
+  if [[ $result != ok && $result != unreachable ]]; then
     alert "$unit: $message"
-  elif [[ -z $last_ok_epoch ]] || [[ $(((now - last_ok_epoch) / 3600)) -ge $max_age_hours ]]; then
-    alert "$unit: la última copia correcta es de ${last_ok:-nunca}, hace más de $max_age_hours h. Comprueba el temporizador: svc systemctl --user list-timers"
+  elif [[ -z $reference ]] || [[ $(((now - reference) / 3600)) -ge $limit ]]; then
+    if [[ $result == unreachable ]]; then
+      alert "$unit: la última copia correcta es de ${last_ok:-nunca}, hace más de $limit h. $message"
+    else
+      alert "$unit: la última copia correcta es de ${last_ok:-nunca}, hace más de $limit h. Comprueba el temporizador: svc systemctl --user list-timers"
+    fi
   else
-    echo "backup-notify: $unit ok, last good backup $last_ok"
+    echo "backup-notify: $unit $result, last good copy ${last_ok:-none yet}"
+  fi
+  if [[ -n $warning ]]; then
+    alert "$unit: $warning"
   fi
 done

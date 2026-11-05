@@ -1,0 +1,12 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Starts {{ backup_copy_name }}.service every hour, at minute {{ backup_copy_minute }}
+# (SPEC 4.11, R44). Persistent: an hour missed while the machine was off runs at start.
+[Unit]
+Description=Hourly copy of the backups to the backup server ({{ infra_env }})
+
+[Timer]
+OnCalendar=*-*-* *:{{ '%02d' | format(backup_copy_minute | int) }}:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -77,6 +77,12 @@ El 2026-11-03, en `ubuntu-24.04` con Podman 4.9.3 sin root y systemd de usuario:
 - **La unidad generada conserva la sección original** como `[X-Container]`: cada valor aparece dos veces en `systemctl --user cat`.
 - **SELinux y el volumen del backup (Fedora):** el contenedor de backup monta su repositorio con `:Z`, que lo marca como privado. Otro contenedor que lo monte sin más recibe `stat /repo/config: permission denied`. Para consultarlo a mano: `--security-opt label=disable`, que no cambia la marca (como el contenedor de Ansible, R16). En Ubuntu no pasa, por eso el CI no lo vio. Detectado por el operador en el portátil el 2026-11-04.
 - **restic y los atributos extendidos:** restic guarda los de cada carpeta (listas de permisos, etiquetas de SELinux en Fedora). Si el destino de una restauración no los admite, restaura los ficheros pero termina con error. Se restaura con `--exclude-xattr '*'` (restic 0.18 o posterior). Visto en el CI y [en Fedora](https://discussion.fedoraproject.org/t/selinux-errors-on-restic-restore-test/181360).
+- **Copia al GX10 (fase 1e2, R44), comprobado con el generador 4.9.3:**
+  - `SecurityLabelDisable=true` existe y genera `--security-opt label:disable`.
+  - `Network=container:<nombre>` pasa tal cual a `--network`: en DEV y en el CI, la copia comparte la red del servidor.
+  - `SuccessExitStatus=` en `[Service]` se conserva: el código 75 (el servidor no responde) no es un fallo.
+  - `Environment="OPTIONS=--a --b"`, con comillas, llega como un único valor.
+  - `Volume=<nombre>.volume:` solo da el nombre de `VolumeName=` si el `.volume` está en la misma carpeta: si no, 4.9 inventa `systemd-<nombre>`. Por eso el contenedor de copia va en el mismo rol que el de backup y se valida con su `.volume`.
 - **Un fichero montado en una ruta que no existe en la imagen** (`/etc/postgresql/pg_hba.conf`) funciona también con `ReadOnly=true`.
 - **Salvedad del runner de GitHub, no de los servidores:** su `/etc/environment` fija `XDG_CONFIG_HOME` y otras `XDG_*` para su propio usuario, y PAM se las pasa al systemd de **cualquier** usuario. El generador de Quadlet de `svc_runner` buscaba entonces sus unidades en `/home/runner/.config`. El workflow borra esas líneas antes de crear el usuario. Si alguna vez un servidor tuviera lo mismo, el síntoma sería `Could not find the requested service` justo después de instalar una unidad.
 
