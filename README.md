@@ -10,6 +10,7 @@ Infraestructura de un operador único: servicios en contenedores Podman gestiona
 | Desplegar en producción paso a paso | [`docs/WORKFLOW.md`, pasos 5 y 6](docs/WORKFLOW.md#5-crear-el-tag-firmado) |
 | Preparar el portátil (se hace una vez) | [`docs/SETUP.md`](docs/SETUP.md) |
 | Configurar la firma de tags y commits (una vez) | [`docs/SIGNING.md`](docs/SIGNING.md) |
+| Tareas de cada día: ver las copias, comprobar que el GX10 las tiene, restaurar, actualizar una imagen, quitar un servicio | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) |
 | Saber en qué fase estamos y qué queda pendiente | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
 | Ver qué secretos existen (sin valores) | [`docs/SECRETS_INVENTORY.md`](docs/SECRETS_INVENTORY.md) |
 | Cómo se monta Postgres: instancias, bases, grupos, usuarios y acceso | [`docs/POSTGRES.md`](docs/POSTGRES.md) |

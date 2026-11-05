@@ -12,6 +12,7 @@ name: lifecycle
       - playbooks/**
       - ansible.cfg
       - tests/lifecycle/**
+      - docs/OPERATIONS.md
       - .github/workflows/lifecycle.yml
   workflow_dispatch:
 
@@ -343,6 +344,7 @@ jobs:
       INV: tests/lifecycle/inventory.yml
       COPY: -e @tests/lifecycle/copy-vars.yml
       CHECK: tests/lifecycle/check-backup-copy.sh
+      OPS: tests/lifecycle/check-operations.sh
       AS: tests/lifecycle/as-svc.sh
     steps:
       - name: Checkout
@@ -463,9 +465,29 @@ jobs:
           $AS systemctl --user start dev-backup-copy.service
           $CHECK ok
 
+      # docs/OPERATIONS.md, run block by block exactly as written (in DEV terms).
+      - name: "Manual: look at the copies, check the server is in sync, back up now (1.1-1.3)"
+        run: |
+          for s in view in-sync copy-now; do $OPS $s 2>&1 | tee -a all.log; done
+
+      - name: "Manual: the monthly drill (1.4)"
+        run: $OPS drill 2>&1 | tee -a all.log
+
+      - name: "Manual: restore a broken database and swap it (2.1)"
+        run: $OPS restore-local 2>&1 | tee -a all.log
+
+      - name: "Manual: restore from the server's volume, without the server (2.2)"
+        run: $OPS restore-volume 2>&1 | tee -a all.log
+
+      - name: "Manual: the data repository, from the local copy and from the server (2.3, 2.4)"
+        run: |
+          $OPS data-repo 2>&1 | tee -a all.log
+          $OPS lost-laptop 2>&1 | tee -a all.log
+
+      # As docs/OPERATIONS.md (3.3) says: as data of the machine, not as -e.
       - name: Remove the server, keeping the copies (SPEC 4.2)
         run: |
-          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup-server.yml -e backup_server_state=absent 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" -i tests/lifecycle/remove-server.yml playbooks/backup-server.yml 2>&1 | tee -a all.log
           $CHECK destroyed
 
       - name: The passwords never appear in the output or the journal (SPEC 4.5)

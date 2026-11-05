@@ -1,0 +1,8 @@
+---
+# Second inventory for the last step of the backup-copy job: removes the backup server
+# the way docs/OPERATIONS.md (3.3) tells the operator to, as data of the machine in the
+# inventory (backup_server_state: absent), not as an extra variable.
+all:
+  hosts:
+    localhost:
+      backup_server_state: absent
