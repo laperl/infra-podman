@@ -25,7 +25,7 @@ Qué hacer cuando algo falla, ordenado por pieza. Busca el mensaje que ves (Ctrl
 | `deploy.sh: define data_repo = <ruta del repo de datos> en …` | Falta la línea `data_repo` en `~/.config/infra-podman/deploy.conf` | Añádela ([`SETUP.md`](SETUP.md), paso 7) |
 | `deploy.sh: falta inventory/prod/hosts.yml en el repo de datos …` | El repo de datos no tiene el inventario de ese entorno | Revisa su estructura con [`inventory.example/`](../inventory.example/README.md) |
 | `deploy.sh: define kdbx_prod=<ruta al .kdbx> en …` | Falta la ruta del `.kdbx` en `deploy.conf`, o el fichero no está ahí | Corrige la línea `kdbx_prod` (o `kdbx_dev`): [`SETUP.md`](SETUP.md), paso 7 |
-| `deploy.sh: no hay agente SSH (SSH_AUTH_SOCK); desbloquea KeePassXC` | KeePassXC está cerrado o bloqueado, y su agente SSH no responde | Desbloquéalo y repite. Comprueba: `ssh-add -l` lista tus claves |
+| `deploy.sh: no hay agente SSH (SSH_AUTH_SOCK); desbloquea KeePassXC` | En esa terminal no hay agente SSH: `SSH_AUTH_SOCK` está vacía o no apunta a un agente | Ábrela desde tu sesión de escritorio, con KeePassXC desbloqueado. Comprueba: `ssh-add -l` lista tus claves |
 | `deploy.sh: contraseña vacía` | Has pulsado Intro sin escribir la contraseña maestra | Repite y escríbela |
 | `deploy.sh: apply --env prod necesita un terminal interactivo` | Lo has lanzado sin terminal (desde un script, por ejemplo) | Lánzalo tú desde una terminal |
 | `deploy.sh: cancelado por el operador` | No has escrito exactamente `prod` en la confirmación | Repite y escribe `prod` |
