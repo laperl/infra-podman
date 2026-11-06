@@ -1,0 +1,38 @@
+---
+# Weekly check for new versions of the images in playbooks/group_vars/all/images.yml.
+# It FAILS when there is one, so GitHub e-mails the operator (Settings → Notifications →
+# Actions). Read only: the update itself is a PR that changes the digest (D6; automatic
+# PRs are postponed, SPEC 7.2).
+name: image-updates
+
+"on":
+  schedule:
+    # Mondays at 10:00 in Madrid, all year round (summer and winter time).
+    - cron: "0 10 * * 1"
+      timezone: "Europe/Madrid"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-updates
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install skopeo from Ubuntu 24.04
+        run: |
+          command -v skopeo >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends skopeo; }
+          skopeo --version
+
+      - name: New versions of the images (fails if there is one)
+        run: scripts/image-updates.sh

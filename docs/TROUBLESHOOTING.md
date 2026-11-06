@@ -152,5 +152,8 @@ Los errores salen en GitHub, en el PR: pestaña **Checks**, en el job en rojo, c
 | `the second apply changed something` (job `lifecycle`) | Un segundo `apply` sin cambios cambió algo: no es idempotente (SPEC 4.2) | Lo corrige Claude en el mismo PR |
 | `… appears in the logs` o `the password appears in the Ansible output` | Una contraseña de prueba ha salido en los logs | No mergees. Lo corrige Claude |
 | `unknown placeholder in the block '…'` o `the block '…' failed` (`check-operations`) | Un bloque de [`OPERATIONS.md`](OPERATIONS.md) ya no funciona tal como está escrito | Lo corrige Claude en el mismo PR |
+| Correo de GitHub: `image-updates` ha fallado, con `New version of …_image` o `New image for …_image` | Hay una versión nueva de esa imagen. No es un fallo | [`WORKFLOW.md`](WORKFLOW.md), «Cuando hay una imagen nueva» |
+| `image-updates` falla con `cannot read … from the registry` o `cannot list the tags of …` | Docker Hub no respondía o ha limitado las descargas | Lánzalo otra vez a mano (Actions → `image-updates` → Run workflow). Si sigue, avísame |
+| `Platforms: not an index` o sin `linux/arm64` en la imagen nueva | Esa versión no trae las dos arquitecturas | No la uses todavía; avísame (D6) |
 | `Expected Podman 4.9` | La máquina de GitHub trae otra versión de Podman | Avísame: hay que revisar el workflow |
 | El mismo fallo 5 veces seguidas | — | Claude para y te pregunta (`CLAUDE.md`) |

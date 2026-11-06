@@ -4,7 +4,9 @@
 # in playbooks/, in dev and prod.
 #
 # Each line is "<name>_image: <repository>@sha256:<digest>  # track: <tag>". The tag in
-# the comment is only where to look for updates (scripts/image-updates.sh, PR 4/4).
+# the comment is only where to look for updates: scripts/image-updates.sh, weekly in the
+# image-updates workflow. A version (0.19.1) looks for a higher one; any other tag (pg18)
+# for a new digest.
 # To update: change the digest in a PR; CI and lifecycle test it; then tag and apply.
 
 # PostgreSQL 18 with the pgvector extension (R27). linux/amd64 and linux/arm64.
