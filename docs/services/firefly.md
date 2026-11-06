@@ -4,6 +4,10 @@ Qué tiene que cumplir Firefly III antes de escribir su código. Es una propuest
 
 Ahí van tus finanzas. Por eso el principio es: **Firefly no puede enviar nada fuera del portátil**, y eso lo garantiza la red, no un ajuste de la aplicación.
 
+**Usa la Postgres de la plataforma:** la instancia `main` del portátil (`prod-pg-main`). Sin base propia dentro del contenedor, sin SQLite y sin otra instancia de Postgres.
+
+Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, backups, red, Postgres) está en SPEC y en [`POSTGRES.md`](../POSTGRES.md), y aquí solo se enlaza.
+
 ## 1. Uso
 
 | Tema | Decisión |
@@ -17,7 +21,7 @@ Ahí van tus finanzas. Por eso el principio es: **Firefly no puede enviar nada f
 
 ## 2. Red: sin salida a internet
 
-- **Firefly está en una red de Podman interna**, sin salida, cuyo único otro miembro es su Postgres: `prod-firefly-pg-main-net` (SPEC 4.4, 4.12). Ni internet, ni la red de casa, ni otros contenedores.
+- **Firefly está en una red de Podman interna**, sin salida, cuyo único otro miembro es su Postgres: `prod-firefly-pg-main-net` ([SPEC](../SPEC.md) 4.4, 4.12). Ni internet, ni la red de casa, ni otros contenedores.
 - **Se llega a él solo desde el portátil**, por un puerto en `127.0.0.1`. Cómo se publica un puerto sin dar salida a internet al contenedor se decide en el diseño 🔍 (una red interna no admite puertos publicados en Podman sin root).
 - **Se prueba en `lifecycle`**, que comprueba que desde el contenedor de Firefly:
   - no se llega a una IP pública;
@@ -49,7 +53,7 @@ Ahí van tus finanzas. Por eso el principio es: **Firefly no puede enviar nada f
   - con límites de memoria, CPU y procesos, y healthcheck;
   - imagen por digest, que existe para `linux/amd64` y `linux/arm64`.
 - **Logs sin datos financieros:** `APP_DEBUG=false` y nivel de log bajo. El registro de auditoría de Firefly, activo.
-- **Postgres** (según [`POSTGRES.md`](POSTGRES.md)):
+- **Postgres** (según [`POSTGRES.md`](../POSTGRES.md)):
   - una base `firefly` con su esquema `firefly` y sus grupos `firefly_owner`, `firefly_writer` y `firefly_reader` (R35, R36);
   - Firefly migra sola, así que usa un único usuario, `firefly`, en `firefly_owner` (`POSTGRES.md`, tabla de usuarios);
   - 🔍 que Firefly cree sus tablas en el esquema `firefly`: la base no tiene esquema `public`;
@@ -72,7 +76,7 @@ Ahí van tus finanzas. Por eso el principio es: **Firefly no puede enviar nada f
 
 - **La base `firefly`** entra sola en el backup diario: se vuelcan todas las bases.
 - **El volumen de justificantes** entra en el backup y en la copia al GX10. Es el pendiente «Copia de los volúmenes de las aplicaciones» del ROADMAP.
-- **Restaurar**, probado en `lifecycle` y escrito en [`OPERATIONS.md`](OPERATIONS.md): la base y los justificantes, desde la copia local y desde la del GX10. Con los permisos de la base repuestos por Ansible (pendiente «Restaurar bases de aplicaciones»).
+- **Restaurar**, probado en `lifecycle` y escrito en [`OPERATIONS.md`](../OPERATIONS.md): la base y los justificantes, desde la copia local y desde la del GX10. Con los permisos de la base repuestos por Ansible (pendiente «Restaurar bases de aplicaciones»).
 - **Conservación:** 7 diarias, 12 mensuales y 5 anuales. Hacienda puede revisar 4 años, así que da para los justificantes de la declaración.
 
 ## 6. Lo que importa para las cuentas
