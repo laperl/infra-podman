@@ -1,0 +1,16 @@
+---
+# Extra variables of the postgres job, once phase 1 is checked: the same instance with
+# application databases (docs/POSTGRES.md, sections 2 and 6), as the operator would add
+# them to the data repository. Fictitious names only.
+#   demo: one user per group, all connecting from the network of the consumer demo;
+#   demo_ai: a second reader, from another consumer (ai), as the AI of later phases.
+postgres_instances:
+  - name: main
+    superuser: ci_admin
+    databases:
+      - name: demo
+        users:
+          - {name: demo_app, group: owner, consumer: demo}
+          - {name: demo_rw, group: writer, consumer: demo}
+          - {name: demo_ro, group: reader, consumer: demo}
+          - {name: demo_ai, group: reader, consumer: ai}

@@ -1,0 +1,62 @@
+---
+# pg_hba.conf with the subnet Podman gave each consumer network (docs/POSTGRES.md, 3).
+# Included twice: before the container starts (it is mounted read-only into it) and after,
+# when a new network has just been created. A network that does not exist yet gets no line,
+# so its users are rejected: a mistake closes, it never opens.
+
+- name: Read the networks of the service user
+  ansible.builtin.command:
+    argv: [podman, network, ls, --format, json]
+  environment: "{{ postgres_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: postgres_network_ls
+  changed_when: false
+  check_mode: false
+
+- name: Index the networks by name
+  ansible.builtin.set_fact:
+    postgres_net_by_name: "{{ postgres_network_ls.stdout | from_json | items2dict(key_name='name', value_name='name') }}"
+    postgres_net_list: "{{ postgres_network_ls.stdout | from_json }}"
+    postgres_subnets: {}
+
+# Podman keeps an existing network as it is when its file changes (quadlet_deploy): one
+# created by hand, or before this role, could have a way out.
+- name: Require every consumer network to be internal and isolated
+  ansible.builtin.assert:
+    that:
+      - item.internal | default(false) | bool
+      - (item.options | default({})).isolate | default('') in ['true', 'strict']
+    fail_msg: >-
+      The network {{ item.name }} exists but is not internal with isolate (D9): it was not
+      created by this role. Stop {{ postgres_name }}, remove it as the service user
+      (podman network rm {{ item.name }}) and apply again; Podman creates it with the
+      right options.
+    quiet: true
+  loop: "{{ postgres_net_list | selectattr('name', 'in', postgres_networks) | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Keep the subnet of each consumer network that exists
+  ansible.builtin.set_fact:
+    postgres_subnets: >-
+      {{ postgres_subnets | combine({item.0: (postgres_net_list | selectattr('name', 'equalto', item.1) | first).subnets
+                                             | map(attribute='subnet') | select('match', '^[0-9.]+/[0-9]+$') | first}) }}
+  loop: "{{ postgres_consumers | zip(postgres_networks) | list }}"
+  loop_control:
+    label: "{{ item.1 }}"
+  when: item.1 in postgres_net_by_name
+
+- name: Write pg_hba.conf
+  ansible.builtin.template:
+    src: pg_hba.conf.j2
+    dest: "{{ postgres_hba_file }}"
+    # Readable by the postgres user inside the container (a subordinate UID).
+    mode: "0644"
+  become: true
+  become_user: "{{ service_user }}"
+  register: postgres_hba
+
+- name: Remember that pg_hba.conf changed, for the reload in setup.yml
+  ansible.builtin.set_fact:
+    postgres_hba_changed: "{{ postgres_hba_changed | default(false) or postgres_hba is changed }}"

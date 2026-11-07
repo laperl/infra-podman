@@ -1,0 +1,13 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Network of one consumer of {{ postgres_name }} (D9, SPEC 4.4): only that consumer and this
+# instance. Internal: no way out to the internet, the LAN or the host. Isolated from every
+# other isolated network. No Subnet=: Podman chooses a free one, and the role reads it
+# for pg_hba.conf (docs/POSTGRES.md, section 3).
+[Network]
+NetworkName={{ item.name | regex_replace('\.network$', '') }}
+Internal=true
+Options=isolate=true
+Label=infra.env={{ infra_env }}
+Label=infra.app=pg-{{ postgres_instance }}
+Label=infra.component=net
+Label=infra.managed-by=infra-podman

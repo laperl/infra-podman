@@ -79,9 +79,10 @@ jobs:
 
   postgres:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       INV: tests/lifecycle/inventory.yml
+      APPS: -e @tests/lifecycle/apps-vars.yml
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -171,6 +172,69 @@ jobs:
             || { echo "::error::PostgreSQL did not reload its configuration"; exit 1; }
           [[ $(tests/lifecycle/as-svc.sh podman inspect dev-pg-main --format '{{.State.StartedAt}}') == "$started" ]] \
             || { echo "::error::PostgreSQL was restarted for a pg_hba.conf change"; exit 1; }
+          tests/lifecycle/check-postgres.sh read
+
+      # Phase 2 (docs/POSTGRES.md, 2 and 3): the same instance, now with application
+      # databases, as in production: PostgreSQL leaves Network=none for one internal,
+      # isolated network per consumer.
+      - name: Application databases are refused without the secrets of their users
+        run: |
+          if ansible-playbook -i "$INV" $APPS playbooks/postgres.yml --check > refusal.log 2>&1; then
+            echo "::error::postgres ran without the secrets of its users"; exit 1
+          fi
+          grep -q 'dev-pg-main-demo_app-password' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+
+      - name: Create the secrets of the users with random values
+        run: |
+          for user in demo_app demo_rw demo_ro demo_ai; do
+            v=$(openssl rand -hex 24)
+            echo "::add-mask::$v"
+            echo "$v" >> "$RUNNER_TEMP/pw"
+            printf '%s' "$v" | tests/lifecycle/as-svc.sh podman secret create "dev-pg-main-$user-password" -
+          done
+
+      - name: Plan, apply, apply again (zero changes), plan again (zero changes)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" $APPS playbooks/postgres.yml --check --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" $APPS playbooks/postgres.yml --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" $APPS playbooks/postgres.yml 2>&1 | tee second.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply changed something"; exit 1; }
+          tests/lifecycle/playbook.sh -i "$INV" $APPS playbooks/postgres.yml --check 2>&1 | tee plan.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' plan.log || { echo "::error::the plan after apply shows changes"; exit 1; }
+          tests/lifecycle/check-postgres.sh read
+
+      - name: One internal, isolated network per consumer, and pg_hba.conf per user
+        run: tests/lifecycle/check-postgres-apps.sh networks
+
+      - name: Groups, users, database and schema follow docs/POSTGRES.md
+        run: tests/lifecycle/check-postgres-apps.sh catalog
+
+      - name: Owner creates as _owner, _reader cannot modify anything (R35, R36)
+        run: tests/lifecycle/check-postgres-apps.sh access
+
+      - name: No way out of the networks (internet, host, other consumers)
+        run: tests/lifecycle/check-postgres-apps.sh isolation
+
+      - name: A rotated secret changes the password, once
+        run: |
+          v=$(openssl rand -hex 24)
+          echo "::add-mask::$v"
+          echo "$v" >> "$RUNNER_TEMP/pw"
+          tests/lifecycle/as-svc.sh podman secret rm dev-pg-main-demo_rw-password
+          printf '%s' "$v" | tests/lifecycle/as-svc.sh podman secret create dev-pg-main-demo_rw-password -
+          tests/lifecycle/playbook.sh -i "$INV" $APPS playbooks/postgres.yml 2>&1 | tee rotate.log | tee -a all.log
+          grep -q 'Password set from its secret: demo_rw"' rotate.log || { echo "::error::the password of demo_rw was not set"; exit 1; }
+          tests/lifecycle/check-postgres-apps.sh password demo_rw
+          tests/lifecycle/playbook.sh -i "$INV" $APPS playbooks/postgres.yml 2>&1 | tee second.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the apply after the rotation changed something"; exit 1; }
+
+      # The way back: the code of phase 1 does not know about databases. Without them the
+      # instance returns to Network=none and keeps its data.
+      - name: Without consumers, back to Network=none, data kept
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml 2>&1 | tee -a all.log
+          tests/lifecycle/check-postgres-apps.sh none
+          tests/lifecycle/check-postgres.sh running
           tests/lifecycle/check-postgres.sh read
 
       - name: Destroy, keeping the volume (SPEC 4.2)

@@ -19,3 +19,5 @@
         postgres_instance: "{{ postgres_item.name }}"
         # Data of the operator (docs/POSTGRES.md, section 6): required, no default.
         postgres_superuser: "{{ postgres_item.superuser | default('') }}"
+        # Its application databases, groups and users (docs/POSTGRES.md, section 6).
+        postgres_databases: "{{ postgres_item.databases | default([]) }}"

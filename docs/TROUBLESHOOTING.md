@@ -86,6 +86,11 @@ Qué hacer cuando algo falla, ordenado por pieza. Busca el mensaje que ves (Ctrl
 | `prod-pg-main would restart on a new image, and there is no backup service on …` | Cambia la imagen de Postgres y no hay backup con el que hacer antes una copia | `./deploy.sh apply backup --limit laptop` y repite |
 | `The backup before changing the image of prod-pg-main failed, so the image has NOT been changed (D11).` | La copia previa al cambio de imagen falló. Postgres sigue igual | Arregla el backup (apartado 6) y repite |
 | `Rotating pg-… only changes the Podman secret. PostgreSQL keeps the old password until you run ALTER ROLE first` | Es un aviso: cambiar el secreto no cambia la contraseña en la base | Primero `ALTER ROLE`, después `--rotate` ([`SECRETS_INVENTORY.md`](SECRETS_INVENTORY.md)) |
+| `Rotating pg-… changes the Podman secret. PostgreSQL takes it on the next apply of postgres` | Es un aviso, para un usuario de aplicación | `./deploy.sh apply postgres --limit laptop` y reinicia la aplicación ([`POSTGRES.md`](POSTGRES.md), apartado 4) |
+| `Missing Podman secrets on …: prod-pg-main-<usuario>-password` | Un usuario de `databases:` no tiene su secreto en esa máquina | Su entrada en KeePassXC y en `infra_secrets`, y `./deploy.sh secrets --limit laptop` ([`POSTGRES.md`](POSTGRES.md), apartado 6) |
+| `databases: of pg-main in the data repository …` | Un nombre, un grupo o un consumidor de `databases:` no es válido, o un usuario está repetido | Corrige el repo de datos según el mensaje ([`POSTGRES.md`](POSTGRES.md), apartado 6) |
+| `The network prod-<consumidor>-pg-main-net exists but is not internal with isolate (D9)` | Esa red no la creó Ansible y podría tener salida | Lo que dice el mensaje: parar Postgres, borrar la red y repetir el `apply` |
+| `the password of … has characters other than printable ASCII` | La contraseña del secreto tiene letras con tilde, eñes u otros caracteres | Genera otra en KeePassXC con letras, números y símbolos, y `--rotate` |
 | `svc podman healthcheck run prod-pg-main && echo sano` no dice `sano` | Postgres no está sano | `sudo journalctl _SYSTEMD_USER_UNIT=prod-pg-main.service -n 50` y `svc systemctl --user restart prod-pg-main.service` |
 
 ## 6. Backup local

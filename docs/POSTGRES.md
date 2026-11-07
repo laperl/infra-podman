@@ -6,7 +6,7 @@ Todo se declara como **datos** en el inventario (ver [Datos fuera del código](#
 
 Estado: **diseño aprobado el 2026-11-03.**
 - El nivel de instancia está implementado desde la fase 1d (rol `postgres`) y comprobado con Podman 4.9 en el workflow `lifecycle`. `pg-main` se recrea con él ([`SETUP.md`](SETUP.md), paso 15).
-- Las bases de las aplicaciones llegan en la fase 2. Lo marcado como *por comprobar* se valida en `lifecycle` antes de darlo por bueno.
+- Las bases de las aplicaciones, desde la fase 2 (R45): se declaran en el repo de datos (sección 6) y `lifecycle` comprueba el modelo de permisos, el aislamiento de las redes y la vuelta atrás.
 
 ## 1. Instancia
 
@@ -79,7 +79,7 @@ El dueño de un objeto es el rol que lo crea, y los privilegios por defecto solo
 | **Aplicaciones de terceros que migran solas** (por ejemplo Firefly) | Un único usuario en `_owner` | No se pueden separar. El riesgo queda limitado a su propia base |
 | **Cambios a mano del operador** | El superusuario, con `SET ROLE <app>_owner` | Para que lo creado quede a nombre de `_owner` |
 
-A los usuarios de `_owner` se les fija que, al conectar, trabajen ya como `_owner` (`ALTER ROLE <usuario> SET role = <app>_owner`), así lo que crean queda a nombre del grupo sin cambiar nada en la aplicación. *Por comprobar en el CI.*
+A los usuarios de `_owner` se les fija que, al conectar a su base, trabajen ya como `_owner` (`ALTER ROLE <usuario> IN DATABASE <app> SET role = <app>_owner`), así lo que crean queda a nombre del grupo sin cambiar nada en la aplicación. Comprobado con PostgreSQL 16 en local y en `lifecycle` con la imagen de la plataforma.
 
 ## 3. Acceso (`pg_hba.conf`)
 
@@ -88,19 +88,20 @@ Lo genera Ansible a partir del inventario y se monta en solo lectura. Si cambia,
 1. `local all all trust`: solo por el socket, dentro del contenedor. Quien llega ahí ya es `svc_runner`.
 2. El superusuario por TCP: `reject`, **salvo desde la subred de pgAdmin** (R37), con `scram-sha-256`.
 3. `backup` por TCP: `reject`.
-4. Cada usuario LOGIN: `host <su base> <usuario> <subred de la red de su aplicación> scram-sha-256`. Una línea por usuario, limitada a su base y a la red aislada de su aplicación (D9).
+4. Cada usuario LOGIN: `host <su base> <usuario> <subred de la red de su consumidor> scram-sha-256`. Una línea por usuario, limitada a su base y a la red de su consumidor (D9). La subred la elige Podman al crear la red y Ansible la lee; mientras la red no existe, el usuario no tiene línea y queda rechazado (R45).
 5. Cualquier otro caso: `reject`.
 
 No hay TLS: el tráfico nunca sale de la máquina, va por redes de Podman aisladas.
 
-No hay red compartida entre consumidores: cada aplicación tiene su red con `isolate=true` (D9), unida solo a su instancia.
+No hay red compartida entre consumidores: cada consumidor tiene su red, `<entorno>-<consumidor>-pg-<instancia>-net`, interna y con `isolate=true` (D9, R45), unida solo a su instancia. Sin consumidores, la instancia sigue con `Network=none`. Al añadir el primero (o uno nuevo), Postgres se reinicia una vez, porque Podman no añade redes a un contenedor en marcha.
 
 ## 4. Contraseñas
 
 - **KeePassXC** es la copia maestra: `<instalación>/pg-<instancia>-<usuario>-password` (por ejemplo `laperl/…`; SETUP, paso 16). El superusuario es `pg-<instancia>-superuser-password`. `backup` no tiene.
-- **Secretos de Podman** (`podman secret`): así llega cada contraseña a los contenedores, como fichero (SPEC 4.5). Se crean con `deploy.sh secrets`.
+- **Secretos de Podman** (`podman secret`): `<entorno>-pg-<instancia>-<usuario>-password`. Así llega cada contraseña a su aplicación, como fichero (SPEC 4.5). Se declaran en `infra_secrets` (grupo `postgres_hosts`) y se crean con `deploy.sh secrets`. Sin ellos, `apply postgres` se para y dice cuáles faltan.
+- **En la base, desde el secreto:** en cada `apply`, Ansible compara la contraseña guardada con la del secreto y, si no coincide, la cambia. Envía el SCRAM ya calculado, nunca la contraseña en claro, que podría acabar en el log de PostgreSQL (R45). Solo letras, números y símbolos ASCII: es lo que genera KeePassXC por defecto.
 - **No hay `.pgpass` ni ficheros de contraseñas.**
-- **Cambiar una contraseña:** primero `ALTER ROLE` en la base y después `deploy.sh secrets --rotate` (SPEC 4.5).
+- **Cambiar una contraseña:** de un usuario de aplicación, `deploy.sh secrets --rotate pg-<instancia>-<usuario>-password`, después `apply postgres` y por último reiniciar la aplicación. Del superusuario, primero `ALTER ROLE` en la base y después `--rotate` (SPEC 4.5).
 
 ## 5. Cómo se conecta el operador
 
@@ -117,18 +118,24 @@ No hay red compartida entre consumidores: cada aplicación tiene su red con `iso
 
 Los nombres de las bases, los usuarios, las aplicaciones y su configuración son **datos del operador** y no viven en este repo (R38). Ver [`SPEC.md`](SPEC.md), sección 4.13.
 
-Ejemplo de cómo se declararán (se concreta en la fase 2):
+Se declaran en `group_vars/postgres_hosts.yml` del repo de datos (ejemplo comentado en [`inventory.example/prod/group_vars/postgres_hosts.yml`](../inventory.example/prod/group_vars/postgres_hosts.yml)):
 
 ```yaml
 postgres_instances:
   - name: main
-    superuser: tu_usuario     # el administrador; obligatorio desde la fase 1d
+    superuser: tu_usuario       # el administrador; obligatorio desde la fase 1d
     databases:
-      - name: app1            # nombre elegido por el operador
-        consumers: [app1]     # aplicaciones con red propia hacia esta instancia
+      - name: app1              # base, esquema y grupos app1_*; ^[a-z][a-z0-9_]{0,30}$
         users:
-          - name: app1_rw
-            group: writer     # owner | writer | reader
-          - name: app1_migrate
-            group: owner
+          - name: app1          # único en la instancia; ^[a-z][a-z0-9_]{0,62}$
+            group: owner        # owner | writer | reader
+            consumer: app1      # la aplicación que entra con él: su red, y solo desde ella
+          - name: app1_ia
+            group: reader
+            consumer: ia
 ```
+
+Para añadir una base o un usuario:
+1. su contraseña en KeePassXC, `<instalación>/pg-<instancia>-<usuario>-password`, y su nombre en `infra_secrets` con `group: postgres_hosts`;
+2. la entrada de arriba en el repo de datos;
+3. `./deploy.sh secrets --limit <máquina>` y después `./deploy.sh plan postgres --limit <máquina>` y `apply`, primero en DEV. Si llega un consumidor nuevo, Postgres se reinicia una vez.

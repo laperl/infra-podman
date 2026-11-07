@@ -1,0 +1,65 @@
+{# Groups and users of every application database (docs/POSTGRES.md, section 2), run in the
+   database postgres as the superuser. Idempotent: each statement leaves the catalogs as they
+   are when there is nothing to do, and the role compares a picture of the catalogs before
+   and after to know what changed. Names are checked by the role (main.yml): only
+   [a-z0-9_], always quoted. Passwords are set elsewhere (pg_passwords.py). #}
+{% macro state() -%}
+SELECT 'role' AS area, rolname || ' ' || concat_ws(',', rolsuper, rolinherit, rolcreaterole, rolcreatedb,
+         rolcanlogin, rolreplication, rolbypassrls) AS item
+  FROM pg_authid WHERE rolname = ANY (ARRAY[{{ postgres_managed_roles | map('regex_replace', '^(.*)$', "'\\1'") | join(', ') }}]::name[])
+UNION ALL
+SELECT 'member', g.rolname || ' > ' || r.rolname || ' ' || concat_ws(',', m.admin_option, m.inherit_option, m.set_option)
+  FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.roleid JOIN pg_roles r ON r.oid = m.member
+  WHERE r.rolname = ANY (ARRAY[{{ postgres_managed_roles | map('regex_replace', '^(.*)$', "'\\1'") | join(', ') }}]::name[])
+{%- endmacro %}
+\set ON_ERROR_STOP 1
+SET client_min_messages = warning;
+BEGIN;
+CREATE TEMP TABLE infra_before ON COMMIT DROP AS {{ state() }};
+
+{% for db in postgres_databases %}
+-- {{ db.name }}: three groups without LOGIN.
+{% for group in ['owner', 'writer', 'reader'] %}
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ db.name }}_{{ group }}') THEN
+    CREATE ROLE "{{ db.name }}_{{ group }}" NOLOGIN;
+  END IF;
+END $$;
+ALTER ROLE "{{ db.name }}_{{ group }}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS INHERIT;
+{% endfor %}
+{% for user in db.users | default([]) %}
+-- {{ user.name }}: LOGIN, member of {{ db.name }}_{{ user.group }} only.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ user.name }}') THEN
+    CREATE ROLE "{{ user.name }}" LOGIN;
+  END IF;
+END $$;
+ALTER ROLE "{{ user.name }}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS INHERIT;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.roleid
+                 JOIN pg_roles r ON r.oid = m.member
+                 WHERE g.rolname = '{{ db.name }}_{{ user.group }}' AND r.rolname = '{{ user.name }}'
+                   AND m.inherit_option AND m.set_option AND NOT m.admin_option) THEN
+    IF EXISTS (SELECT FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.roleid
+               JOIN pg_roles r ON r.oid = m.member
+               WHERE g.rolname = '{{ db.name }}_{{ user.group }}' AND r.rolname = '{{ user.name }}') THEN
+      REVOKE "{{ db.name }}_{{ user.group }}" FROM "{{ user.name }}";
+    END IF;
+    GRANT "{{ db.name }}_{{ user.group }}" TO "{{ user.name }}" WITH INHERIT TRUE, SET TRUE;
+  END IF;
+{% for other in ['owner', 'writer', 'reader'] | reject('equalto', user.group) %}
+  IF EXISTS (SELECT FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.roleid
+             JOIN pg_roles r ON r.oid = m.member
+             WHERE g.rolname = '{{ db.name }}_{{ other }}' AND r.rolname = '{{ user.name }}') THEN
+    REVOKE "{{ db.name }}_{{ other }}" FROM "{{ user.name }}";
+  END IF;
+{% endfor %}
+END $$;
+{% endfor %}
+
+{% endfor %}
+SELECT 'changed|' || area || '|' || item FROM (
+  (SELECT * FROM ({{ state() }}) s EXCEPT SELECT * FROM infra_before)
+  UNION (SELECT * FROM infra_before EXCEPT SELECT * FROM ({{ state() }}) s)
+) d ORDER BY 1;
+{{ 'ROLLBACK' if ansible_check_mode else 'COMMIT' }};

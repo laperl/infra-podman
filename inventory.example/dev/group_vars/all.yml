@@ -18,6 +18,9 @@ infra_secrets:
   - name: test_dummy  # only checked, never installed
   - name: pg-main-superuser-password
     group: postgres_hosts
+  # One per application user of postgres_hosts.yml (docs/POSTGRES.md, section 4):
+  # - name: pg-main-app1-password
+  #   group: postgres_hosts
   - name: backup-restic-password  # key of the restic repositories: lose it, lose the backups
     group: backup_clients
   - name: backup-server-password  # user <infra_site> of the backup server: both ends need it

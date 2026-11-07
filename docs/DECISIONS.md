@@ -406,3 +406,29 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Comprobado en `lifecycle`** (Ubuntu 24.04, Podman 4.9.3), con cliente y servidor en el mismo runner: servidor solo en `127.0.0.1`, sin acceso sin contraseña ni con una equivocada, sin acceso a la carpeta de otra instalación y con solo el hash guardado; copia, copia sin cambios, copia de un backup nuevo, borrado rechazado por el servidor, servidor que no responde (sin error), servidor lleno (fallo con mensaje), restauración desde el volumen del servidor sin pasar por él, segundo `apply` con cero cambios y ninguna contraseña en los logs ni en el journal. Los mensajes y avisos, con pruebas propias (`tests/backup/run.sh`).
 - **Comprobado en el GX10** (Tailscale 1.104.4, `v0.5.0`, 2026-11-05): `tailscale serve --tcp` funciona sin pedir nada más; el puerto 18000 queda solo dentro de la red de Tailscale y la página que ya había no cambia. El segundo `apply backup-server` da `changed=0`, así que Ansible lee bien `tailscale serve status --json`.
 - **Aprobada por:** el operador, el 2026-11-05.
+
+## 2026-11-07
+
+### R45. Redes internas por consumidor, subred elegida por Podman y contraseñas desde el secreto (fase 2)
+
+- **Decisión:**
+  - **Red de cada consumidor interna** (`Internal=true`) además de aislada (`isolate=true`, D9): ni el consumidor ni Postgres tienen salida a internet, a la red de casa o al host. Comprobado con Podman 4.9.3 sin root: un contenedor de una red interna no tiene ruta de salida, pero sí resuelve por nombre a los de su red; otro consumidor no ve a Postgres por la red ajena ni resuelve sus contenedores, y Postgres no reenvía paquetes de una red a otra (`ip_forward` a 0).
+  - **Sin subred fija.** La elige Podman al crear la red, sin solaparse con sus otras redes, y Ansible la lee (`podman network ls`) para escribir `pg_hba.conf`. Una red que aún no existe no tiene línea: sus usuarios quedan rechazados. Cambia la sección 4.4, que pedía una subred fija en cada `.network`: el operador no quiere un inventario de direcciones a mano.
+  - **Contraseña de cada usuario desde su secreto de Podman,** en cada `apply`. Ansible calcula el SCRAM-SHA-256 en el servidor y envía solo eso: según la documentación de PostgreSQL, una contraseña ya cifrada se guarda tal cual, y una en claro podría acabar en su log. Si ya coincide, no envía nada. Por eso la rotación de estos usuarios es: secreto, `apply`, reiniciar el consumidor (SPEC 4.5).
+  - **Al quitar una base o un usuario del inventario** no se borra nada (D11): `pg_hba.conf` deja de admitirlo.
+- **Vuelta atrás:** el código de la fase 1 no conoce las bases; con él, Postgres vuelve a `Network=none` y conserva los datos. Probado en `lifecycle`.
+- **Aprobada por:** el operador, el 2026-11-07.
+- **SPEC:** 4.4, 4.5 y [`POSTGRES.md`](POSTGRES.md).
+
+### R46. Límites de recursos en todos los contenedores, como variables
+
+- **Decisión:** todo contenedor lleva tope de memoria, de procesador y de procesos, como variables con valor por defecto que se cambian en el inventario. Se mantiene `PodmanArgs=--memory … --cpus …` (fase 0, [`COMPATIBILITY.md`](COMPATIBILITY.md)), no `MemoryMax=` en `[Service]`.
+- **Motivo:** el operador lo pide como requisito general. `MemoryMax=` también funcionaría, pero limita el servicio entero: Quadlet arranca los contenedores con `--cgroups=split`, que separa `conmon` y la aplicación en dos grupos dentro del del servicio (documentación de Podman 4.9.3). `--memory` limita solo la aplicación, se ve en `podman inspect` y, si se pasa, Podman lo anota (`OOMKilled`), lo que se puede probar. Podman ya pone 2048 procesos por defecto cuando el sistema lo permite; en el portátil, `svc_runner` tiene los controladores `cpu`, `io`, `memory` y `pids` (comprobado por el operador el 2026-11-07).
+- **Aprobada por:** el operador, el 2026-11-07.
+- **SPEC:** 4.14.
+
+### R47. Un lanzador en el menú para cada aplicación de escritorio
+
+- **Decisión:** cada aplicación que el operador abre desde el escritorio (Firefly, pgAdmin y las que lleguen) tiene un `.desktop` que Ansible instala en su cuenta, en `~/.local/share/applications`. El menú del portátil es rofi en modo `drun`, que lee esa carpeta.
+- **Aprobada por:** el operador, el 2026-11-07. Se implementa con Firefly.
+- **SPEC:** 4.14.

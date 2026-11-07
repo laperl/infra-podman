@@ -7,7 +7,6 @@
       - postgres_instance is match('^[a-z0-9]+$')
       - postgres_state in ['present', 'absent']
       - postgres_image is match('^[^ ]+@sha256:[0-9a-f]{64}$')
-      - postgres_consumers | length == 0
       - postgres_superuser is match('^[a-z_][a-z0-9_]{0,62}$')
       - postgres_superuser not in ['backup', 'public']
       - postgres_superuser is not match('^pg_')
@@ -15,8 +14,36 @@
       postgres_instance must be lower case letters and digits, postgres_image pinned by digest (D6).
       Each instance needs its superuser in the data repository (superuser: <name>, lower case,
       not backup, public or pg_*; docs/POSTGRES.md, section 6).
-      Consumers and their networks arrive in phase 2.
     quiet: true
+
+# docs/POSTGRES.md, section 6. Names go into SQL and pg_hba.conf: only these characters.
+- name: Check the databases and users of the instance
+  ansible.builtin.assert:
+    that:
+      - postgres_databases is sequence and postgres_databases is not string
+      - postgres_databases | rejectattr('name', 'defined') | list | length == 0
+      - postgres_users | rejectattr('name', 'defined') | list | length == 0
+      - postgres_users | rejectattr('group', 'defined') | list | length == 0
+      - postgres_users | rejectattr('consumer', 'defined') | list | length == 0
+      - postgres_databases | map(attribute='name') | select('match', '^[a-z][a-z0-9_]{0,30}$') | list | length == postgres_databases | length
+      - postgres_databases | map(attribute='name') | unique | list | length == postgres_databases | length
+      - postgres_databases | map(attribute='name') | intersect(['postgres', 'template0', 'template1']) | length == 0
+      - postgres_users | map(attribute='name') | select('match', '^[a-z][a-z0-9_]{0,62}$') | list | length == postgres_users | length
+      - postgres_users | map(attribute='group') | difference(['owner', 'writer', 'reader']) | length == 0
+      - postgres_users | map(attribute='consumer') | select('match', '^[a-z][a-z0-9]{0,20}$') | list | length == postgres_users | length
+      - postgres_managed_roles | unique | list | length == postgres_managed_roles | length
+      - postgres_managed_roles | intersect([postgres_superuser, 'backup', 'public', 'postgres']) | length == 0
+      - postgres_managed_roles | select('match', '^pg_') | list | length == 0
+    fail_msg: >-
+      databases: of pg-{{ postgres_instance }} in the data repository (docs/POSTGRES.md, section 6):
+      each database a name ^[a-z][a-z0-9_]{0,30}$, not postgres or template*; each user a name
+      ^[a-z][a-z0-9_]{0,62}$, unique in the instance and different from the groups <database>_owner,
+      _writer and _reader, the superuser, backup, public and pg_*; group owner, writer or reader;
+      consumer ^[a-z][a-z0-9]{0,20}$.
+    quiet: true
+  vars:
+    postgres_users: >-
+      {{ postgres_databases | selectattr('users', 'defined') | map(attribute='users') | flatten }}
 
 - name: Read the service user
   ansible.builtin.getent:
@@ -54,6 +81,35 @@
     quiet: true
   when: postgres_state == 'present'
 
+- name: Check that the password of each user exists as a Podman secret
+  ansible.builtin.command:
+    cmd: podman secret exists {{ infra_env }}-pg-{{ postgres_instance }}-{{ item }}-password
+  loop: "{{ postgres_user_names }}"
+  environment: "{{ postgres_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: postgres_user_secrets
+  changed_when: false
+  failed_when: postgres_user_secrets.rc not in [0, 1]
+  check_mode: false
+  when: postgres_state == 'present'
+
+- name: Require them (deploy.sh secrets creates them from KeePassXC)
+  ansible.builtin.assert:
+    that: postgres_missing | length == 0
+    fail_msg: >-
+      Missing Podman secrets on {{ inventory_hostname }}: {{ postgres_missing | join(', ') }}.
+      Declare each one in infra_secrets (group postgres_hosts), with its KeePassXC entry
+      {{ infra_site | default('<infra_site>') }}/pg-{{ postgres_instance }}-<user>-password, and create them:
+      ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
+    quiet: true
+  vars:
+    postgres_missing: >-
+      {{ postgres_user_secrets.results | selectattr('rc', 'defined') | rejectattr('rc', 'equalto', 0)
+         | map(attribute='item') | map('regex_replace', '^(.*)$', infra_env ~ '-pg-' ~ postgres_instance ~ '-\1-password')
+         | list }}
+  when: postgres_state == 'present'
+
 # Written before the container starts: it is mounted read-only into it. A change is
 # applied with a reload in setup.yml, without restarting PostgreSQL.
 - name: Create the configuration directory of the instance
@@ -65,15 +121,14 @@
   become_user: "{{ service_user }}"
   when: postgres_state == 'present'
 
+# With the subnets of the networks that already exist. A new network only exists once
+# PostgreSQL starts with it: setup.yml writes the file again after the start.
+- name: Start this instance with pg_hba.conf unchanged
+  ansible.builtin.set_fact:
+    postgres_hba_changed: false
+
 - name: Write pg_hba.conf
-  ansible.builtin.template:
-    src: pg_hba.conf.j2
-    dest: "{{ postgres_hba_file }}"
-    # Readable by the postgres user inside the container (a subordinate UID).
-    mode: "0644"
-  become: true
-  become_user: "{{ service_user }}"
-  register: postgres_hba
+  ansible.builtin.include_tasks: hba.yml
   when: postgres_state == 'present'
 
 # Before PostgreSQL restarts on a new image, a backup, so the operator can go back by hand

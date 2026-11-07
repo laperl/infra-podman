@@ -10,18 +10,20 @@ postgres_instances:
     # The administrator role (docs/POSTGRES.md, section 1). Your own name, not "postgres".
     superuser: example_admin
 
-# Coming in phase 2 (docs/POSTGRES.md, section 6): the databases and users of each
-# application, as data. NOT read by the code yet; shown so the shape is known. Names are
-# chosen by the operator and never go into the code repository.
+# Application databases, groups and users (docs/POSTGRES.md, sections 2 and 6), as data.
+# Names are chosen by the operator and never go into the code repository. Each user needs
+# its secret pg-<instance>-<user>-password in infra_secrets (group postgres_hosts) and in
+# KeePassXC. Uncomment and adapt:
 #
 # postgres_instances:
 #   - name: main
 #     superuser: example_admin
 #     databases:
-#       - name: app1            # ^[a-z][a-z0-9_]{0,30}$
-#         consumers: [app1]     # applications with their own network to this instance
+#       - name: app1            # database, schema and groups app1_*; ^[a-z][a-z0-9_]{0,30}$
 #         users:
-#           - name: app1_rw
-#             group: writer     # owner | writer | reader
-#           - name: app1_migrate
-#             group: owner
+#           - name: app1        # unique in the instance; ^[a-z][a-z0-9_]{0,62}$
+#             group: owner      # owner | writer | reader
+#             consumer: app1    # the application that connects with it: its network, only from there
+#           - name: app1_ai
+#             group: reader
+#             consumer: ai
