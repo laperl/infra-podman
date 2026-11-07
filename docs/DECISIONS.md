@@ -416,7 +416,7 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
   - **Sin DNS hacia fuera:** cada red lleva `DNS=127.0.0.1`. En Podman 4.9 el DNS de una red interna reenvía al host lo que no es un contenedor; lo destapó `lifecycle` ([`COMPATIBILITY.md`](COMPATIBILITY.md)).
   - **Sin subred fija.** La elige Podman al crear la red, sin solaparse con sus otras redes, y Ansible la lee (`podman network ls`) para escribir `pg_hba.conf`. Una red que aún no existe no tiene línea: sus usuarios quedan rechazados. Cambia la sección 4.4, que pedía una subred fija en cada `.network`: el operador no quiere un inventario de direcciones a mano.
   - **Contraseña de cada usuario desde su secreto de Podman,** en cada `apply`. Ansible calcula el SCRAM-SHA-256 en el servidor y envía solo eso: según la documentación de PostgreSQL, una contraseña ya cifrada se guarda tal cual, y una en claro podría acabar en su log. Si ya coincide, no envía nada. Por eso la rotación de estos usuarios es: secreto, `apply`, reiniciar el consumidor (SPEC 4.5).
-  - **Al quitar una base o un usuario del inventario** no se borra nada (D11): `pg_hba.conf` deja de admitirlo.
+  - **Altas, cambios y bajas** por el fichero: lo que se quita se borra, con las salvaguardas de [`POSTGRES.md`](POSTGRES.md), sección 7 (aprobadas por el operador el 2026-11-07).
 - **Vuelta atrás:** el código de la fase 1 no conoce las bases; con él, Postgres vuelve a `Network=none` y conserva los datos. Probado en `lifecycle`.
 - **Aprobada por:** el operador, el 2026-11-07.
 - **SPEC:** 4.4, 4.5 y [`POSTGRES.md`](POSTGRES.md).

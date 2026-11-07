@@ -55,7 +55,7 @@ Para cada aplicación `<app>` (nombre elegido por el operador, `^[a-z][a-z0-9_]{
 - **Tres grupos sin LOGIN:** `<app>_owner`, `<app>_writer` y `<app>_reader`.
 - **Esquema** `<app>`, cuyo dueño es `<app>_owner`, con la extensión `vector`. No hay esquema `public`: la base nace sin él, porque `template1` no lo tiene. La aplicación solo ve el suyo.
 - **Conexión:** nadie puede conectar por defecto (`REVOKE CONNECT … FROM PUBLIC`). Pueden los tres grupos, sus usuarios y `backup`.
-- **Usuarios LOGIN a demanda,** cada uno miembro de **un** grupo, con `search_path = <app>` en su base.
+- **Usuarios LOGIN a demanda:** en cada base, miembros de **un** grupo, con `search_path = <app>` en esa base. Altas, cambios y bajas, en la sección 7.
 
 ### Permisos
 
@@ -122,20 +122,101 @@ Se declaran en `group_vars/postgres_hosts.yml` del repo de datos (ejemplo coment
 
 ```yaml
 postgres_instances:
-  - name: main
+  - name: main                  # un nombre distinto en cada máquina; no se cambia después
     superuser: tu_usuario       # el administrador; obligatorio desde la fase 1d
     databases:
-      - name: app1              # base, esquema y grupos app1_*; ^[a-z][a-z0-9_]{0,30}$
+      - name: app1              # base y esquema app1; ^[a-z][a-z0-9_]{0,30}$
+        # Grupos, siempre estos tres: app1_owner, app1_writer y app1_reader (sección 2).
         users:
-          - name: app1          # único en la instancia; ^[a-z][a-z0-9_]{0,62}$
-            group: owner        # owner | writer | reader
+          - name: app1          # ^[a-z][a-z0-9_]{0,62}$
+            group: owner        # owner | writer | reader: entra en app1_owner
             consumer: app1      # la aplicación que entra con él: su red, y solo desde ella
           - name: app1_ia
-            group: reader
+            group: reader       # entra en app1_reader
             consumer: ia
 ```
 
-Para añadir una base o un usuario:
-1. su contraseña en KeePassXC, `<instalación>/pg-<instancia>-<usuario>-password`, y su nombre en `infra_secrets` con `group: postgres_hosts`;
-2. la entrada de arriba en el repo de datos;
-3. `./deploy.sh secrets --limit <máquina>` y después `./deploy.sh plan postgres --limit <máquina>` y `apply`, primero en DEV. Si llega un consumidor nuevo, Postgres se reinicia una vez.
+- **`group:`** es siempre `owner`, `writer` o `reader`. El grupo real es `<base>_<grupo>`, y lo que puede hacer cada uno está en la sección 2.
+- **`users:`** es opcional. Sin usuarios, la base existe pero nadie entra salvo el administrador.
+- **Una instancia en otra máquina** va en `host_vars/<máquina>.yml` del repo de datos, con su propio nombre (por ejemplo `gx10`). Cada aplicación tiene que estar en la misma máquina que su Postgres: las redes de Podman no salen de la máquina.
+
+## 7. Altas, cambios y bajas
+
+Todo se hace editando el fichero de la sección 6 y aplicando. Primero en DEV:
+
+```
+./deploy.sh plan  postgres --limit <máquina>
+./deploy.sh apply postgres --limit <máquina>
+```
+
+El `plan` enseña lo que va a cambiar sin tocar nada, y las bajas en un bloque aparte. Al final de cada `plan` y `apply` sale un resumen por base, con sus grupos y sus usuarios.
+
+**Ansible solo borra lo que creó él.** Lo marca dentro de Postgres con el comentario `managed by infra-podman`. Nunca toca el superusuario, `backup`, los roles `pg_*` ni nada creado a mano: si encuentra una base o un usuario que no está en el fichero y no lleva esa marca, solo avisa.
+
+### Altas
+
+**Una base.** Añades su bloque:
+```yaml
+      - name: app2
+```
+Se crean la base `app2`, su esquema `app2` con `vector` y sus tres grupos, `app2_owner`, `app2_writer` y `app2_reader`.
+
+**Un usuario.** Antes de aplicar:
+1. En KeePassXC, la entrada `<instalación>/pg-<instancia>-<usuario>-password`, por ejemplo `laperl/pg-main-app2-password`.
+2. En `group_vars/all.yml` del repo de datos, dentro de `infra_secrets`:
+   ```yaml
+     - name: pg-main-app2-password
+       group: postgres_hosts
+   ```
+3. Su línea dentro de la base:
+   ```yaml
+      - name: app2
+        users:
+          - {name: app2, group: owner, consumer: app2}
+   ```
+4. `./deploy.sh secrets --limit <máquina>`, y después `plan` y `apply postgres`.
+
+Se crea el usuario con la contraseña de su secreto, en `app2_owner`, y solo puede entrar en `app2` desde la red de `app2`. Si `app2` es una aplicación nueva, se crea su red y Postgres se reinicia una vez: Podman no añade redes a un contenedor en marcha.
+
+**Un usuario en varias bases.** Se puede: el mismo nombre en cada base, con su grupo y su aplicación en cada una, y una sola contraseña. Lo recomendable es un usuario por aplicación, para que cada una vea solo lo suyo.
+
+### Cambios
+
+| Cambias | Qué pasa | Después |
+| --- | --- | --- |
+| `group:` de un usuario | Sale de su grupo y entra en el nuevo | Reinicia la aplicación: el cambio vale para las conexiones nuevas |
+| `consumer:` de un usuario | Solo puede entrar desde la red de la aplicación nueva. Si esa red no existía, Postgres se reinicia una vez | Reinicia las dos aplicaciones |
+| Su contraseña | `./deploy.sh secrets --rotate pg-<instancia>-<usuario>-password --limit <máquina>` y `apply postgres` (sección 4) | Reinicia la aplicación |
+
+**No se renombra nada en el fichero:** ni bases, ni usuarios, ni instancias. Cambiar un nombre es borrar lo viejo y crear algo nuevo, vacío. Con una base, eso son sus datos. Si de verdad hace falta, es una mudanza a mano: base nueva, restaurar la copia en ella (OPERATIONS, apartado 5) y borrar la vieja.
+
+### Bajas
+
+**Un usuario.** Quitas su línea (o todas, si la base se queda sin `users:`) y aplicas:
+1. Si el usuario está conectado, **se para** sin borrar nada y te dice que pares antes la aplicación que lo usa.
+2. Borra el usuario. Su grupo se queda. Si el usuario sigue en otra base, solo deja de estar en esta.
+3. Borra su secreto de Podman. La aplicación que lo usaba no tiene que borrar nada.
+4. Al final te recuerda dos cosas que haces tú: borrar su entrada de KeePassXC y su línea de `infra_secrets`. Si esa línea sigue ahí, `deploy.sh secrets` volvería a crear el secreto.
+
+**Una base.** Quitas su bloque entero y aplicas:
+1. Si hay alguien conectado a ella, **se para** sin borrar nada.
+2. Hace una **copia completa antes de borrar**, igual que antes de cambiar la imagen de Postgres (sección 1). Esa copia llega también al GX10. Si la copia falla, o la máquina no tiene copias configuradas, **no borra**.
+3. Borra la base y sus tres grupos.
+4. Borra sus usuarios que ya no estén en ninguna otra base, como en el caso anterior.
+
+**Todas las bases.** Si falta `databases:` o está vacío (`databases: []`) y hay bases que borrar, **se para** y te enseña la lista. Para confirmarlo, repites la orden así:
+```
+./deploy.sh apply postgres --limit <máquina> -e postgres_confirm_drop=<instancia>
+```
+
+**La red de una aplicación** que se queda sin usuarios se quita, y Postgres se reinicia una vez.
+
+**Recuperar una base borrada:** la vuelves a declarar, aplicas (nace vacía) y restauras la copia hecha antes de borrarla (OPERATIONS, apartado 5).
+
+### Instancias
+
+Quitar una instancia del fichero **no la borra ni la para**: cada `apply` avisa de que en esa máquina hay una instancia que no está declarada. Para retirarla:
+```
+./deploy.sh apply postgres --limit <máquina> -e postgres_state=absent
+```
+Para el contenedor y quita su servicio, pero **conserva el volumen con los datos** (SPEC, sección 8). Si vuelves a aplicar sin esa opción, arranca otra vez con los mismos datos. Borrar también los datos es un paso aparte, a mano.

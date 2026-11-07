@@ -19,10 +19,15 @@ postgres_instances:
 #   - name: main
 #     superuser: example_admin
 #     databases:
-#       - name: app1            # database, schema and groups app1_*; ^[a-z][a-z0-9_]{0,30}$
+#       - name: app1            # database and schema app1; ^[a-z][a-z0-9_]{0,30}$
+#         # Groups, always these three (docs/POSTGRES.md, section 2):
+#         #   app1_owner   everything in its database: creates and changes tables
+#         #   app1_writer  reads and writes rows, cannot change the structure
+#         #   app1_reader  only reads
+#         # Adding, changing and removing: docs/POSTGRES.md, section 7.
 #         users:
-#           - name: app1        # unique in the instance; ^[a-z][a-z0-9_]{0,62}$
-#             group: owner      # owner | writer | reader
+#           - name: app1        # ^[a-z][a-z0-9_]{0,62}$
+#             group: owner      # owner | writer | reader: joins app1_owner
 #             consumer: app1    # the application that connects with it: its network, only from there
 #           - name: app1_ai
 #             group: reader
