@@ -61,6 +61,9 @@ case $1 in
       grep -qF "host    $line" <<<"$hba" || fail "pg_hba.conf has no line '$line'"
     done
     [[ $(sql "SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL") == 0 ]] || fail "pg_hba.conf has errors"
+    [[ $(sql "SELECT string_agg(user_name[1] || '@' || address, ' ' ORDER BY user_name[1]) FROM pg_hba_file_rules
+              WHERE database = '{demo}'") == "demo_ai@${ai_subnet%/*} demo_app@${demo_subnet%/*} demo_ro@${demo_subnet%/*} demo_rw@${demo_subnet%/*}" ]] \
+      || fail "PostgreSQL does not read the lines of the users: $(sql "SELECT user_name, address FROM pg_hba_file_rules WHERE database = '{demo}'")"
     echo "::notice title=Consumer networks::$demo_net $demo_subnet, $ai_net $ai_subnet (chosen by Podman)"
     ;;
   catalog)

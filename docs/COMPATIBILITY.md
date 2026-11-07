@@ -70,6 +70,7 @@ En la documentación de Quadlet de Podman 4.9.3 existen `NetworkName=`, `Interna
 - **Sin `Subnet=`, Podman elige la subred** de su rango (`10.89.0.0/24`, `10.89.1.0/24`…), sin repetir una que ya use otra red.
 - **Un contenedor en una red interna no tiene ruta de salida** (`Network is unreachable`). Según la documentación de `podman network create`, su DNS solo resuelve nombres de contenedores: el resto recibe `NXDOMAIN`.
 - **Con dos redes internas y aisladas**, un contenedor de una no resuelve ni alcanza a los de la otra, aunque haya un contenedor (Postgres) en las dos: dentro de él `ip_forward` es 0.
+- **Un fichero de configuración se monta por su carpeta, no suelto.** Ansible (y `sed -i`) reescriben un fichero creando uno nuevo; un montaje del fichero suelto sigue enseñando al contenedor el antiguo, y una recarga no ve el cambio. Lo destapó `lifecycle` con `pg_hba.conf`: Postgres recargaba y seguía rechazando a los usuarios nuevos.
 - **Publicar un puerto en `127.0.0.1` desde una red interna funciona sin root** y el contenedor sigue sin salida. Con root no: netavark no crea las reglas para una red interna (discusión de Podman [#21451](https://github.com/podman-container-tools/podman/discussions/21451)). Lo usará Firefly; se comprueba en su PR y, en el portátil, con Podman 5.
 
 ## Comprobado en el workflow `lifecycle`

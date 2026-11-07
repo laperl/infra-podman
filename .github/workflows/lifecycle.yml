@@ -164,6 +164,9 @@ jobs:
           started=$(tests/lifecycle/as-svc.sh podman inspect dev-pg-main --format '{{.State.StartedAt}}')
           home=$(getent passwd svc_runner | cut -d: -f6)
           (cd / && sudo -u svc_runner sed -i '1s/^/# changed by lifecycle\n/' "$home/.config/infra-podman/dev-pg-main/pg_hba.conf")
+          # sed -i, like Ansible, writes a new file: PostgreSQL must see it (the directory is mounted).
+          tests/lifecycle/as-svc.sh podman exec dev-pg-main grep -q 'changed by lifecycle' /etc/postgresql/pg_hba.conf \
+            || { echo "::error::the container does not see the new pg_hba.conf"; exit 1; }
           tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml 2>&1 | tee hba.log | tee -a all.log
           if ! grep -A2 'Reload pg_hba.conf' hba.log | grep -q '^changed:'; then
             echo "::error::the playbook did not reload pg_hba.conf: $(grep -A2 'pg_hba' hba.log | tr '\n' ' ')"; exit 1
