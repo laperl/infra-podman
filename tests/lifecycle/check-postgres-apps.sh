@@ -168,7 +168,7 @@ case $1 in
     ;;
   none)
     [[ $("$as" podman inspect "$name" --format '{{.HostConfig.NetworkMode}}') == none ]] || fail "$name is not back on Network=none"
-    [[ $(sql "SELECT count(*) FROM probe" demo) -ge 2 ]] || fail "the data of demo was not kept"
+    [[ $(sql "SELECT count(*) FROM demo.probe" demo) -ge 2 ]] || fail "the data of demo was not kept"
     home=$(getent passwd svc_runner | cut -d: -f6)
     if "$as" grep -q 'demo_' "$home/.config/infra-podman/$name/pg_hba.conf"; then fail "pg_hba.conf still admits the users"; fi
     ;;
