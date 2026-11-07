@@ -89,7 +89,7 @@ Qué hacer cuando algo falla, ordenado por pieza. Busca el mensaje que ves (Ctrl
 | `Rotating pg-… changes the Podman secret. PostgreSQL takes it on the next apply of postgres` | Es un aviso, para un usuario de aplicación | `./deploy.sh apply postgres --limit laptop` y reinicia la aplicación ([`POSTGRES.md`](POSTGRES.md), apartado 4) |
 | `Missing Podman secrets on …: prod-pg-main-<usuario>-password` | Un usuario de `databases:` no tiene su secreto en esa máquina | Su entrada en KeePassXC y en `infra_secrets`, y `./deploy.sh secrets --limit laptop` ([`POSTGRES.md`](POSTGRES.md), apartado 6) |
 | `databases: of pg-main in the data repository …` | Un nombre, un grupo o un consumidor de `databases:` no es válido, o un usuario está repetido | Corrige el repo de datos según el mensaje ([`POSTGRES.md`](POSTGRES.md), apartado 6) |
-| `The network prod-<consumidor>-pg-main-net exists but is not internal with isolate (D9)` | Esa red no la creó Ansible y podría tener salida | Lo que dice el mensaje: parar Postgres, borrar la red y repetir el `apply` |
+| `The network prod-<consumidor>-pg-main-net exists but is not internal with isolate and DNS 127.0.0.1` | Esa red no la creó Ansible y podría tener salida | Lo que dice el mensaje: parar Postgres, borrar la red y repetir el `apply` |
 | `the password of … has characters other than printable ASCII` | La contraseña del secreto tiene letras con tilde, eñes u otros caracteres | Genera otra en KeePassXC con letras, números y símbolos, y `--rotate` |
 | `svc podman healthcheck run prod-pg-main && echo sano` no dice `sano` | Postgres no está sano | `sudo journalctl _SYSTEMD_USER_UNIT=prod-pg-main.service -n 50` y `svc systemctl --user restart prod-pg-main.service` |
 

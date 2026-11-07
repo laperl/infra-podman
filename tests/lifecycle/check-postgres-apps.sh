@@ -47,8 +47,8 @@ case $1 in
     [[ -z $("$as" podman port "$name") ]] || fail "$name publishes ports (SPEC 4.4)"
     home=$(getent passwd svc_runner | cut -d: -f6)
     for net in "$demo_net" "$ai_net"; do
-      [[ $("$as" podman network inspect "$net" --format '{{.Internal}} {{index .Options "isolate"}}') == 'true true' ]] \
-        || fail "$net is not internal with isolate=true (D9)"
+      [[ $("$as" podman network inspect "$net" --format '{{.Internal}} {{index .Options "isolate"}} {{.NetworkDNSServers}}') \
+         == 'true true [127.0.0.1]' ]] || fail "$net is not internal with isolate=true and DNS 127.0.0.1 (D9, R45)"
       for label in infra.env=dev infra.app=pg-main infra.component=net infra.managed-by=infra-podman; do
         # Captured first: with pipefail, grep -q closing early can fail podman with SIGPIPE.
         nets=$("$as" podman network ls --filter "label=$label" --format '{{.Name}}')

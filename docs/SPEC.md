@@ -117,7 +117,7 @@ Esta sección debe copiarse a `docs/COMPATIBILITY.md`.
 
 ### 4.4 Redes y Postgres
 
-- Una red por consumidor de Postgres, `<entorno>-<consumidor>-pg-<instancia>-net` (por ejemplo `prod-firefly-pg-main-net`), **interna** (`Internal=true`: sin salida a internet, a la red de casa ni al host) y con `Options=isolate=true`. **Sin subred fija:** la elige Podman, sin solaparse con sus otras redes, y Ansible la lee para `pg_hba.conf` (R45). Los consumidores llegan a Postgres por su nombre de contenedor.
+- Una red por consumidor de Postgres, `<entorno>-<consumidor>-pg-<instancia>-net` (por ejemplo `prod-firefly-pg-main-net`), **interna** (`Internal=true`: sin salida a internet, a la red de casa ni al host; y `DNS=127.0.0.1`, para que tampoco salgan consultas de DNS) y con `Options=isolate=true`. **Sin subred fija:** la elige Podman, sin solaparse con sus otras redes, y Ansible la lee para `pg_hba.conf` (R45). Los consumidores llegan a Postgres por su nombre de contenedor.
 - El contenedor de Postgres se une a todas esas redes. Los consumidores no se ven entre sí.
 - Con varias instancias en la misma máquina, cada red de consumidor se une solo a la instancia que usa ese consumidor. No hay una red común para todos los Postgres.
 - En Postgres, el modelo de [`POSTGRES.md`](POSTGRES.md): una base y tres grupos por aplicación y usuarios a demanda. En `pg_hba.conf`, generado desde el inventario, cada usuario solo se admite en su base y desde la subred de su red. El superusuario y `backup` nunca entran por TCP, salvo el superusuario desde la red de pgAdmin (R37).

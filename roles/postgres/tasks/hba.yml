@@ -22,16 +22,17 @@
 
 # Podman keeps an existing network as it is when its file changes (quadlet_deploy): one
 # created by hand, or before this role, could have a way out.
-- name: Require every consumer network to be internal and isolated
+- name: Require every consumer network to be internal, isolated and without outside DNS
   ansible.builtin.assert:
     that:
       - item.internal | default(false) | bool
       - (item.options | default({})).isolate | default('') in ['true', 'strict']
+      - item.network_dns_servers | default([]) == ['127.0.0.1']
     fail_msg: >-
-      The network {{ item.name }} exists but is not internal with isolate (D9): it was not
-      created by this role. Stop {{ postgres_name }}, remove it as the service user
-      (podman network rm {{ item.name }}) and apply again; Podman creates it with the
-      right options.
+      The network {{ item.name }} exists but is not internal with isolate and DNS 127.0.0.1
+      (D9, R45): it was not created by this version of the role. Stop {{ postgres_name }},
+      remove it as the service user (podman network rm {{ item.name }}) and apply again;
+      Podman creates it with the right options.
     quiet: true
   loop: "{{ postgres_net_list | selectattr('name', 'in', postgres_networks) | list }}"
   loop_control:
