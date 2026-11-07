@@ -23,10 +23,8 @@ client() { # client <network> <user> <query>: psql over TCP from a container on 
   "$as" podman run --rm --network "$1" --secret "dev-pg-main-$2-password,type=env,target=PGPASSWORD" \
     --entrypoint psql "$(image)" -X -h "$name" -U "$2" -d demo -v ON_ERROR_STOP=1 -tAq -c "$3" </dev/null
 }
-allowed() { # allowed <what> <network> <user> <query>
-  local out
+allowed() { # allowed <what> <network> <user> <query>: its output in $out
   out=$(client "$2" "$3" "$4" 2>&1) || fail "$1 was refused: $out"
-  printf '%s' "$out"
 }
 refused() { # refused <what> <network> <user> <query> <expected message>
   local out
@@ -88,27 +86,28 @@ case $1 in
     ;;
   access)
     # R35: the user of _owner creates as _owner, without the application doing anything.
-    got=$(allowed "SET role of demo_app" "$demo_net" demo_app "SELECT session_user || ' as ' || current_user")
-    [[ $got == 'demo_app as demo_owner' ]] || fail "demo_app does not become demo_owner on connecting (got: $got)"
+    allowed "SET role of demo_app" "$demo_net" demo_app "SELECT session_user || ' as ' || current_user"
+    [[ $out == 'demo_app as demo_owner' ]] || fail "demo_app does not become demo_owner on connecting (got: $out)"
     allowed "CREATE TABLE by demo_app" "$demo_net" demo_app \
       "CREATE TABLE IF NOT EXISTS probe (id serial PRIMARY KEY, v text, e vector(2));
        CREATE OR REPLACE FUNCTION probe_write() RETURNS void LANGUAGE sql SECURITY DEFINER
          AS \$\$ INSERT INTO probe (v) VALUES ('by function') \$\$;
-       TRUNCATE probe; INSERT INTO probe (v, e) VALUES ('by owner', '[1,2]')" >/dev/null
+       TRUNCATE probe; INSERT INTO probe (v, e) VALUES ('by owner', '[1,2]')"
     [[ $(sql "SELECT tableowner FROM pg_tables WHERE schemaname = 'demo' AND tablename = 'probe'" demo) == demo_owner ]] \
       || fail "the table created by demo_app is not owned by demo_owner (R35)"
     # _writer: data yes, structure no.
-    allowed "INSERT by demo_rw" "$demo_net" demo_rw "INSERT INTO probe (v) VALUES ('by writer')" >/dev/null
-    allowed "UPDATE by demo_rw" "$demo_net" demo_rw "UPDATE probe SET v = 'updated' WHERE v = 'by writer'" >/dev/null
-    allowed "DELETE by demo_rw" "$demo_net" demo_rw "DELETE FROM probe WHERE v = 'updated'" >/dev/null
-    allowed "a function, by demo_rw" "$demo_net" demo_rw "SELECT probe_write()" >/dev/null
+    allowed "INSERT by demo_rw" "$demo_net" demo_rw "INSERT INTO probe (v) VALUES ('by writer')"
+    allowed "UPDATE by demo_rw" "$demo_net" demo_rw "UPDATE probe SET v = 'updated' WHERE v = 'by writer'"
+    allowed "DELETE by demo_rw" "$demo_net" demo_rw "DELETE FROM probe WHERE v = 'updated'"
+    allowed "a function, by demo_rw" "$demo_net" demo_rw "SELECT probe_write()"
     refused "CREATE TABLE by demo_rw" "$demo_net" demo_rw "CREATE TABLE nope (v text)" 'permission denied'
     refused "TRUNCATE by demo_rw" "$demo_net" demo_rw "TRUNCATE probe" 'permission denied'
     # _reader: reads, and nothing else at all (R36).
     for reader in demo_ro:"$demo_net" demo_ai:"$ai_net"; do
       user=${reader%%:*} net=${reader#*:}
-      [[ $(allowed "SELECT by $user" "$net" "$user" "SELECT count(*) FROM probe") -ge 2 ]] || fail "$user cannot read"
-      allowed "vector search by $user" "$net" "$user" "SELECT e <-> '[2,3]' FROM probe WHERE e IS NOT NULL" >/dev/null
+      allowed "SELECT by $user" "$net" "$user" "SELECT count(*) FROM probe"
+      [[ $out -ge 2 ]] || fail "$user reads $out rows, expected at least 2"
+      allowed "vector search by $user" "$net" "$user" "SELECT e <-> '[2,3]' FROM probe WHERE e IS NOT NULL"
       refused "INSERT by $user" "$net" "$user" "INSERT INTO probe (v) VALUES ('r')" 'permission denied'
       refused "UPDATE by $user" "$net" "$user" "UPDATE probe SET v = 'r'" 'permission denied'
       refused "DELETE by $user" "$net" "$user" "DELETE FROM probe" 'permission denied'
@@ -157,7 +156,7 @@ case $1 in
     "$as" podman stop -t 0 lifecycle-ai-probe >/dev/null
     ;;
   password)
-    allowed "login of $2 with its secret" "$demo_net" "$2" "SELECT 1" >/dev/null
+    allowed "login of $2 with its secret" "$demo_net" "$2" "SELECT 1"
     ;;
   none)
     [[ $("$as" podman inspect "$name" --format '{{.HostConfig.NetworkMode}}') == none ]] || fail "$name is not back on Network=none"
