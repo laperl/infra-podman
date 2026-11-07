@@ -15,6 +15,29 @@ Lee `docs/SPEC.md` antes de cualquier tarea. Es la fuente de verdad: lo que no e
 - **Solo software libre y gratuito.** Ansible comunitario; nada de Automation Platform, Automation Hub ni imágenes con suscripción.
 - **Si el CI falla 5 veces por lo mismo**, para y pregunta.
 
+## Qué leer para cada tarea
+
+No leas todo el repo: lee lo que pide la tarea. Cada cosa se explica en un solo sitio; los demás documentos enlazan, no repiten.
+
+| Tarea | Lee |
+| --- | --- |
+| Cualquiera | `docs/SPEC.md` (secciones 3, 4, 6 a 8) y la fila de la fase en `docs/ROADMAP.md` |
+| Un servicio (Firefly, pgAdmin…) | `docs/services/<servicio>.md`, `roles/<servicio>/` y su `CLAUDE.md`, si lo tiene |
+| Postgres, bases o usuarios | `docs/POSTGRES.md` y `roles/postgres/` |
+| Backups o restaurar | SPEC 4.11, `roles/backup/`, `roles/backup_server/` y `docs/OPERATIONS.md`, apartado 5 |
+| Secretos | SPEC 4.5, `docs/SECRETS_INVENTORY.md` y `playbooks/secrets.yml` |
+| Despliegue o `deploy.sh` | SPEC 4.10, `deploy.sh` y `docs/WORKFLOW.md` |
+| Un fallo | `docs/TROUBLESHOOTING.md`, en la pieza que falla |
+| Cómo encaja todo | `docs/ARCHITECTURE.md` |
+| Por qué algo es así | `docs/DECISIONS.md`, solo la R que lo cita |
+| Una auditoría | `docs/ARCHITECTURE.md` y, por pieza, lo de esta tabla |
+
+## Dónde va cada cosa nueva
+
+- **Un servicio nuevo:** su rol en `roles/<servicio>/`, su página en `docs/services/<servicio>.md` (solo lo propio de ese servicio) y un `CLAUDE.md` corto en su rol: qué no se toca, qué tests tiene y qué leer.
+- **Al añadirlo, al día:** las tablas de `docs/ARCHITECTURE.md`, `docs/OPERATIONS.md` (apartados 1 y 4) y `docs/TROUBLESHOOTING.md` (una sección), y `docs/SECRETS_INVENTORY.md`. No se copian textos entre ellos.
+- **Software propio** (por ejemplo `rag`): en su propio repo, que publica su imagen (SPEC 5.5). Aquí solo su despliegue.
+
 ## Convenciones
 
 - Documentación y mensajes en español; código, variables y commits en inglés.

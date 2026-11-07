@@ -87,10 +87,11 @@ Eres el ingeniero que implementa esta plataforma para un operador único. Eres e
   scripts/                     # utilidades de CI: render y validación de Quadlets
   tests/                       # fixtures y pruebas de CI
   docs/  SPEC.md  VISION.md  ROADMAP.md  DECISIONS.md  COMPATIBILITY.md  SECRETS_INVENTORY.md
+  docs/services/               # lo propio de cada servicio (firefly.md…); lo común, en SPEC y POSTGRES.md
   CLAUDE.md
 ```
 
-`CLAUDE.md` resume para cualquier agente las reglas de la sección 1 y las prohibiciones de la sección 8.
+`CLAUDE.md` resume para cualquier agente las reglas de la sección 1 y las prohibiciones de la sección 8, y dice qué leer para cada tarea. Cada rol de servicio puede tener el suyo, corto, con lo propio de ese servicio.
 
 ### 4.2 Despliegue de Quadlets
 
@@ -281,7 +282,7 @@ Cada fase termina en un PR (o varios pequeños) y no se pasa a la siguiente sin 
 | **0. Base** | Estructura del repo, `CLAUDE.md` y `docs/`; firma SSH y fichero de firmantes permitidos; workflow `lint`; imagen de Ansible; esqueleto de `deploy.sh`; lookup `kdbx.py` probado contra `infra-dev.kdbx` | CI en verde; `deploy.sh plan` funciona contra DEV; un tag sin firmar es rechazado; el lookup lee un secreto ficticio de un `.kdbx` creado con KeePassXC 2.8 |
 | **1. Postgres y backups** | Rol `host_base` en el portátil y en el GX10 (usuario de servicio y linger); Postgres en el portátil, parametrizado por instancia, con volumen, secreto como fichero y healthcheck; **repo de datos (4.13)**; **instancia según [`POSTGRES.md`](POSTGRES.md)** (recrear `pg-main`); backups según 4.11, con rest-server en el GX10; workflow `lifecycle` | `apply` correcto y un segundo `apply` con cero cambios; sobrevive a un reinicio del portátil; no publica puertos; restauración correcta desde la copia local y desde la del GX10; ningún secreto en repo ni logs |
 | 1b. Cortafuegos (cuando el operador lo decida, antes de la fase 5) | Auditoría de solo lectura de lo que escucha cada servidor; ensayo en `vmiadev` con Docker y Tailscale; firewalld en dos pasos (primero con SSH también desde la red local como puerta de emergencia, después solo por Tailscale); ufw desactivado | Solo se entra por Tailscale; vLLM sigue funcionando; el operador no pierde el acceso en ningún paso |
-| **2. Firefly III y pgAdmin** | En el portátil. Bases y usuarios declarados como datos según [`POSTGRES.md`](POSTGRES.md), con `pg_hba` generado; red propia con `isolate=true` para cada consumidor; espera a Postgres según 4.3; pgAdmin solo en `127.0.0.1` (R37) | Firefly solo arranca con Postgres sano; no alcanza otras redes; al destruirlo se conserva su volumen; `_reader` no puede modificar datos; pgAdmin administra la instancia |
+| **2. Firefly III y pgAdmin** | En el portátil, con los requisitos de [`services/firefly.md`](services/firefly.md): en la Postgres `main` de la plataforma, sin salida a internet, solo en `127.0.0.1` y copia de sus justificantes. Bases y usuarios declarados como datos según [`POSTGRES.md`](POSTGRES.md), con `pg_hba` generado; red propia con `isolate=true` para cada consumidor; espera a Postgres según 4.3; pgAdmin solo en `127.0.0.1` (R37) | Firefly solo arranca con Postgres sano; no alcanza otras redes; al destruirlo se conserva su volumen; `_reader` no puede modificar datos; pgAdmin administra la instancia |
 | **3. Observabilidad** | `prometheus-podman-exporter` como servicio de usuario y objetivo en el Prometheus existente | Métricas visibles en el Grafana actual |
 | 4. LiteLLM (más adelante) | Pasar LiteLLM a Quadlet con `vllm_host` y `vllm_port`; su base en una instancia de Postgres en el GX10 cuando lleguen las virtual keys | LiteLLM responde igual que hoy |
 | 5. Agentes (más adelante) | OpenClaw, SearXNG y audio con el endurecimiento de 4.9; control de salida por usuario tras una prueba previa (sección 7); evaluar el disparador del segundo usuario | Un contenedor de agente no alcanza la LAN, Tailscale ni Postgres salvo lo permitido |
