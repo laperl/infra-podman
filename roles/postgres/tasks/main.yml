@@ -31,19 +31,22 @@
       - postgres_users | map(attribute='name') | select('match', '^[a-z][a-z0-9_]{0,62}$') | list | length == postgres_users | length
       - postgres_users | map(attribute='group') | difference(['owner', 'writer', 'reader']) | length == 0
       - postgres_users | map(attribute='consumer') | select('match', '^[a-z][a-z0-9]{0,20}$') | list | length == postgres_users | length
-      - postgres_managed_roles | unique | list | length == postgres_managed_roles | length
+      - postgres_user_names | intersect(postgres_group_names) | length == 0
+      - postgres_per_db | map('length') | list == postgres_per_db | map('unique') | map('list') | map('length') | list
       - postgres_managed_roles | intersect([postgres_superuser, 'backup', 'public', 'postgres']) | length == 0
       - postgres_managed_roles | select('match', '^pg_') | list | length == 0
     fail_msg: >-
       databases: of pg-{{ postgres_instance }} in the data repository (docs/POSTGRES.md, section 6):
       each database a name ^[a-z][a-z0-9_]{0,30}$, not postgres or template*; each user a name
-      ^[a-z][a-z0-9_]{0,62}$, unique in the instance and different from the groups <database>_owner,
-      _writer and _reader, the superuser, backup, public and pg_*; group owner, writer or reader;
-      consumer ^[a-z][a-z0-9]{0,20}$.
+      ^[a-z][a-z0-9_]{0,62}$, once per database (it may be in several), different from the groups
+      <database>_owner, _writer and _reader, the superuser, backup, public and pg_*; group owner,
+      writer or reader; consumer ^[a-z][a-z0-9]{0,20}$.
     quiet: true
   vars:
     postgres_users: >-
-      {{ postgres_databases | selectattr('users', 'defined') | map(attribute='users') | flatten }}
+      {{ postgres_databases | selectattr('users') | map(attribute='users') | flatten }}
+    postgres_per_db: >-
+      {{ postgres_databases | selectattr('users') | map(attribute='users') | map('map', attribute='name') | map('list') | list }}
 
 - name: Read the service user
   ansible.builtin.getent:
@@ -129,6 +132,12 @@
 
 - name: Write pg_hba.conf
   ansible.builtin.include_tasks: hba.yml
+  when: postgres_state == 'present'
+
+# What is no longer in the inventory (docs/POSTGRES.md, section 7): worked out, checked
+# and backed up now, before anything changes; dropped by setup.yml after the deploy.
+- name: Check what would be dropped
+  ansible.builtin.include_tasks: drop_check.yml
   when: postgres_state == 'present'
 
 # Before PostgreSQL restarts on a new image, a backup, so the operator can go back by hand

@@ -6,7 +6,7 @@
 #   failed     last run failed and the status explains why
 #   retention  R28 on fake-dated snapshots, with the values of the installed unit
 #   latest     prints the time of the newest pgdump snapshot of pg-main
-#   kept <r>   there is a pgdump snapshot of lifecycle_app tagged reason=<r>
+#   kept <r> [db]  there is a pgdump snapshot of db (lifecycle_app) tagged reason=<r>
 #   destroyed  timer and container unit gone, repository kept (SPEC 4.2)
 set -Eeuo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -119,9 +119,10 @@ case $1 in
     restic_cli snapshots --json --tag app=pg-main,type=pgdump | jq -r 'map(.time) | max'
     ;;
   kept)
+    db=${3:-lifecycle_app}
     restic_cli snapshots --json --tag "app=pg-main,type=pgdump,reason=$2" \
-      | jq -e 'any(.[]; .paths == ["/backup/pg-main/pgdump/lifecycle_app"])' >/dev/null \
-      || fail "no pgdump snapshot tagged reason=$2"
+      | jq -e --arg p "/backup/pg-main/pgdump/$db" 'any(.[]; .paths == [$p])' >/dev/null \
+      || fail "no pgdump snapshot of $db tagged reason=$2"
     ;;
   destroyed)
     ! "$as" systemctl --user is-enabled "$unit.timer" >/dev/null 2>&1 || fail "the timer is still enabled"

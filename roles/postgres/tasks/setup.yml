@@ -161,6 +161,10 @@
       ansible.builtin.include_tasks: apps.yml
       when: postgres_databases | length > 0
 
+    # What drop_check.yml approved before the deploy (docs/POSTGRES.md, section 7).
+    - name: Drop what is no longer in the inventory
+      ansible.builtin.include_tasks: drop.yml
+
     # Now every consumer network exists: the start has just created any new one.
     - name: Write pg_hba.conf with the subnets of new networks
       ansible.builtin.include_tasks: hba.yml
@@ -190,3 +194,13 @@
       changed_when: false
       failed_when: postgres_hba_errors.rc != 0 or postgres_hba_errors.stdout != 'ok'
       check_mode: false
+
+    # Groups are always <database>_owner, _writer and _reader (docs/POSTGRES.md, section 2).
+    - name: Summary of the databases, groups and users
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.name }}: groups {{ item.name }}_owner, {{ item.name }}_writer, {{ item.name }}_reader;
+          users {% for u in item.users or [] %}{{ u.name }} ({{ u.group }}, from {{ u.consumer }}){{ ', ' if not loop.last }}{% else %}none{% endfor %}
+      loop: "{{ postgres_databases }}"
+      loop_control:
+        label: "{{ item.name }}"

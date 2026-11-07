@@ -1,63 +1,98 @@
-{# Groups and users of every application database (docs/POSTGRES.md, section 2), run in the
-   database postgres as the superuser. Idempotent: each statement leaves the catalogs as they
-   are when there is nothing to do, and the role compares a picture of the catalogs before
-   and after to know what changed. Names are checked by the role (main.yml): only
-   [a-z0-9_], always quoted. Passwords are set elsewhere (pg_passwords.py). #}
+{# Groups and users of every application database (docs/POSTGRES.md, sections 2 and 7), run
+   in the database postgres as the superuser. Idempotent: each statement leaves the catalogs
+   as they are when there is nothing to do, and the role compares a picture of the catalogs
+   before and after to know what changed. Names are checked by the role (main.yml): only
+   [a-z0-9_], always quoted. Passwords are set elsewhere (pg_passwords.py), and what is no
+   longer declared is dropped elsewhere (drop.yml).
+   Everything created here gets the comment postgres_managed_mark (COMMENT ON ROLE): the
+   role only ever drops roles with it. #}
+{% set mark = postgres_managed_mark %}
+{# Groups each user must be in: {user: ['<db>_<group>', ...]} and its databases. #}
+{% set wanted = {} %}
+{% set user_dbs = {} %}
+{% for db in postgres_databases %}
+{% for user in db.users or [] %}
+{% set _ = wanted.update({user.name: (wanted[user.name] | default([])) + [db.name ~ '_' ~ user.group]}) %}
+{% set _ = user_dbs.update({user.name: (user_dbs[user.name] | default([])) + [db.name]}) %}
+{% endfor %}
+{% endfor %}
+{% macro names(list) -%}
+ARRAY[{{ list | map('regex_replace', '^(.*)$', "'\\1'") | join(', ') }}]::name[]
+{%- endmacro %}
 {% macro state() -%}
 SELECT 'role' AS area, rolname || ' ' || concat_ws(',', rolsuper, rolinherit, rolcreaterole, rolcreatedb,
-         rolcanlogin, rolreplication, rolbypassrls) AS item
-  FROM pg_authid WHERE rolname = ANY (ARRAY[{{ postgres_managed_roles | map('regex_replace', '^(.*)$', "'\\1'") | join(', ') }}]::name[])
+         rolcanlogin, rolreplication, rolbypassrls, coalesce(shobj_description(oid, 'pg_authid'), '')) AS item
+  FROM pg_authid WHERE rolname = ANY ({{ names(postgres_managed_roles) }})
 UNION ALL
 SELECT 'member', g.rolname || ' > ' || r.rolname || ' ' || concat_ws(',', m.admin_option, m.inherit_option, m.set_option)
   FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.roleid JOIN pg_roles r ON r.oid = m.member
-  WHERE r.rolname = ANY (ARRAY[{{ postgres_managed_roles | map('regex_replace', '^(.*)$', "'\\1'") | join(', ') }}]::name[])
+  WHERE r.rolname = ANY ({{ names(postgres_managed_roles) }})
+UNION ALL
+SELECT 'setting', r.rolname || ' ' || d.datname || ' ' || array_to_string(s.setconfig, ',')
+  FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole JOIN pg_database d ON d.oid = s.setdatabase
+  WHERE r.rolname = ANY ({{ names(postgres_managed_roles) }})
 {%- endmacro %}
 \set ON_ERROR_STOP 1
 SET client_min_messages = warning;
 BEGIN;
 CREATE TEMP TABLE infra_before ON COMMIT DROP AS {{ state() }};
 
-{% for db in postgres_databases %}
--- {{ db.name }}: three groups without LOGIN.
-{% for group in ['owner', 'writer', 'reader'] %}
+{% for group in postgres_group_names %}
+-- {{ group }}: a group, without LOGIN.
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ db.name }}_{{ group }}') THEN
-    CREATE ROLE "{{ db.name }}_{{ group }}" NOLOGIN;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ group }}') THEN
+    CREATE ROLE "{{ group }}" NOLOGIN;
   END IF;
 END $$;
-ALTER ROLE "{{ db.name }}_{{ group }}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS INHERIT;
+ALTER ROLE "{{ group }}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS INHERIT;
+COMMENT ON ROLE "{{ group }}" IS '{{ mark }}';
 {% endfor %}
-{% for user in db.users | default([]) %}
--- {{ user.name }}: LOGIN, member of {{ db.name }}_{{ user.group }} only.
+
+{% for user in postgres_user_names %}
+-- {{ user }}: LOGIN, member of {{ wanted[user] | join(', ') }} and of nothing else of ours.
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ user.name }}') THEN
-    CREATE ROLE "{{ user.name }}" LOGIN;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ user }}') THEN
+    CREATE ROLE "{{ user }}" LOGIN;
   END IF;
 END $$;
-ALTER ROLE "{{ user.name }}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS INHERIT;
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.roleid
+ALTER ROLE "{{ user }}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS INHERIT;
+COMMENT ON ROLE "{{ user }}" IS '{{ mark }}';
+DO $$
+DECLARE g name;
+BEGIN
+{% for group in wanted[user] %}
+  -- INHERIT, to use the privileges of the group; SET, so ALTER ROLE … SET role works (R35).
+  IF NOT EXISTS (SELECT FROM pg_auth_members m JOIN pg_roles gr ON gr.oid = m.roleid
                  JOIN pg_roles r ON r.oid = m.member
-                 WHERE g.rolname = '{{ db.name }}_{{ user.group }}' AND r.rolname = '{{ user.name }}'
+                 WHERE gr.rolname = '{{ group }}' AND r.rolname = '{{ user }}'
                    AND m.inherit_option AND m.set_option AND NOT m.admin_option) THEN
-    IF EXISTS (SELECT FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.roleid
+    IF EXISTS (SELECT FROM pg_auth_members m JOIN pg_roles gr ON gr.oid = m.roleid
                JOIN pg_roles r ON r.oid = m.member
-               WHERE g.rolname = '{{ db.name }}_{{ user.group }}' AND r.rolname = '{{ user.name }}') THEN
-      REVOKE "{{ db.name }}_{{ user.group }}" FROM "{{ user.name }}";
+               WHERE gr.rolname = '{{ group }}' AND r.rolname = '{{ user }}') THEN
+      REVOKE "{{ group }}" FROM "{{ user }}";
     END IF;
-    GRANT "{{ db.name }}_{{ user.group }}" TO "{{ user.name }}" WITH INHERIT TRUE, SET TRUE;
-  END IF;
-{% for other in ['owner', 'writer', 'reader'] | reject('equalto', user.group) %}
-  IF EXISTS (SELECT FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.roleid
-             JOIN pg_roles r ON r.oid = m.member
-             WHERE g.rolname = '{{ db.name }}_{{ other }}' AND r.rolname = '{{ user.name }}') THEN
-    REVOKE "{{ db.name }}_{{ other }}" FROM "{{ user.name }}";
+    GRANT "{{ group }}" TO "{{ user }}" WITH INHERIT TRUE, SET TRUE;
   END IF;
 {% endfor %}
+  -- Out of any other group of ours: one it was in before the inventory changed.
+  FOR g IN SELECT gr.rolname FROM pg_auth_members m JOIN pg_roles gr ON gr.oid = m.roleid
+           JOIN pg_roles r ON r.oid = m.member
+           WHERE r.rolname = '{{ user }}'
+             AND shobj_description(gr.oid, 'pg_authid') = '{{ mark }}'
+             AND gr.rolname <> ALL ({{ names(wanted[user]) }})
+  LOOP
+    EXECUTE format('REVOKE %I FROM %I', g, '{{ user }}');
+  END LOOP;
+  -- Without settings in a database it is no longer declared in.
+  FOR g IN SELECT d.datname FROM pg_db_role_setting s JOIN pg_database d ON d.oid = s.setdatabase
+           JOIN pg_roles r ON r.oid = s.setrole
+           WHERE r.rolname = '{{ user }}' AND d.datname <> ALL ({{ names(user_dbs[user]) }})
+  LOOP
+    EXECUTE format('ALTER ROLE %I IN DATABASE %I RESET ALL', '{{ user }}', g);
+  END LOOP;
 END $$;
 {% endfor %}
 
-{% endfor %}
 SELECT 'changed|' || area || '|' || item FROM (
   (SELECT * FROM ({{ state() }}) s EXCEPT SELECT * FROM infra_before)
   UNION (SELECT * FROM infra_before EXCEPT SELECT * FROM ({{ state() }}) s)

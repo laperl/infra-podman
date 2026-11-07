@@ -3,7 +3,8 @@
    catalogs before and after. postgres_db is one item of postgres_databases. #}
 {% set db = postgres_db.name %}
 {% macro state() -%}
-SELECT 'database' AS area, datname || ' ' || pg_get_userbyid(datdba) || ' ' || coalesce(datacl::text, '') AS item
+SELECT 'database' AS area, datname || ' ' || pg_get_userbyid(datdba) || ' ' || coalesce(datacl::text, '')
+       || ' ' || coalesce(shobj_description(oid, 'pg_database'), '') AS item
   FROM pg_database WHERE datname = current_database()
 UNION ALL
 SELECT 'setting', r.rolname || ' ' || array_to_string(s.setconfig, ',')
@@ -32,13 +33,15 @@ SET client_min_messages = warning;
 BEGIN;
 CREATE TEMP TABLE infra_before ON COMMIT DROP AS {{ state() }};
 
--- Owner, and who may connect: the three groups (and so their users) and backup.
+-- Owner, the mark (the role only ever drops databases with it), and who may connect: the
+-- three groups (and so their users) and backup.
 ALTER DATABASE "{{ db }}" OWNER TO "{{ db }}_owner";
+COMMENT ON DATABASE "{{ db }}" IS '{{ postgres_managed_mark }}';
 REVOKE CONNECT, TEMPORARY ON DATABASE "{{ db }}" FROM PUBLIC;
 GRANT CONNECT ON DATABASE "{{ db }}" TO "{{ db }}_owner", "{{ db }}_writer", "{{ db }}_reader", backup;
 
 -- Each user works in the schema of its application; those of _owner, as _owner (R35).
-{% for user in postgres_db.users | default([]) %}
+{% for user in postgres_db.users or [] %}
 ALTER ROLE "{{ user.name }}" IN DATABASE "{{ db }}" SET search_path = "{{ db }}";
 {% if user.group == 'owner' %}
 ALTER ROLE "{{ user.name }}" IN DATABASE "{{ db }}" SET role = "{{ db }}_owner";

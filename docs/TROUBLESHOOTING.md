@@ -91,6 +91,12 @@ Qué hacer cuando algo falla, ordenado por pieza. Busca el mensaje que ves (Ctrl
 | `databases: of pg-main in the data repository …` | Un nombre, un grupo o un consumidor de `databases:` no es válido, o un usuario está repetido | Corrige el repo de datos según el mensaje ([`POSTGRES.md`](POSTGRES.md), apartado 6) |
 | `The network prod-<consumidor>-pg-main-net exists but is not internal with isolate and DNS 127.0.0.1` | Esa red no la creó Ansible y podría tener salida | Lo que dice el mensaje: parar Postgres, borrar la red y repetir el `apply` |
 | `the password of … has characters other than printable ASCII` | La contraseña del secreto tiene letras con tilde, eñes u otros caracteres | Genera otra en KeePassXC con letras, números y símbolos, y `--rotate` |
+| `Still connected to what would be dropped from prod-pg-main (user\|database): …` | Quitaste del inventario un usuario o una base que una aplicación sigue usando. No se ha cambiado nada | Para esa aplicación y repite el `apply` ([`POSTGRES.md`](POSTGRES.md), apartado 7) |
+| `prod-pg-main has no databases: in the inventory, so these databases would be dropped: …` | Falta `databases:` o está vacío, y hay bases creadas por Ansible. No se ha cambiado nada | Si es un error, vuelve a poner las bases. Si quieres borrarlas todas, repite con `-e postgres_confirm_drop=main` |
+| `prod-pg-main would drop the databases …, and there is no backup service on …` | Esa máquina no tiene copias, y sin copia no se borra una base | `./deploy.sh apply backup --limit <máquina>` antes, o vuelve a poner la base en el inventario |
+| `The backup before dropping … from prod-pg-main failed, so nothing has been dropped.` | Falló la copia previa al borrado | Mira el log que da el mensaje y repite cuando la copia funcione (OPERATIONS, apartado 2) |
+| `not in the inventory and not created by Ansible, left as it is: …` | Es un aviso: hay una base o un rol hecho a mano, o de antes de la fase 2 | Nada, si es tuyo. Ansible nunca lo toca |
+| `Not in the inventory of …, left running as they are: pg-…` | Es un aviso: en esa máquina hay una instancia que ya no está en el inventario | Para retirarla conservando sus datos, `-e postgres_state=absent` ([`POSTGRES.md`](POSTGRES.md), apartado 7) |
 | `svc podman healthcheck run prod-pg-main && echo sano` no dice `sano` | Postgres no está sano | `sudo journalctl _SYSTEMD_USER_UNIT=prod-pg-main.service -n 50` y `svc systemctl --user restart prod-pg-main.service` |
 
 ## 6. Backup local

@@ -1,0 +1,14 @@
+---
+# postgres job, after apps-step2.yml: demo_ro leaves demo but stays in demo2, so it is not
+# dropped. Fictitious names only.
+postgres_instances:
+  - name: main
+    superuser: ci_admin
+    databases:
+      - name: demo
+        users:
+          - {name: demo_app, group: owner, consumer: demo}
+          - {name: demo_rw, group: writer, consumer: demo}
+      - name: demo2
+        users:
+          - {name: demo_ro, group: reader, consumer: demo}

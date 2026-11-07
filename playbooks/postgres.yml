@@ -2,7 +2,9 @@
 # Phase 1: the PostgreSQL instances of each machine (D8). Which instances a machine runs
 # is in the inventory (postgres_instances). Needs the base playbook and the secrets first.
 #   ./deploy.sh plan postgres --limit laptop
-# Destroy keeping the data: -e postgres_state=absent (not through deploy.sh yet).
+# Databases and users: docs/POSTGRES.md, section 7. Dropping every database of an instance
+# needs -e postgres_confirm_drop=<instance>.
+# Retire an instance keeping its data: -e postgres_state=absent.
 - name: PostgreSQL instances
   hosts: postgres_hosts
   become: true
@@ -21,3 +23,42 @@
         postgres_superuser: "{{ postgres_item.superuser | default('') }}"
         # Its application databases, groups and users (docs/POSTGRES.md, section 6).
         postgres_databases: "{{ postgres_item.databases | default([]) }}"
+
+    # An instance removed from the inventory is never stopped or dropped by removing it
+    # (docs/POSTGRES.md, section 7): only reported, on every run.
+    - name: Read the service user
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ service_user }}"
+
+    - name: Read the PostgreSQL instances running on this machine
+      ansible.builtin.command:
+        argv:
+          - podman
+          - ps
+          - --all
+          - --filter
+          - label=infra.component=db
+          - --filter
+          - label=infra.managed-by=infra-podman
+          - --format
+          - '{% raw %}{{ index .Labels "infra.app" }}{% endraw %}'
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+      become: true
+      become_user: "{{ service_user }}"
+      register: postgres_found
+      changed_when: false
+      check_mode: false
+
+    - name: Report instances that are not in the inventory (left as they are)
+      ansible.builtin.debug:
+        msg: >-
+          Not in the inventory of {{ inventory_hostname }}, left running as they are:
+          {{ postgres_undeclared | join(', ') }}. To retire one keeping its data:
+          -e postgres_state=absent (docs/POSTGRES.md, section 7).
+      when: postgres_undeclared | length > 0
+      vars:
+        postgres_undeclared: >-
+          {{ postgres_found.stdout_lines | reject('in', postgres_instances | map(attribute='name')
+             | map('regex_replace', '^', 'pg-') | list) | list }}

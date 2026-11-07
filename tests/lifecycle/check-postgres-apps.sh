@@ -6,7 +6,7 @@
 #   access     R35 and R36 over TCP, from throwaway containers on each network
 #   isolation  no way out: not to the internet, the host, or another consumer's network
 #   password   <user>: the password of that user is the one in its secret
-#   none       back without consumers: Network=none, the data kept
+#   role|db|groups|secret|net  small checks of state (docs/POSTGRES.md, section 7)
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 as=$here/as-svc.sh
@@ -166,12 +166,28 @@ case $1 in
   password)
     allowed "login of $2 with its secret" "$demo_net" "$2" "SELECT 1"
     ;;
-  none)
-    [[ $("$as" podman inspect "$name" --format '{{.HostConfig.NetworkMode}}') == none ]] || fail "$name is not back on Network=none"
-    [[ $(sql "SELECT count(*) FROM demo.probe" demo) -ge 2 ]] || fail "the data of demo was not kept"
-    home=$(getent passwd svc_runner | cut -d: -f6)
-    if "$as" grep -q 'demo_' "$home/.config/infra-podman/$name/pg_hba.conf"; then fail "pg_hba.conf still admits the users"; fi
+  # Small checks of state, for the steps of docs/POSTGRES.md, section 7.
+  role)    # role <name> present|absent
+    [[ $(sql "SELECT count(*) FROM pg_roles WHERE rolname = '$2'") == "$([[ $3 == present ]] && echo 1 || echo 0)" ]] \
+      || fail "the role $2 is not $3"
     ;;
-  *) echo "usage: $0 networks|catalog|access|isolation|password <user>|none" >&2; exit 2 ;;
+  db)      # db <name> present|absent
+    [[ $(sql "SELECT count(*) FROM pg_database WHERE datname = '$2'") == "$([[ $3 == present ]] && echo 1 || echo 0)" ]] \
+      || fail "the database $2 is not $3"
+    ;;
+  groups)  # groups <user> <group,group…>: exactly these memberships
+    got=$(sql "SELECT coalesce(string_agg(g.rolname, ',' ORDER BY g.rolname), '') FROM pg_auth_members m
+               JOIN pg_roles g ON g.oid = m.roleid JOIN pg_roles r ON r.oid = m.member WHERE r.rolname = '$2'")
+    [[ $got == "$3" ]] || fail "$2 is in '$got', expected '$3'"
+    ;;
+  secret)  # secret <name> present|absent
+    if "$as" podman secret exists "$2"; then state=present; else state=absent; fi
+    [[ $state == "$3" ]] || fail "the Podman secret $2 is $state, expected $3"
+    ;;
+  net)     # net <name> present|absent
+    if "$as" podman network exists "$2"; then state=present; else state=absent; fi
+    [[ $state == "$3" ]] || fail "the network $2 is $state, expected $3"
+    ;;
+  *) echo "usage: $0 networks|catalog|access|isolation|password <user>|role|db|groups|secret|net …" >&2; exit 2 ;;
 esac
 echo "ok: $1"

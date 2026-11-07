@@ -1,0 +1,16 @@
+---
+# postgres job, after apps-vars.yml (docs/POSTGRES.md, section 7): demo_ai is removed, so
+# the consumer ai has no user left and its network goes; demo_ro is also in a new
+# database, demo2. Fictitious names only.
+postgres_instances:
+  - name: main
+    superuser: ci_admin
+    databases:
+      - name: demo
+        users:
+          - {name: demo_app, group: owner, consumer: demo}
+          - {name: demo_rw, group: writer, consumer: demo}
+          - {name: demo_ro, group: reader, consumer: demo}
+      - name: demo2
+        users:
+          - {name: demo_ro, group: reader, consumer: demo}

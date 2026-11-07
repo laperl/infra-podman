@@ -2,8 +2,8 @@
 # Included by setup.yml (inside its block, with postgres_psql): the databases, groups and
 # users of the applications, as declared in postgres_databases (docs/POSTGRES.md, 2 and 4).
 # Each step reports what changed; a second apply gives zero changes. In a plan the SQL runs
-# and is rolled back, so the plan shows what would change. Users removed from the
-# inventory are never dropped (D11): pg_hba.conf stops admitting them.
+# and is rolled back, so the plan shows what would change. What is no longer in the
+# inventory is dropped by drop_check.yml and drop.yml (docs/POSTGRES.md, section 7).
 
 # 1. Groups and users, in the database postgres.
 - name: Converge the groups and users

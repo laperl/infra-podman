@@ -16,7 +16,7 @@ host    all  backup  ::/0       reject
 # 4. One line per application user: only its database, only from the network of its
 #    consumer, whose subnet Podman chose. Without that network yet, no line: rejected.
 {% for db in postgres_databases %}
-{% for user in db.users | default([]) %}
+{% for user in db.users or [] %}
 {% if user.consumer in postgres_subnets %}
 host    "{{ db.name }}"  "{{ user.name }}"  {{ postgres_subnets[user.consumer] }}  scram-sha-256
 {% else %}

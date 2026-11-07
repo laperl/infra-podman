@@ -231,14 +231,75 @@ jobs:
           tests/lifecycle/playbook.sh -i "$INV" $APPS playbooks/postgres.yml 2>&1 | tee second.log | tee -a all.log
           grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the apply after the rotation changed something"; exit 1; }
 
-      # The way back: the code of phase 1 does not know about databases. Without them the
-      # instance returns to Network=none and keeps its data.
-      - name: Without consumers, back to Network=none, data kept
+      # Changes and removals by the inventory (docs/POSTGRES.md, section 7). This job has no
+      # backup service: dropping a database must be refused here; the backup job drops one.
+      - name: A connected user is not dropped; once disconnected it is, with its secret and network
+        env:
+          C: tests/lifecycle/check-postgres-apps.sh
+          STEP: -e @tests/lifecycle/apps-step2.yml
         run: |
-          tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml 2>&1 | tee -a all.log
-          tests/lifecycle/check-postgres-apps.sh none
-          tests/lifecycle/check-postgres.sh running
-          tests/lifecycle/check-postgres.sh read
+          image=$(tests/lifecycle/as-svc.sh podman inspect dev-pg-main --format '{{.ImageName}}')
+          tests/lifecycle/as-svc.sh podman run -d --rm --name lifecycle-session --network dev-ai-pg-main-net \
+            --secret dev-pg-main-demo_ai-password,type=env,target=PGPASSWORD --entrypoint psql "$image" \
+            -X -h dev-pg-main -U demo_ai -d demo -c 'SELECT pg_sleep(300)' >/dev/null
+          sleep 3
+          if tests/lifecycle/playbook.sh -i "$INV" $STEP playbooks/postgres.yml > drop.log 2>&1; then
+            echo "::error::demo_ai was dropped while connected"; exit 1
+          fi
+          cat drop.log >> all.log
+          grep -q 'Still connected to what would be dropped' drop.log || { echo "::error::unexpected refusal"; exit 1; }
+          $C role demo_ai present
+          tests/lifecycle/as-svc.sh podman stop -t 0 lifecycle-session >/dev/null
+          tests/lifecycle/playbook.sh -i "$INV" $STEP playbooks/postgres.yml 2>&1 | tee drop.log | tee -a all.log
+          grep -q 'KeePassXC entries: ci-site/pg-main-demo_ai-password' drop.log || { echo "::error::no reminder"; exit 1; }
+          $C role demo_ai absent
+          $C secret dev-pg-main-demo_ai-password absent
+          $C net dev-ai-pg-main-net absent
+          $C groups demo_ro demo2_reader,demo_reader
+          $C role demo_reader present
+          tests/lifecycle/playbook.sh -i "$INV" $STEP playbooks/postgres.yml 2>&1 | tee second.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply changed something"; exit 1; }
+
+      - name: A user removed from one database but kept in another is not dropped
+        env:
+          C: tests/lifecycle/check-postgres-apps.sh
+          STEP: -e @tests/lifecycle/apps-step3.yml
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" $STEP playbooks/postgres.yml 2>&1 | tee -a all.log
+          $C role demo_ro present
+          $C groups demo_ro demo2_reader
+          $C secret dev-pg-main-demo_ro-password present
+          tests/lifecycle/playbook.sh -i "$INV" $STEP playbooks/postgres.yml 2>&1 | tee second.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply changed something"; exit 1; }
+
+      - name: A database is not dropped without a backup service, nor all of them without confirmation
+        env:
+          C: tests/lifecycle/check-postgres-apps.sh
+        run: |
+          if tests/lifecycle/playbook.sh -i "$INV" -e @tests/lifecycle/apps-step4.yml playbooks/postgres.yml > drop.log 2>&1; then
+            echo "::error::demo2 was dropped without a backup"; exit 1
+          fi
+          cat drop.log >> all.log
+          grep -q 'there is no backup service on' drop.log || { echo "::error::unexpected refusal"; exit 1; }
+          $C db demo2 present
+          if tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml > drop.log 2>&1; then
+            echo "::error::every database went without confirmation"; exit 1
+          fi
+          cat drop.log >> all.log
+          grep -q 'postgres_confirm_drop=main' drop.log || { echo "::error::unexpected refusal"; exit 1; }
+          $C db demo present
+
+      - name: What was made by hand is only reported
+        env:
+          C: tests/lifecycle/check-postgres-apps.sh
+        run: |
+          tests/lifecycle/as-svc.sh podman exec dev-pg-main psql -X -U ci_admin -d postgres -v ON_ERROR_STOP=1 -q \
+            -c "CREATE DATABASE handmade" -c "CREATE ROLE handmade_user" </dev/null
+          tests/lifecycle/playbook.sh -i "$INV" -e @tests/lifecycle/apps-step3.yml playbooks/postgres.yml 2>&1 | tee hand.log | tee -a all.log
+          grep 'left as it is:' hand.log | grep -q 'db handmade' || { echo "::error::db handmade not reported"; exit 1; }
+          grep 'left as it is:' hand.log | grep -q 'role handmade_user' || { echo "::error::role handmade_user not reported"; exit 1; }
+          $C db handmade present
+          $C role handmade_user present
 
       - name: Destroy, keeping the volume (SPEC 4.2)
         run: |
@@ -247,7 +308,7 @@ jobs:
 
       - name: Deploy again on the kept volume
         run: |
-          tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" -e @tests/lifecycle/apps-step3.yml playbooks/postgres.yml 2>&1 | tee -a all.log
           tests/lifecycle/check-postgres.sh read
 
       - name: The password never appears in the output (SPEC 4.5)
@@ -381,6 +442,40 @@ jobs:
           $CHECK kept daily
           $AS podman exec dev-pg-main psql -X -U ci_admin -d lifecycle_app -tAq -c "SELECT count(*) FROM app.t" | grep -qx 1000 \
             || { echo "::error::the data did not survive"; exit 1; }
+
+      # docs/POSTGRES.md, section 7: removing a database from the inventory backs it up
+      # first, then drops it with its groups, users, secrets and networks.
+      - name: A database removed from the inventory is backed up, then dropped
+        env:
+          C: tests/lifecycle/check-postgres-apps.sh
+        run: |
+          for user in demo_app demo_rw demo_ro demo_ai; do
+            v=$(openssl rand -hex 24)
+            echo "::add-mask::$v"
+            echo "$v" >> "$RUNNER_TEMP/pw"
+            printf '%s' "$v" | $AS podman secret create "dev-pg-main-$user-password" -
+          done
+          tests/lifecycle/playbook.sh -i "$INV" -e @tests/lifecycle/apps-vars.yml playbooks/postgres.yml 2>&1 | tee -a all.log
+          $C db demo present
+          if tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml > drop.log 2>&1; then
+            echo "::error::every database went without confirmation"; exit 1
+          fi
+          cat drop.log >> all.log
+          grep -q 'postgres_confirm_drop=main' drop.log || { echo "::error::unexpected refusal"; exit 1; }
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml -e postgres_confirm_drop=main 2>&1 | tee drop.log | tee -a all.log
+          grep -A1 'Run the backup now' drop.log | grep -q '^changed:' || { echo "::error::no backup before dropping"; exit 1; }
+          $CHECK kept pre-drop demo
+          $C db demo absent
+          for role in demo_owner demo_writer demo_reader demo_app demo_rw demo_ro demo_ai; do $C role "$role" absent; done
+          for user in demo_app demo_rw demo_ro demo_ai; do $C secret "dev-pg-main-$user-password" absent; done
+          $C net dev-demo-pg-main-net absent
+          $C net dev-ai-pg-main-net absent
+          [[ $($AS podman inspect dev-pg-main --format '{{.HostConfig.NetworkMode}}') == none ]] \
+            || { echo "::error::dev-pg-main is not back on Network=none"; exit 1; }
+          grep 'left as it is:' drop.log | grep -q 'db lifecycle_app' || { echo "::error::lifecycle_app not reported"; exit 1; }
+          $C db lifecycle_app present
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml 2>&1 | tee second.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply changed something"; exit 1; }
 
       - name: Remove the backup, keeping the repository (SPEC 4.2)
         run: |
