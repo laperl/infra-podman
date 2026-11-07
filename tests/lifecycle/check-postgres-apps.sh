@@ -47,7 +47,9 @@ case $1 in
       [[ $("$as" podman network inspect "$net" --format '{{.Internal}} {{index .Options "isolate"}}') == 'true true' ]] \
         || fail "$net is not internal with isolate=true (D9)"
       for label in infra.env=dev infra.app=pg-main infra.component=net infra.managed-by=infra-podman; do
-        "$as" podman network ls --filter "label=$label" --format '{{.Name}}' | grep -qx "$net" || fail "$net: missing label $label"
+        # Captured first: with pipefail, grep -q closing early can fail podman with SIGPIPE.
+        nets=$("$as" podman network ls --filter "label=$label" --format '{{.Name}}')
+        grep -qx "$net" <<<"$nets" || fail "$net: missing label $label"
       done
     done
     demo_subnet=$("$as" podman network inspect "$demo_net" --format '{{range .Subnets}}{{.Subnet}}{{end}}')
