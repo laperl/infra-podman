@@ -76,6 +76,8 @@
       --users {{ postgres_password_users | to_json | quote }}
       {{ '--check' if ansible_check_mode else '' }}
     executable: python3
+    # Podman cannot run from a directory the service user cannot enter (the playbook's).
+    chdir: "{{ postgres_service_home }}"
   vars:
     postgres_password_users: >-
       {{ postgres_user_names | map('regex_replace', '^(.*)$',

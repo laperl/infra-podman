@@ -74,7 +74,7 @@ def check_password(role: str, password: str) -> None:
 
 def run(argv: list[str], stdin: str | None = None) -> str:
     result = subprocess.run(argv, input=stdin, stdin=None if stdin is not None else subprocess.DEVNULL,
-                            capture_output=True, text=True, check=False)
+                            capture_output=True, text=True, check=False, cwd="/")
     if result.returncode != 0:
         # Never echo stdin: it may hold a verifier.
         raise RuntimeError(f"{' '.join(argv[:4])} failed: {result.stderr.strip()}")
@@ -83,7 +83,7 @@ def run(argv: list[str], stdin: str | None = None) -> str:
 
 def read_secret(name: str) -> str:
     result = subprocess.run(["podman", "secret", "inspect", "--showsecret", name],
-                            stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False)
+                            stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False, cwd="/")
     if result.returncode != 0:
         raise LookupError(name)
     return json.loads(result.stdout)[0]["SecretData"]
