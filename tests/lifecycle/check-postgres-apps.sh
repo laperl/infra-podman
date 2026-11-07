@@ -88,8 +88,8 @@ case $1 in
     ;;
   access)
     # R35: the user of _owner creates as _owner, without the application doing anything.
-    allowed "SET role of demo_app" "$demo_net" demo_app "SELECT current_user" | grep -qx demo_owner \
-      || fail "demo_app does not become demo_owner on connecting"
+    got=$(allowed "SET role of demo_app" "$demo_net" demo_app "SELECT session_user || ' as ' || current_user")
+    [[ $got == 'demo_app as demo_owner' ]] || fail "demo_app does not become demo_owner on connecting (got: $got)"
     allowed "CREATE TABLE by demo_app" "$demo_net" demo_app \
       "CREATE TABLE IF NOT EXISTS probe (id serial PRIMARY KEY, v text, e vector(2));
        CREATE OR REPLACE FUNCTION probe_write() RETURNS void LANGUAGE sql SECURITY DEFINER
