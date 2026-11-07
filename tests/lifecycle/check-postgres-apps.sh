@@ -14,13 +14,13 @@ name=dev-pg-main
 su=ci_admin  # fictitious superuser of tests/lifecycle/inventory.yml
 demo_net=dev-demo-pg-main-net
 ai_net=dev-ai-pg-main-net
-fail() { echo "::error title=check-postgres-apps::$*"; exit 1; }
+fail() { local m="$*"; echo "::error title=check-postgres-apps::${m//$'\n'/ | }"; exit 1; }
 sql() { # sql <query> [database]: as the superuser, through the socket
   "$as" podman exec "$name" psql -X -U "$su" -d "${2:-postgres}" -v ON_ERROR_STOP=1 -tAq -c "$1" </dev/null
 }
 image() { "$as" podman inspect "$name" --format '{{.ImageName}}'; }
 client() { # client <network> <user> <query>: psql over TCP from a container on that network
-  "$as" podman run --rm --network "$1" --secret "dev-pg-main-$2-password,type=env,target=PGPASSWORD" \
+  "$as" podman --log-level=error run --rm --network "$1" --secret "dev-pg-main-$2-password,type=env,target=PGPASSWORD" \
     --entrypoint psql "$(image)" -X -h "$name" -U "$2" -d demo -v ON_ERROR_STOP=1 -tAq -c "$3" </dev/null
 }
 allowed() { # allowed <what> <network> <user> <query>: its output in $out
@@ -32,7 +32,7 @@ refused() { # refused <what> <network> <user> <query> <expected message>
   grep -q "$5" <<<"$out" || fail "$1 failed for another reason: $out"
 }
 on_net() { # on_net <network> <bash command>: run it in a throwaway container on that network
-  "$as" podman run --rm --network "$1" --entrypoint bash "$(image)" -c "$2" </dev/null
+  "$as" podman --log-level=error run --rm --network "$1" --entrypoint bash "$(image)" -c "$2" </dev/null
 }
 
 case $1 in
@@ -121,7 +121,7 @@ case $1 in
     # pg_hba.conf: each user only from its consumer's network, only to its database.
     refused "demo_app from the network of ai" "$ai_net" demo_app "SELECT 1" 'pg_hba.conf'
     refused "demo_ai from the network of demo" "$demo_net" demo_ai "SELECT 1" 'pg_hba.conf'
-    if out=$("$as" podman run --rm --network "$demo_net" --secret dev-pg-main-demo_app-password,type=env,target=PGPASSWORD \
+    if out=$("$as" podman --log-level=error run --rm --network "$demo_net" --secret dev-pg-main-demo_app-password,type=env,target=PGPASSWORD \
                --entrypoint psql "$(image)" -X -h "$name" -U demo_app -d postgres -c 'SELECT 1' </dev/null 2>&1); then
       fail "demo_app connected to the database postgres"
     fi
