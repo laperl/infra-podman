@@ -239,9 +239,11 @@ jobs:
           STEP: -e @tests/lifecycle/apps-step2.yml
         run: |
           image=$(tests/lifecycle/as-svc.sh podman inspect dev-pg-main --format '{{.ImageName}}')
+          # An idle connection, as an application keeps: psql waits on its input. (A running
+          # query would outlive the stop: PostgreSQL only notices when it ends.)
           tests/lifecycle/as-svc.sh podman run -d --rm --name lifecycle-session --network dev-ai-pg-main-net \
-            --secret dev-pg-main-demo_ai-password,type=env,target=PGPASSWORD --entrypoint psql "$image" \
-            -X -h dev-pg-main -U demo_ai -d demo -c 'SELECT pg_sleep(300)' >/dev/null
+            --secret dev-pg-main-demo_ai-password,type=env,target=PGPASSWORD --entrypoint sh "$image" \
+            -c 'sleep 300 | psql -X -h dev-pg-main -U demo_ai -d demo' >/dev/null
           sleep 3
           if tests/lifecycle/playbook.sh -i "$INV" $STEP playbooks/postgres.yml > drop.log 2>&1; then
             echo "::error::demo_ai was dropped while connected"; exit 1
