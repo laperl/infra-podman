@@ -23,8 +23,11 @@ client() { # client <network> <user> <query>: psql over TCP from a container on 
   "$as" podman --log-level=error run --rm --network "$1" --secret "dev-pg-main-$2-password,type=env,target=PGPASSWORD" \
     --entrypoint psql "$(image)" -X -h "$name" -U "$2" -d demo -v ON_ERROR_STOP=1 -tAq -c "$3" </dev/null
 }
-allowed() { # allowed <what> <network> <user> <query>: its output in $out
-  out=$(client "$2" "$3" "$4" 2>&1) || fail "$1 was refused: $out"
+errors=$(mktemp)
+trap 'rm -f "$errors"' EXIT
+allowed() { # allowed <what> <network> <user> <query>: its output in $out. Errors apart:
+  # Podman writes a warning about the image's volumes on stderr even with --log-level=error.
+  out=$(client "$2" "$3" "$4" 2>"$errors") || fail "$1 was refused: $(cat "$errors")"
 }
 refused() { # refused <what> <network> <user> <query> <expected message>
   local out
@@ -138,7 +141,7 @@ case $1 in
     host_ip=$(hostname -I | awk '{print $1}')
     python3 -m http.server 18999 --bind 0.0.0.0 >/dev/null 2>&1 &
     server=$!
-    trap 'kill $server 2>/dev/null || true' EXIT
+    trap 'kill $server 2>/dev/null || true; rm -f "$errors"' EXIT
     sleep 1
     timeout 5 bash -c "</dev/tcp/$host_ip/18999" || fail "control: the runner cannot reach its own port 18999"
     # A container of the ai network, and the address of PostgreSQL in that network.
