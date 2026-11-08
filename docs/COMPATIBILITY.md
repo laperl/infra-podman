@@ -5,7 +5,7 @@ Copia de la sección 4.3 de [`SPEC.md`](SPEC.md), más lo comprobado en la prác
 ## Reglas (SPEC 4.3)
 
 - **Prohibido** usar funciones de Quadlet posteriores a 4.9. En concreto, `Notify=healthy` y los ficheros `.pod` llegaron con Podman 5.0. Cualquier clave se comprueba en la documentación de 4.9.
-- **Dependencias entre servicios** (por ejemplo, Firefly espera a Postgres): `Requires=` y `After=` más un `ExecStartPre` que espere, con tiempo máximo, a que la dependencia esté sana. Fija `TimeoutStartSec` explícito. Este patrón está pendiente de validar (SPEC 7.1, fase 2).
+- **Dependencias entre servicios** (por ejemplo, Firefly espera a Postgres): `Requires=` y `After=` más un `ExecStartPre` que espere, con tiempo máximo, a que la dependencia esté sana. Fija `TimeoutStartSec` explícito. Probado en `lifecycle` con Firefly (fase 2): con Postgres en pausa, Firefly no arranca y se rinde a su `TimeoutStartSec`; con `Restart=on-failure`, arranca solo cuando Postgres vuelve a estar sano.
 - **Red rootless:** en 4.9 la salida al exterior de las redes rootless usa slirp4netns. Podman 5.0 cambió a pasta y Podman 6 elimina slirp4netns. Por eso **ninguna plantilla lleva opciones de slirp4netns ni de pasta**: así el cambio de versión no toca el código.
 - **Al actualizar el GX10 a Podman 5 o superior:** se sustituye el patrón de espera por `Notify=healthy` en un único sitio de las plantillas.
 
@@ -84,6 +84,12 @@ El 2026-11-03, en `ubuntu-24.04` con Podman 4.9.3 sin root y systemd de usuario:
 - **`HealthCmd=`** con comillas y una tubería: Quadlet 4.9 lo pasa entero a `--health-cmd` y Podman lo ejecuta con `sh -c`.
 - **Contenedores de un solo uso (backup, fase 1e1):** `Type=oneshot` en `[Service]` funciona en 4.9. El generador no añade `--sdnotify`, conserva `ExecStartPre=` y `ExecStopPost=` propios y, sin `[Install]`, el servicio no arranca al encender. Lo arranca un `.timer` normal de systemd.
 - **`Entrypoint=` no existe en Quadlet 4.9** (`unsupported key`). Se usa `PodmanArgs=--entrypoint=…`.
+- **`StopSignal=` tampoco existe en Quadlet 4.9** (no está en `podman-systemd.unit.5.md` del tag `v4.9.3`). Firefly usa `PodmanArgs=--stop-signal=SIGINT`.
+- **Firefly (fase 2), comprobado en `lifecycle` con 4.9.3:**
+  - `Network=<x>.network` de un `.network` que instala otro rol (Postgres) funciona: el generador lee el `NetworkName=` porque los dos ficheros están en la misma carpeta (`addNetworks` en `quadlet.go`).
+  - `Secret=…,type=mount,uid=33,gid=33,mode=0400` deja el fichero de `www-data` con permisos `0400`.
+  - `PublishPort=127.0.0.1:<puerto>:8080` desde una red interna, sin root: responde en `127.0.0.1` y no en la IP del equipo.
+  - Dos instancias en dos redes internas: subredes distintas, y ninguna llega a la otra.
 - **La unidad generada conserva la sección original** como `[X-Container]`: cada valor aparece dos veces en `systemctl --user cat`.
 - **SELinux y el volumen del backup (Fedora):** el contenedor de backup monta su repositorio con `:Z`, que lo marca como privado. Otro contenedor que lo monte sin más recibe `stat /repo/config: permission denied`. Para consultarlo a mano: `--security-opt label=disable`, que no cambia la marca (como el contenedor de Ansible, R16). En Ubuntu no pasa, por eso el CI no lo vio. Detectado por el operador en el portátil el 2026-11-04.
 - **restic y los atributos extendidos:** restic guarda los de cada carpeta (listas de permisos, etiquetas de SELinux en Fedora). Si el destino de una restauración no los admite, restaura los ficheros pero termina con error. Se restaura con `--exclude-xattr '*'` (restic 0.18 o posterior). Visto en el CI y [en Fedora](https://discussion.fedoraproject.org/t/selinux-errors-on-restic-restore-test/181360).
