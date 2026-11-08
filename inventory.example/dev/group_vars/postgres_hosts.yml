@@ -32,3 +32,9 @@ postgres_instances:
 #           - name: app1_ai
 #             group: reader
 #             consumer: ai
+#       # Firefly III (docs/services/firefly.md): one user in firefly_owner, from its network.
+#       - name: firefly
+#         users:
+#           - name: firefly
+#             group: owner
+#             consumer: firefly

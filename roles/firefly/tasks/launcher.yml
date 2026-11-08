@@ -1,0 +1,43 @@
+---
+# Included by main.yml. In the OPERATOR's account (the user Ansible logs in with), not the
+# service user's: the menu (rofi drun) reads ~/.local/share/applications (R47, SPEC 4.14).
+- name: Find the operator
+  ansible.builtin.command:
+    cmd: id -un
+  become: false
+  register: firefly_operator
+  changed_when: false
+  check_mode: false
+
+- name: Read the operator's home
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ firefly_operator.stdout }}"
+
+- name: Set the path of the launcher
+  ansible.builtin.set_fact:
+    firefly_launcher_file: >-
+      {{ ansible_facts['getent_passwd'][firefly_operator.stdout][4] }}/.local/share/applications/infra-podman-{{ firefly_name }}.desktop
+
+- name: Create the operator's applications directory
+  ansible.builtin.file:
+    path: "{{ firefly_launcher_file | dirname }}"
+    state: directory
+    mode: "0755"
+  become: false
+  when: firefly_state == 'present' and firefly_launcher | bool
+
+- name: Install the launcher
+  ansible.builtin.template:
+    src: firefly.desktop.j2
+    dest: "{{ firefly_launcher_file }}"
+    mode: "0644"
+  become: false
+  when: firefly_state == 'present' and firefly_launcher | bool
+
+- name: Remove the launcher
+  ansible.builtin.file:
+    path: "{{ firefly_launcher_file }}"
+    state: absent
+  become: false
+  when: firefly_state == 'absent' or not firefly_launcher | bool

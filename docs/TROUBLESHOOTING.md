@@ -171,3 +171,18 @@ Los errores salen en GitHub, en el PR: pestaña **Checks**, en el job en rojo, c
 | `Platforms: not an index` o sin `linux/arm64` en la imagen nueva | Esa versión no trae las dos arquitecturas | No la uses todavía; avísame (D6) |
 | `Expected Podman 4.9` | La máquina de GitHub trae otra versión de Podman | Avísame: hay que revisar el workflow |
 | El mismo fallo 5 veces seguidas | — | Claude para y te pregunta (`CLAUDE.md`) |
+
+## 11. Firefly III
+
+Sus logs: `sudo journalctl _SYSTEMD_USER_UNIT=prod-firefly.service -n 50`. Los de sus tareas diarias: `sudo journalctl _SYSTEMD_USER_UNIT=prod-firefly-cron.service -n 50`.
+
+| Lo que ves | Por qué | Qué hacer |
+| --- | --- | --- |
+| `Firefly needs the PostgreSQL instance prod-pg-main and the network prod-firefly-pg-main-net on …` | Falta su base, su usuario o su red en Postgres | Declara en `postgres_hosts.yml` del repo de datos la base `firefly` con el usuario `firefly` (`group: owner`, `consumer: firefly`), como dice [`services/firefly.md`](services/firefly.md), y `./deploy.sh apply postgres --limit laptop` |
+| `Missing Podman secrets on …: prod-firefly-app-key` (o `prod-pg-main-firefly-password`) | Falta ese secreto en la máquina | Decláralo en `infra_secrets`, crea su entrada en KeePassXC y `./deploy.sh secrets --limit laptop` ([`SECRETS_INVENTORY.md`](SECRETS_INVENTORY.md)) |
+| `The secret prod-firefly-app-key has … characters, and Firefly needs exactly 32` | La clave de la aplicación no tiene 32 caracteres | Antes del primer arranque: corrige la entrada de KeePassXC y `./deploy.sh secrets --limit laptop --rotate firefly-app-key`. **Con Firefly ya en uso, no la cambies**: pídeme ayuda |
+| `prod-firefly did not pass its healthcheck in 300 s and has been STOPPED` | Firefly no llega a leer su base. El primer arranque crea todas las tablas y tarda | Mira sus logs. Si dicen `password authentication failed`, el secreto de su usuario no coincide: `./deploy.sh apply postgres --limit laptop` fija la contraseña desde el secreto. Después `svc systemctl --user start prod-firefly.service` |
+| `Job for prod-firefly.service failed because a timeout was exceeded.` | Firefly ha esperado a que Postgres estuviera sano y no lo ha estado a tiempo (SPEC 4.3). Vuelve a intentarlo solo | `svc podman healthcheck run prod-pg-main && echo sano`. Si Postgres está mal, su apartado (5). Cuando esté sano, Firefly arranca solo |
+| `prod-firefly would start a new image, which changes its database, and there is no backup service on …` | Al cambiar la imagen de Firefly se hace antes una copia, y no hay servicio de backup | `./deploy.sh apply backup --limit laptop` y repite |
+| `The backup before changing the image of prod-firefly failed, so the image has NOT been changed` | La copia previa ha fallado; Firefly sigue con su imagen anterior | El apartado 6 (backup local), con los logs que salen en el mensaje |
+| La página no carga en `http://127.0.0.1:18001` | Firefly está parado o arrancando | `svc systemctl --user status prod-firefly.service`. Tras encender, espera a que Postgres y Firefly estén sanos (`svc podman ps`, columna `STATUS`) |

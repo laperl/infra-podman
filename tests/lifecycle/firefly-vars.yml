@@ -1,0 +1,15 @@
+---
+# Extra variables of the firefly job: the instance with Firefly's database and user, as
+# the operator adds them to postgres_hosts.yml (docs/POSTGRES.md, section 6), and a second
+# consumer (demo) whose network Firefly must not reach. Fictitious names only.
+postgres_instances:
+  - name: main
+    superuser: ci_admin
+    databases:
+      - name: firefly
+        users:
+          - {name: firefly, group: owner, consumer: firefly}
+          - {name: firefly_ro, group: reader, consumer: ai}
+      - name: demo
+        users:
+          - {name: demo_app, group: owner, consumer: demo}

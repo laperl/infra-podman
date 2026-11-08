@@ -1,0 +1,23 @@
+---
+# EXAMPLE (SPEC 4.13). The real file is inventory/dev/group_vars/firefly_hosts.yml in the
+# data repository. Firefly III on each machine of firefly_hosts (docs/services/firefly.md).
+# Every variable has a default in roles/firefly/defaults/main.yml; write here only what
+# changes.
+
+# The address you open: http://127.0.0.1:<port>, only from this machine.
+firefly_port: 18001
+
+# Language of the login page and of new users, and your time zone.
+firefly_language: es_ES
+firefly_timezone: Europe/Madrid
+
+# Resource limits (R46): memory, CPUs and processes of the container.
+# firefly_memory: 512m
+# firefly_cpus: "1"
+# firefly_pids_limit: 200
+
+# Time of its daily scheduled tasks (recurring transactions, budgets, bill warnings).
+# firefly_cron_time: "05:30"
+
+# The launcher in your menu (R47); false on a machine without a desktop.
+# firefly_launcher: true

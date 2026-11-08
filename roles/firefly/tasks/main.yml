@@ -1,0 +1,91 @@
+---
+# Firefly III (docs/services/firefly.md). Check what it needs, install and start it with
+# quadlet_deploy, then its daily scheduled tasks and the operator's launcher.
+
+- name: Check the settings
+  ansible.builtin.assert:
+    that:
+      - firefly_state in ['present', 'absent']
+      - firefly_image is match('^[^ ]+@sha256:[0-9a-f]{64}$')
+      - firefly_port | int >= 1024 and firefly_port | int <= 65535
+      - firefly_port | string is match('^[0-9]+$')
+      - firefly_language is match('^[a-z]{2}_[A-Z]{2}$')
+      - firefly_timezone is match('^[A-Za-z0-9_+/-]+$')
+      - firefly_log_level in ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency']
+      - firefly_memory is match('^[0-9]+[kmg]$')
+      - firefly_cpus | string is match('^[0-9]+(\.[0-9]+)?$')
+      - firefly_pids_limit | int > 0
+      - firefly_start_timeout | int > 0
+      - firefly_cron_time is match('^([01][0-9]|2[0-3]):[0-5][0-9]$')
+      - firefly_pg_instance is match('^[a-z0-9]+$')
+      - firefly_db_name is match('^[a-z][a-z0-9_]{0,30}$')
+      - firefly_db_user is match('^[a-z][a-z0-9_]{0,62}$')
+      - firefly_launcher_name is match('^[^\n=]+$')
+    fail_msg: >-
+      Firefly settings (roles/firefly/defaults/main.yml): firefly_image pinned by digest (D6);
+      firefly_port between 1024 and 65535; firefly_language like en_US; firefly_timezone like
+      Europe/Madrid; firefly_log_level one of Laravel's levels; firefly_memory like 512m;
+      firefly_cpus a number; firefly_pids_limit and firefly_start_timeout above 0;
+      firefly_cron_time as HH:MM; instance, database and user as in docs/POSTGRES.md, section 6.
+    quiet: true
+
+- name: Read the service user
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ service_user }}"
+
+- name: Set the paths and environment of the service user
+  ansible.builtin.set_fact:
+    firefly_service_home: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
+    firefly_env:
+      HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
+      XDG_CONFIG_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.config"
+      XDG_DATA_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.local/share"
+      XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+
+- name: Check what Firefly needs
+  ansible.builtin.include_tasks: checks.yml
+  when: firefly_state == 'present'
+
+# Before Firefly starts a new image, which changes the structure of its database, a
+# backup (docs/services/firefly.md, 4; D11).
+- name: Back up before an image change
+  ansible.builtin.include_tasks: backup_before_image_change.yml
+  when: firefly_state == 'present'
+
+# Absolute paths, resolved here: role_path passed lazily to quadlet_deploy would point
+# at quadlet_deploy itself.
+- name: Resolve the templates
+  ansible.builtin.set_fact:
+    firefly_units_resolved: >-
+      {{ ([] if ansible_loop.first else firefly_units_resolved)
+         + [{'name': item.name, 'template': role_path ~ '/templates/' ~ item.template}] }}
+  loop: "{{ firefly_quadlet_units }}"
+  loop_control:
+    extended: true
+    label: "{{ item.name }}"
+
+# The scheduled tasks go first when removing: their service needs Firefly's.
+- name: Remove the scheduled tasks
+  ansible.builtin.include_tasks: cron_remove.yml
+  when: firefly_state == 'absent'
+
+# The first start creates every table: up to 5 minutes before the healthcheck passes.
+- name: Deploy with quadlet_deploy
+  ansible.builtin.include_role:
+    name: quadlet_deploy
+  vars:
+    quadlet_deploy_units: "{{ firefly_units_resolved }}"
+    quadlet_deploy_images:
+      - "{{ firefly_image }}"
+    quadlet_deploy_wait_healthy:
+      - "{{ firefly_name }}"
+    quadlet_deploy_health_retries: 60
+    quadlet_deploy_state: "{{ firefly_state }}"
+
+- name: Install the scheduled tasks
+  ansible.builtin.include_tasks: cron.yml
+  when: firefly_state == 'present'
+
+- name: Install or remove the launcher
+  ansible.builtin.include_tasks: launcher.yml

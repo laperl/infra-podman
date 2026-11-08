@@ -1,0 +1,11 @@
+[Desktop Entry]
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Launcher in the operator's menu (R47): opens Firefly III in the default browser.
+Type=Application
+Version=1.5
+Name={{ firefly_launcher_name }}
+Comment=Firefly III ({{ infra_env }}), http://127.0.0.1:{{ firefly_port }}
+Exec=xdg-open http://127.0.0.1:{{ firefly_port }}
+Icon=applications-office
+Terminal=false
+Categories=Office;Finance;

@@ -1,0 +1,16 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Firefly's scheduled tasks (recurring transactions, automatic budgets, bill warnings),
+# run inside its container as the official command does. Started only by
+# {{ firefly_cron_name }}.timer: no [Install] section.
+[Unit]
+Description=Firefly III scheduled tasks ({{ infra_env }})
+Requires={{ firefly_name }}.service
+After={{ firefly_name }}.service
+
+[Service]
+Type=oneshot
+# The same wait as Firefly's own (SPEC 4.3): at boot the timer may fire before Firefly
+# has read its database.
+ExecStartPre=/bin/sh -c 'until podman healthcheck run {{ firefly_name }} >/dev/null 2>&1; do sleep 5; done'
+ExecStart=podman exec {{ firefly_name }} php /var/www/html/artisan firefly-iii:cron
+TimeoutStartSec=600

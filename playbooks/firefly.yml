@@ -1,0 +1,12 @@
+---
+# Phase 2: Firefly III on each machine of firefly_hosts (docs/services/firefly.md). Needs
+# the base playbook, postgres with the database and user of Firefly (docs/POSTGRES.md,
+# section 6) and the secrets firefly-app-key and pg-<instance>-firefly-password.
+#   ./deploy.sh plan firefly --env dev --limit <vm>
+# Remove keeping its data (database and attachments): -e firefly_state=absent (not through
+# deploy.sh yet).
+- name: Firefly III
+  hosts: firefly_hosts
+  gather_facts: false
+  roles:
+    - firefly

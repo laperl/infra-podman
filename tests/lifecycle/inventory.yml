@@ -32,3 +32,10 @@ all:
         postgres_instances:
           - name: main
             superuser: ci_admin  # fictitious
+    # Firefly III (playbook firefly): its database and user come from firefly-vars.yml.
+    firefly_hosts:
+      hosts:
+        localhost: {}
+      vars:
+        firefly_timezone: Europe/Madrid   # any valid zone; not UTC, to see it applied
+        firefly_start_timeout: 60         # the wait test takes this long; prod keeps 300

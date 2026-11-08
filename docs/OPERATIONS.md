@@ -15,6 +15,8 @@ El día a día: qué hay en marcha, cómo van las copias, cómo lanzar algo a ma
 | Contenedor | Máquina | Cómo corre | Quién lo lanza |
 | --- | --- | --- | --- |
 | `prod-pg-main` (Postgres) | Portátil | **Siempre** | systemd, al encender |
+| `prod-firefly` (Firefly III) | Portátil | **Siempre** | systemd, al encender, cuando Postgres está sano |
+| `prod-firefly-cron` (tareas de Firefly) | Portátil | No es un contenedor: lanza una orden dentro de `prod-firefly` | `prod-firefly-cron.timer`, cada día a las 05:30 |
 | `prod-backup` (copia diaria) | Portátil | **Duerme** y despierta un rato | `prod-backup.timer`, cada día a las 13:00 |
 | `prod-backup-copy` (envío al GX10) | Portátil | **Duerme** y despierta un rato | `prod-backup-copy.timer`, cada hora a y media |
 | `prod-backup-server` (recibe las copias) | GX10 | **Siempre** | systemd, al encender |
@@ -31,6 +33,16 @@ sudo ls ~svc_runner/.config/containers/systemd/ ~svc_runner/.config/systemd/user
 ```
 
 En el GX10, la primera orden muestra `prod-backup-server`.
+
+Firefly, en el portátil:
+
+<!-- test: deployed-firefly -->
+```bash
+svc podman ps --filter name=prod-firefly             # el contenedor, con (healthy)
+svc systemctl --user list-timers prod-firefly-cron.timer   # sus tareas: cuándo tocan (NEXT) y la última vez (LAST)
+```
+
+Se abre desde el menú (lanzador «Firefly III») o en el navegador, en `http://127.0.0.1:18001`.
 
 ## 2. Estado de los backups
 
@@ -111,6 +123,23 @@ grep -h '^result=' /var/lib/infra-podman/backup-status/prod-backup*.status
 | `healthcheck` | `sano` |
 | `podman port` | Nada: Postgres no publica ningún puerto |
 | `grep` | Dos líneas `result=ok`. `result=unreachable` en la segunda solo si el GX10 está apagado o fuera de Tailscale |
+
+**Firefly, en el portátil:**
+
+<!-- test: healthy-firefly -->
+```bash
+svc systemctl --user is-active prod-firefly.service prod-firefly-cron.timer
+svc podman healthcheck run prod-firefly && echo sano
+svc podman port prod-firefly
+curl -s http://127.0.0.1:18001/health; echo
+```
+
+| Orden | Lo que tiene que salir |
+| --- | --- |
+| `is-active` | Dos líneas `active`: Firefly en marcha y su temporizador esperando su hora |
+| `healthcheck` | `sano`: Firefly responde y lee su base |
+| `podman port` | Una sola línea, `8080/tcp -> 127.0.0.1:18001`: solo se llega desde el portátil |
+| `curl` | `OK` |
 
 Y el aviso de escritorio, en tu usuario: `systemctl --user is-active infra-podman-backup-notify.timer` → `active`.
 

@@ -331,6 +331,138 @@ jobs:
         if: failure()
         run: tests/lifecycle/diagnose.sh
 
+  firefly:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      INV: tests/lifecycle/inventory.yml
+      PG: -e @tests/lifecycle/firefly-vars.yml
+      CHECK: tests/lifecycle/check-firefly.sh
+      AS: tests/lifecycle/as-svc.sh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same reason as in the base job.
+      - name: Make the runner look like a normal server
+        run: sudo sed -i '/^XDG_/d' /etc/environment
+
+      # desktop-file-utils: desktop-file-validate, the freedesktop.org checker of the
+      # launcher (R47). Only on the runner.
+      - name: Install Podman 4.9 from Ubuntu 24.04, and desktop-file-utils
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq podman desktop-file-utils
+          podman --version | grep -Eq ' 4\.9\.' || { echo "Expected Podman 4.9"; exit 1; }
+
+      - name: Install pinned ansible-core
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --requirement scripts/requirements-lint.txt
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      # Random, thrown away with the runner. Never KeePassXC (SPEC 5.4).
+      - name: Service user, and PostgreSQL with the database and user of Firefly
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/base.yml > base.log
+          for s in superuser firefly firefly_ro demo_app; do
+            v=$(openssl rand -hex 24)
+            echo "::add-mask::$v"
+            echo "$v" >> "$RUNNER_TEMP/pw"
+            name=dev-pg-main-$s-password
+            [[ $s == superuser ]] && name=dev-pg-main-superuser-password
+            printf '%s' "$v" | $AS podman secret create "$name" -
+          done
+          tests/lifecycle/playbook.sh -i "$INV" $PG playbooks/postgres.yml 2>&1 | tee -a all.log
+
+      - name: Plan before the application key exists, expecting a clear refusal
+        run: |
+          if ansible-playbook -i "$INV" playbooks/firefly.yml --check > refusal.log 2>&1; then
+            echo "::error::firefly ran without its application key"; exit 1
+          fi
+          grep -q 'Missing Podman secrets on localhost: dev-firefly-app-key' refusal.log \
+            || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+
+      - name: An application key that is not 32 characters is refused
+        run: |
+          printf '%s' "$(openssl rand -hex 8)" | $AS podman secret create dev-firefly-app-key -
+          if ansible-playbook -i "$INV" playbooks/firefly.yml --check > refusal.log 2>&1; then
+            echo "::error::firefly accepted a key of 16 characters"; exit 1
+          fi
+          grep -q 'has 16 characters' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+          $AS podman secret rm dev-firefly-app-key >/dev/null
+
+      - name: Create the application key with a random value
+        run: |
+          v=$(openssl rand -hex 16)
+          echo "::add-mask::$v"
+          echo "$v" >> "$RUNNER_TEMP/pw"
+          printf '%s' "$v" | $AS podman secret create dev-firefly-app-key -
+
+      - name: Plan, apply, apply again (zero changes), plan again (zero changes)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/firefly.yml --check --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/firefly.yml --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/firefly.yml 2>&1 | tee second.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply changed something"; exit 1; }
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/firefly.yml --check 2>&1 | tee plan.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' plan.log || { echo "::error::the plan after apply shows changes"; exit 1; }
+
+      - name: Running, healthy, only on 127.0.0.1:18001
+        run: $CHECK running
+
+      - name: Hardened, with its limits, one network and the secrets as files
+        run: $CHECK standard
+
+      - name: Its tables in the schema firefly, owned by firefly_owner
+        run: $CHECK schema
+
+      - name: firefly_reader reads and cannot change anything (phases 4 and 5)
+        run: $CHECK reader
+
+      - name: No way out (internet, host, the network of demo)
+        run: $CHECK isolation
+
+      - name: The scheduled tasks run
+        run: $CHECK cron
+
+      - name: The launcher in the operator's menu (R47)
+        run: $CHECK launcher
+
+      - name: "Manual: deployed and healthy (docs/OPERATIONS.md, 1 and 4)"
+        run: tests/lifecycle/check-operations.sh firefly
+
+      - name: Only starts with PostgreSQL healthy, within its timeout (SPEC 4.3)
+        run: |
+          $CHECK marker write
+          $CHECK wait
+          $CHECK running
+
+      - name: Remove, keeping the database and the attachments (SPEC 4.2)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" -e firefly_state=absent playbooks/firefly.yml 2>&1 | tee -a all.log
+          $CHECK destroyed
+
+      - name: Deploy again on the kept data
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/firefly.yml 2>&1 | tee -a all.log
+          $CHECK running
+          $CHECK marker read
+
+      - name: The secrets never appear in the output or the journal (SPEC 4.5)
+        run: |
+          if grep -qF -f "$RUNNER_TEMP/pw" all.log; then echo "::error::a secret appears in the Ansible output"; exit 1; fi
+          if sudo journalctl --no-pager | grep -qF -f "$RUNNER_TEMP/pw"; then echo "::error::a secret appears in the journal"; exit 1; fi
+          echo "ok"
+
+      - name: Diagnose
+        if: failure()
+        run: |
+          tests/lifecycle/diagnose.sh
+          tests/lifecycle/as-svc.sh podman logs --tail 40 dev-firefly 2>&1 | sed 's/^/firefly: /' || true
+
   backup:
     runs-on: ubuntu-24.04
     timeout-minutes: 30

@@ -16,13 +16,13 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
 | Desde dónde | Solo desde el navegador del portátil (`127.0.0.1`). El móvil queda para más adelante (apartado 8) |
 | Cómo entran los datos | A mano y con extractos del banco en CSV. Sin conexión con el banco. El Data Importer de Firefly queda para más adelante (ROADMAP) |
 | Monedas | Euros y dólares. Los tipos de cambio se meten a mano, porque los automáticos van por internet |
-| Criptomonedas | Solo si es fácil y estándar: crearla como una moneda más (por ejemplo, `BTC`) y anotar los saldos a mano, sin cotizaciones automáticas. 🔍 Cuántos decimales admite Firefly (bitcoin usa 8) |
+| Criptomonedas | Solo si es fácil y estándar: crearla como una moneda más (por ejemplo, `BTC`) y anotar los saldos a mano, sin cotizaciones automáticas. Bitcoin cabe: cada moneda admite de 0 a 12 decimales y las cantidades se guardan con 12 (código de Firefly 6.7.9) |
 | Justificantes | Los ficheros que adjuntas a un movimiento (la foto de un ticket, el PDF de una factura). Firefly los guarda en un volumen propio, que entra en el backup (apartado 5) |
 
 ## 2. Red: sin salida a internet
 
 - **Firefly está en una red de Podman interna**, sin salida, cuyo único otro miembro es su Postgres: `prod-firefly-pg-main-net` ([SPEC](../SPEC.md) 4.4, 4.12). Ni internet, ni la red de casa, ni otros contenedores.
-- **Se llega a él solo desde el portátil**, por un puerto en `127.0.0.1`, publicado desde esa misma red interna. Elegido por el operador el 2026-11-07 frente a un proxy delante o una segunda red. Sin root funciona y el contenedor sigue sin salida (comprobado con Podman 4.9.3, [`COMPATIBILITY.md`](../COMPATIBILITY.md)); con root no funcionaría. 🔍 Se prueba en `lifecycle` y en el portátil, con Podman 5.
+- **Se llega a él solo desde el portátil**, por un puerto en `127.0.0.1`, publicado desde esa misma red interna. Elegido por el operador el 2026-11-07 frente a un proxy delante o una segunda red. Sin root funciona y el contenedor sigue sin salida (comprobado con Podman 4.9.3, [`COMPATIBILITY.md`](../COMPATIBILITY.md)); con root no funcionaría. Probado en `lifecycle` con Podman 4.9; 🔍 falta probarlo en el portátil, con Podman 5 y SELinux.
 - **Siempre en marcha**, como servicio de `svc_runner`, y se abre desde el menú de Sway con su lanzador (R47).
 - **Se prueba en `lifecycle`**, que comprueba que desde el contenedor de Firefly:
   - no se llega a una IP pública;
@@ -35,9 +35,11 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
   | `ENABLE_EXTERNAL_RATES=false` | Descargar tipos de cambio de un almacén en Azure del autor |
   | `ENABLE_EXTERNAL_MAP=false` | Cargar un mapa externo para ubicar movimientos |
   | `ALLOW_WEBHOOKS=false` | Enviar avisos a otras direcciones |
-  | Sin `MAIL_*` | Enviar correos, incluidos informes con movimientos |
+  | `MAIL_MAILER=log` y `SEND_ERROR_MESSAGE=false` | Enviar correos, también un informe por cada error (`SEND_ERROR_MESSAGE` viene en `true`) |
   | Sin `TRACKER_*` | Analítica (Matomo) |
-  | Comprobación de versiones, apagada en la administración 🔍 | Consultar GitHub. De las versiones nuevas ya avisa `image-updates` |
+  | Comprobación de versiones: **«No»** en la administración, tras instalar | Consultar GitHub. De las versiones nuevas ya avisa `image-updates` |
+
+  Las tres primeras ya no mandan en Firefly 6.7: solo dan el valor inicial, y el ajuste de verdad está en la administración (*Administration → Configuration*), guardado en la base. Al instalar se quedan apagadas; no las enciendas. La comprobación de contraseñas filtradas (casilla al cambiar la contraseña) consulta `api.pwnedpasswords.com`: con la red cerrada falla y Firefly sigue sin ella.
 
 ## 3. Seguridad
 
@@ -50,13 +52,13 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
   - `pg-main-firefly-password`: la contraseña de su usuario de Postgres (`firefly`).
 - **Contenedor endurecido**, como el resto:
   - sin root (`www-data`) y sin capacidades extra;
-  - con límites de memoria, CPU y procesos como variables (R46), con valores medidos en DEV, y healthcheck;
-  - imagen por digest, que existe para `linux/amd64` y `linux/arm64`.
-- **Logs sin datos financieros:** `APP_DEBUG=false` y nivel de log bajo. El registro de auditoría de Firefly, activo.
+  - con límites de memoria, CPU y procesos como variables (R46): 512 MB, 1 CPU y 200 procesos, 🔍 a confirmar midiendo en DEV; y healthcheck en `/health`, que solo responde `OK` si Firefly lee su base;
+  - imagen por digest; 🔍 falta confirmar que existe también para `linux/arm64` (hoy solo la usan máquinas `amd64`).
+- **Logs sin datos financieros:** `APP_DEBUG=false`, nivel `notice` y al journal de `svc_runner` (`LOG_CHANNEL=stdout`). El registro de auditoría, **apagado** (`AUDIT_LOG_LEVEL=emergency`, el valor por defecto): según Firefly, «puede contener información financiera sensible». Decidido por el operador el 2026-11-08.
 - **Postgres** (según [`POSTGRES.md`](../POSTGRES.md)):
   - una base `firefly` con su esquema `firefly` y sus grupos `firefly_owner`, `firefly_writer` y `firefly_reader` (R35, R36);
   - Firefly migra sola, así que usa un único usuario, `firefly`, en `firefly_owner` (`POSTGRES.md`, tabla de usuarios), con `consumer: firefly`;
-  - 🔍 que Firefly cree sus tablas en el esquema `firefly`: la base no tiene esquema `public`;
+  - sus tablas, en el esquema `firefly` (`PGSQL_SCHEMA=firefly`) y de `firefly_owner`: la base no tiene esquema `public` (probado en `lifecycle`);
   - `pg_hba` generado: cada usuario, solo en su base y solo desde la red de Firefly, cuya subred elige Podman (R45).
 
 ## 4. Actualizaciones

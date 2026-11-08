@@ -1,0 +1,92 @@
+---
+# Included by main.yml: everything Firefly needs, checked before anything changes, each
+# with what to do about it. Only reads.
+
+- name: Check that its PostgreSQL instance exists
+  ansible.builtin.command:
+    cmd: podman container exists {{ firefly_pg_name }}
+  environment: "{{ firefly_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: firefly_pg_exists
+  changed_when: false
+  failed_when: firefly_pg_exists.rc not in [0, 1]
+  check_mode: false
+
+- name: Check that its network exists (created by the postgres playbook)
+  ansible.builtin.command:
+    cmd: podman network exists {{ firefly_network }}
+  environment: "{{ firefly_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: firefly_net_exists
+  changed_when: false
+  failed_when: firefly_net_exists.rc not in [0, 1]
+  check_mode: false
+
+- name: Require the instance and the network
+  ansible.builtin.assert:
+    that:
+      - firefly_pg_exists.rc == 0
+      - firefly_net_exists.rc == 0
+    fail_msg: >-
+      Firefly needs the PostgreSQL instance {{ firefly_pg_name }} and the network
+      {{ firefly_network }} on {{ inventory_hostname }}
+      (found: instance {{ 'yes' if firefly_pg_exists.rc == 0 else 'no' }}, network
+      {{ 'yes' if firefly_net_exists.rc == 0 else 'no' }}). Declare in postgres_hosts.yml of
+      the data repository, in the instance {{ firefly_pg_instance }}, the database
+      {{ firefly_db_name }} with the user {{ firefly_db_user }} (group: owner, consumer: firefly),
+      and apply postgres first: ./deploy.sh apply postgres --env {{ infra_env }} --limit {{ inventory_hostname }}
+      (docs/POSTGRES.md, section 6).
+    quiet: true
+
+- name: Check that its secrets exist
+  ansible.builtin.command:
+    cmd: podman secret exists {{ item }}
+  loop:
+    - "{{ firefly_app_key_secret }}"
+    - "{{ firefly_db_secret }}"
+  environment: "{{ firefly_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: firefly_secrets
+  changed_when: false
+  failed_when: firefly_secrets.rc not in [0, 1]
+  check_mode: false
+
+- name: Require them (deploy.sh secrets creates them from KeePassXC)
+  ansible.builtin.assert:
+    that: firefly_missing | length == 0
+    fail_msg: >-
+      Missing Podman secrets on {{ inventory_hostname }}: {{ firefly_missing | join(', ') }}.
+      Declare them in infra_secrets ({{ firefly_app_key_secret_key }} in the group firefly_hosts,
+      {{ firefly_db_secret_key }} in postgres_hosts), with their KeePassXC entries
+      {{ infra_site | default('<infra_site>') }}/<name>, and create them:
+      ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
+    quiet: true
+  vars:
+    firefly_missing: >-
+      {{ firefly_secrets.results | rejectattr('rc', 'equalto', 0) | map(attribute='item') | list }}
+
+# Only its length is read, never its value.
+- name: Read the length of the application key
+  ansible.builtin.command:
+    argv: [podman, secret, inspect, --showsecret, --format, "{% raw %}{{len .SecretData}}{% endraw %}", "{{ firefly_app_key_secret }}"]
+  environment: "{{ firefly_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: firefly_app_key_length
+  changed_when: false
+  check_mode: false
+
+- name: Require exactly 32 characters (Firefly's APP_KEY)
+  ansible.builtin.assert:
+    that: firefly_app_key_length.stdout | trim == '32'
+    fail_msg: >-
+      The secret {{ firefly_app_key_secret }} has {{ firefly_app_key_length.stdout | trim }} characters,
+      and Firefly needs exactly 32 (letters and digits). Change the KeePassXC entry
+      {{ infra_site | default('<infra_site>') }}/{{ firefly_app_key_secret_key }} and rotate it:
+      ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }} --rotate {{ firefly_app_key_secret_key }}
+      Only before the first start: once Firefly has data, a new key loses its sessions and its
+      OAuth keys (docs/services/firefly.md).
+    quiet: true
