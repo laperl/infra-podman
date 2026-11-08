@@ -22,7 +22,8 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
 ## 2. Red: sin salida a internet
 
 - **Firefly está en una red de Podman interna**, sin salida, cuyo único otro miembro es su Postgres: `prod-firefly-pg-main-net` ([SPEC](../SPEC.md) 4.4, 4.12). Ni internet, ni la red de casa, ni otros contenedores.
-- **Se llega a él solo desde el portátil**, por un puerto en `127.0.0.1`. Cómo se publica un puerto sin dar salida a internet al contenedor se decide en el diseño 🔍 (una red interna no admite puertos publicados en Podman sin root).
+- **Se llega a él solo desde el portátil**, por un puerto en `127.0.0.1`, publicado desde esa misma red interna. Elegido por el operador el 2026-11-07 frente a un proxy delante o una segunda red. Sin root funciona y el contenedor sigue sin salida (comprobado con Podman 4.9.3, [`COMPATIBILITY.md`](../COMPATIBILITY.md)); con root no funcionaría. 🔍 Se prueba en `lifecycle` y en el portátil, con Podman 5.
+- **Siempre en marcha**, como servicio de `svc_runner`, y se abre desde el menú de Sway con su lanzador (R47).
 - **Se prueba en `lifecycle`**, que comprueba que desde el contenedor de Firefly:
   - no se llega a una IP pública;
   - no se resuelve un nombre de internet;
@@ -46,18 +47,17 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
   - sesiones con caducidad.
 - **Secretos** en KeePassXC, grupo de la instalación, pasados como secretos de Podman. Firefly lee del fichero las variables terminadas en `_FILE`:
   - `firefly-app-key`: `APP_KEY`, exactamente 32 caracteres. Si se pierde, se pierden las sesiones; va en KeePassXC como cualquier otro secreto;
-  - `firefly-cron-token`: `STATIC_CRON_TOKEN`, 32 caracteres;
   - `pg-main-firefly-password`: la contraseña de su usuario de Postgres (`firefly`).
 - **Contenedor endurecido**, como el resto:
   - sin root (`www-data`) y sin capacidades extra;
-  - con límites de memoria, CPU y procesos, y healthcheck;
+  - con límites de memoria, CPU y procesos como variables (R46), con valores medidos en DEV, y healthcheck;
   - imagen por digest, que existe para `linux/amd64` y `linux/arm64`.
 - **Logs sin datos financieros:** `APP_DEBUG=false` y nivel de log bajo. El registro de auditoría de Firefly, activo.
 - **Postgres** (según [`POSTGRES.md`](../POSTGRES.md)):
   - una base `firefly` con su esquema `firefly` y sus grupos `firefly_owner`, `firefly_writer` y `firefly_reader` (R35, R36);
-  - Firefly migra sola, así que usa un único usuario, `firefly`, en `firefly_owner` (`POSTGRES.md`, tabla de usuarios);
+  - Firefly migra sola, así que usa un único usuario, `firefly`, en `firefly_owner` (`POSTGRES.md`, tabla de usuarios), con `consumer: firefly`;
   - 🔍 que Firefly cree sus tablas en el esquema `firefly`: la base no tiene esquema `public`;
-  - `pg_hba` generado: cada usuario, solo en su base y solo desde la red de Firefly.
+  - `pg_hba` generado: cada usuario, solo en su base y solo desde la red de Firefly, cuya subred elige Podman (R45).
 
 ## 4. Actualizaciones
 
@@ -70,7 +70,7 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
   Nunca se actualiza sola.
 - **Antes de cambiar la imagen, una copia de la base**, como ya hace Postgres (`reason=pre-upgrade`). Una versión nueva cambia la estructura de la base al arrancar, y no se vuelve atrás solo con la imagen: volver atrás es restaurar la base más la imagen anterior.
 - **`image-updates` tiene que reconocer las etiquetas con versión de Firefly** 🔍 (si llevan prefijo, como `version-6.x.y`, hoy no las vería).
-- **Las tareas programadas de Firefly** (movimientos recurrentes, presupuestos automáticos y avisos de facturas), con un temporizador diario de `svc_runner` que lanza `php artisan firefly-iii:cron` dentro del contenedor. Sin red añadida.
+- **Las tareas programadas de Firefly** (movimientos recurrentes, presupuestos automáticos y avisos de facturas), con un temporizador diario de `svc_runner` que lanza `php artisan firefly-iii:cron` dentro del contenedor. Sin red añadida, y sin `STATIC_CRON_TOKEN`: según la [documentación de Firefly](https://docs.firefly-iii.org/how-to/firefly-iii/advanced/cron/), el token solo hace falta para lanzarlo por la web.
 
 ## 5. Copias y restauración
 

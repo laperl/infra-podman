@@ -1,0 +1,145 @@
+---
+# Included by main.yml before anything is deployed (docs/POSTGRES.md, section 7). Works out
+# what is no longer in the inventory and may be dropped, and stops before any change if:
+#   - every database would go (databases: missing or empty) without -e postgres_confirm_drop;
+#   - someone is connected to a database or as a user that would be dropped;
+#   - a database would be dropped and the backup before it fails (backup_now.yml).
+# Only what carries postgres_managed_mark is ever dropped; anything else not in the inventory
+# is only reported. drop.yml, after the deploy, drops exactly what this file approved.
+
+- name: Nothing approved for dropping yet
+  ansible.builtin.set_fact:
+    postgres_drop_dbs: []
+    postgres_drop_users: []
+    postgres_drop_groups: []
+    postgres_unmanaged: []
+
+- name: Read whether the instance is running
+  ansible.builtin.command:
+    argv: [podman, container, inspect, --format, "{% raw %}{{.State.Running}}{% endraw %}", "{{ postgres_name }}"]
+  environment: "{{ postgres_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: postgres_running
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# Not running (first deploy, or stopped): nothing can be read, so nothing is dropped now;
+# the next apply will.
+- name: Work out what to drop
+  when: postgres_running.rc == 0 and postgres_running.stdout == 'true'
+  vars:
+    postgres_psql_read: >-
+      {{ ['podman', 'exec', postgres_name, 'psql', '-X', '-q', '-t', '-A', '-v', 'ON_ERROR_STOP=1',
+          '-U', postgres_superuser, '-d', 'postgres', '-c'] }}
+  block:
+    # kind|name|carries the mark|can log in
+    - name: Read the databases and roles of the instance
+      ansible.builtin.command:
+        argv: >-
+          {{ postgres_psql_read + ["SELECT 'db|' || datname || '|' || (coalesce(shobj_description(oid, 'pg_database'), '') = '"
+             ~ postgres_managed_mark ~ "') || '|false' FROM pg_database WHERE datname NOT IN ('postgres', 'template0', 'template1')
+             UNION ALL SELECT 'role|' || rolname || '|' || (coalesce(shobj_description(oid, 'pg_authid'), '') = '"
+             ~ postgres_managed_mark ~ "') || '|' || rolcanlogin FROM pg_roles
+             WHERE rolname !~ '^pg_' AND rolname NOT IN ('" ~ postgres_superuser ~ "', 'backup') ORDER BY 1"] }}
+      environment: "{{ postgres_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      register: postgres_catalog
+      changed_when: false
+      check_mode: false
+
+    - name: Compare them with the inventory
+      ansible.builtin.set_fact:
+        postgres_drop_dbs: >-
+          {{ postgres_rows | selectattr('0', 'equalto', 'db') | selectattr('2', 'equalto', 'true')
+             | map(attribute='1') | reject('in', postgres_databases | map(attribute='name')) | list }}
+        postgres_drop_users: >-
+          {{ postgres_rows | selectattr('0', 'equalto', 'role') | selectattr('2', 'equalto', 'true')
+             | selectattr('3', 'equalto', 'true') | map(attribute='1') | reject('in', postgres_user_names) | list }}
+        postgres_drop_groups: >-
+          {{ postgres_rows | selectattr('0', 'equalto', 'role') | selectattr('2', 'equalto', 'true')
+             | selectattr('3', 'equalto', 'false') | map(attribute='1') | reject('in', postgres_group_names) | list }}
+        postgres_unmanaged: >-
+          {{ postgres_rows | selectattr('2', 'equalto', 'false')
+             | rejectattr('1', 'in', postgres_databases | map(attribute='name') | list + postgres_managed_roles)
+             | map('join', ' ') | map('regex_replace', '^(db|role) (\S+) .*$', '\1 \2') | list }}
+      vars:
+        postgres_rows: "{{ postgres_catalog.stdout_lines | map('split', '|') | list }}"
+
+    - name: Show what would be dropped
+      ansible.builtin.debug:
+        msg:
+          - "{{ postgres_name }}: no longer in the inventory, will be DROPPED (docs/POSTGRES.md, section 7)"
+          - "databases (a backup is made first): {{ postgres_drop_dbs | join(', ') or '-' }}"
+          - "users: {{ postgres_drop_users | join(', ') or '-' }}"
+          - "groups: {{ postgres_drop_groups | join(', ') or '-' }}"
+      when: (postgres_drop_dbs + postgres_drop_users + postgres_drop_groups) | length > 0
+
+    - name: Require confirmation to drop every database
+      ansible.builtin.assert:
+        that: postgres_confirm_drop == postgres_instance
+        fail_msg: >-
+          {{ postgres_name }} has no databases: in the inventory, so these databases would be
+          dropped: {{ postgres_drop_dbs | join(', ') }}. Nothing has been changed. If that is what
+          you want: ./deploy.sh apply postgres --limit {{ inventory_hostname }} --confirm-drop
+          {{ postgres_instance }} (docs/POSTGRES.md, section 7).
+        quiet: true
+      when: postgres_databases | length == 0 and postgres_drop_dbs | length > 0 and not ansible_check_mode
+
+    - name: Say that the apply needs confirmation
+      ansible.builtin.debug:
+        msg: "{{ postgres_name }} has no databases: in the inventory: the apply will stop unless run with --confirm-drop {{ postgres_instance }}."
+      when: postgres_databases | length == 0 and postgres_drop_dbs | length > 0 and ansible_check_mode
+
+    - name: Read who is connected to what would be dropped
+      ansible.builtin.command:
+        argv: >-
+          {{ postgres_psql_read + ["SELECT DISTINCT coalesce(usename, '') || '|' || coalesce(datname, '')
+             FROM pg_stat_activity WHERE pid <> pg_backend_pid()
+             AND (datname = ANY (ARRAY['" ~ (postgres_drop_dbs | join("', '")) ~ "']::name[])
+             OR usename = ANY (ARRAY['" ~ (postgres_drop_users | join("', '")) ~ "']::name[]))"] }}
+      environment: "{{ postgres_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      register: postgres_connected
+      changed_when: false
+      check_mode: false
+      when: (postgres_drop_dbs + postgres_drop_users) | length > 0
+
+    # PostgreSQL drops a role with open sessions (they go on) and refuses to drop a database
+    # with connections unless forced (DROP ROLE, DROP DATABASE): the operator decides.
+    - name: Require nobody connected to what would be dropped
+      ansible.builtin.assert:
+        that: postgres_connected.stdout_lines | length == 0
+        fail_msg: >-
+          Still connected to what would be dropped from {{ postgres_name }} (user|database):
+          {{ postgres_connected.stdout_lines | join(', ') }}. Nothing has been changed. Stop the
+          application that uses it and apply again (docs/POSTGRES.md, section 7).
+        quiet: true
+      when: postgres_connected.stdout_lines is defined and not ansible_check_mode
+
+    - name: Say who is connected (the apply would stop here)
+      ansible.builtin.debug:
+        msg: "Still connected (user|database): {{ postgres_connected.stdout_lines | join(', ') }}. The apply will stop until the application is stopped."
+      when: postgres_connected.stdout_lines is defined and postgres_connected.stdout_lines | length > 0 and ansible_check_mode
+
+    - name: Back up before dropping a database
+      ansible.builtin.include_tasks: backup_now.yml
+      when: postgres_drop_dbs | length > 0
+      vars:
+        postgres_backup_reason: pre-drop
+        postgres_backup_missing_msg: >-
+          {{ postgres_name }} would drop the databases {{ postgres_drop_dbs | join(', ') }}, and there
+          is no backup service on {{ inventory_hostname }} to make a copy first. Nothing has been
+          changed. Apply the backup playbook before.
+        postgres_backup_plan_msg: "{{ postgres_name }} drops databases: apply will run {{ infra_env }}-backup.service first."
+        postgres_backup_failed_msg: >-
+          The backup before dropping {{ postgres_drop_dbs | join(', ') }} from {{ postgres_name }}
+          failed, so nothing has been dropped.
+
+- name: Report what is not in the inventory and was not created by this role (never touched)
+  ansible.builtin.debug:
+    msg: "{{ postgres_name }}: not in the inventory and not created by Ansible, left as it is: {{ postgres_unmanaged | join(', ') }}"
+  when: postgres_unmanaged | length > 0

@@ -156,16 +156,29 @@
       changed_when: true
       when: postgres_template1_public.stdout != '0'
 
+    # The databases, groups and users of the applications (docs/POSTGRES.md, section 2).
+    - name: Converge the application databases
+      ansible.builtin.include_tasks: apps.yml
+      when: postgres_databases | length > 0
+
+    # What drop_check.yml approved before the deploy (docs/POSTGRES.md, section 7).
+    - name: Drop what is no longer in the inventory
+      ansible.builtin.include_tasks: drop.yml
+
+    # Now every consumer network exists: the start has just created any new one.
+    - name: Write pg_hba.conf with the subnets of new networks
+      ansible.builtin.include_tasks: hba.yml
+
     # Not a handler: it has to run here, after the container is up and healthy, and the
     # handlers of quadlet_deploy are flushed earlier, inside its include.
-    - name: Reload pg_hba.conf  # noqa: no-handler
+    - name: Reload pg_hba.conf
       ansible.builtin.command:
         argv: "{{ postgres_psql + ['-d', 'postgres', '-c', 'SELECT pg_reload_conf()'] }}"
       environment: "{{ postgres_env }}"
       become: true
       become_user: "{{ service_user }}"
       changed_when: true
-      when: postgres_hba is changed
+      when: postgres_hba_changed
 
     - name: Check that PostgreSQL accepts every line of pg_hba.conf
       ansible.builtin.command:
@@ -181,3 +194,13 @@
       changed_when: false
       failed_when: postgres_hba_errors.rc != 0 or postgres_hba_errors.stdout != 'ok'
       check_mode: false
+
+    # Groups are always <database>_owner, _writer and _reader (docs/POSTGRES.md, section 2).
+    - name: Summary of the databases, groups and users
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.name }}: groups {{ item.name }}_owner, {{ item.name }}_writer, {{ item.name }}_reader;
+          users {% for u in item.users or [] %}{{ u.name }} ({{ u.group }}, from {{ u.consumer }}){{ ', ' if not loop.last }}{% else %}none{% endfor %}
+      loop: "{{ postgres_databases }}"
+      loop_control:
+        label: "{{ item.name }}"

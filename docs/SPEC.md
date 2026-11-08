@@ -117,7 +117,7 @@ Esta sección debe copiarse a `docs/COMPATIBILITY.md`.
 
 ### 4.4 Redes y Postgres
 
-- Una red por consumidor de Postgres (por ejemplo `firefly-pg-net`), con `Options=isolate=true` y subred fija declarada en el `.network`.
+- Una red por consumidor de Postgres, `<entorno>-<consumidor>-pg-<instancia>-net` (por ejemplo `prod-firefly-pg-main-net`), **interna** (`Internal=true`: sin salida a internet, a la red de casa ni al host; y `DNS=127.0.0.1`, para que tampoco salgan consultas de DNS) y con `Options=isolate=true`. **Sin subred fija:** la elige Podman, sin solaparse con sus otras redes, y Ansible la lee para `pg_hba.conf` (R45). Los consumidores llegan a Postgres por su nombre de contenedor.
 - El contenedor de Postgres se une a todas esas redes. Los consumidores no se ven entre sí.
 - Con varias instancias en la misma máquina, cada red de consumidor se une solo a la instancia que usa ese consumidor. No hay una red común para todos los Postgres.
 - En Postgres, el modelo de [`POSTGRES.md`](POSTGRES.md): una base y tres grupos por aplicación y usuarios a demanda. En `pg_hba.conf`, generado desde el inventario, cada usuario solo se admite en su base y desde la subred de su red. El superusuario y `backup` nunca entran por TCP, salvo el superusuario desde la red de pgAdmin (R37).
@@ -134,7 +134,7 @@ Esta sección debe copiarse a `docs/COMPATIBILITY.md`.
 - **El lookup va siempre en los argumentos de la tarea, nunca en `loop:`.** Comprobado en la fase 0 (`tests/ee/`): con `when:` falso, Ansible no evalúa el lookup de los argumentos, pero `loop:` se evalúa antes que `when:` y el lookup se ejecutaría igualmente.
 - **Entrega:** como fichero (`Secret=nombre,type=mount,target=/ruta,mode=0400`). Para Postgres, `POSTGRES_PASSWORD_FILE`. Variables de entorno solo si la aplicación no admite fichero.
 - **Riesgo residual conocido:** Podman guarda los secretos en el disco del servidor sin cifrar, porque es el único driver disponible.
-- **Rotación en Postgres:** primero `ALTER ROLE` en la base, después actualizar el secreto con `force` y por último reiniciar los consumidores. Cambiar solo el secreto no cambia la contraseña guardada.
+- **Rotación en Postgres:** para el superusuario, primero `ALTER ROLE` en la base y después el secreto, porque su secreto solo se lee al crear la base. Para los usuarios de las aplicaciones, primero el secreto (`--rotate`), después `apply postgres`, que fija la contraseña desde el secreto (R45), y por último reiniciar el consumidor.
 - **Inventario:** `docs/SECRETS_INVENTORY.md` con nombre, ruta en KeePassXC, consumidores y política de rotación. Nunca valores.
 
 ### 4.6 Cortafuegos
@@ -164,6 +164,7 @@ Para OpenClaw, SearXNG y el servicio de audio: `NoNewPrivileges=true`, `DropCapa
 - `deploy.sh plan <playbook> [--env dev|prod] [--limit]`: ejecuta `--check --diff` y muestra el plan.
 - `deploy.sh apply <playbook> [--env dev|prod] [--limit]`: aplica. Lo lanza solo el operador, también en DEV.
 - `deploy.sh secrets [--env dev|prod] [--rotate nombre]`: pide la contraseña de KeePassXC y crea o rota secretos. Con `dev` usa `infra-dev.kdbx`.
+- Solo con `apply postgres`: `--confirm-drop <instancia>` confirma que se borran todas sus bases, y `--retire <instancia>` la retira conservando sus datos ([`POSTGRES.md`](POSTGRES.md), sección 7). Quedan en el registro, junto al playbook.
 - `--env` vale `prod` por defecto. Con `prod`, antes de `plan` o `apply` comprueba que el checkout es un **tag firmado** válido (`git verify-tag`). Con `dev` se despliega desde la rama del PR, sin tag.
 - `secrets --env prod` también exige el tag firmado: el playbook que se ejecuta recibe la contraseña maestra.
 - `apply --env prod` pide además escribir `prod` en un terminal interactivo. Sin terminal, se rechaza.
@@ -229,6 +230,11 @@ Desde la fase 1c (R38):
 - Claude nunca ve el repo de datos.
 - **Estructura:** la de [`inventory.example/`](../inventory.example/README.md), dentro de una carpeta `inventory/`. Un repo de datos por proyecto: la carpeta `ansible/` del operador puede tener otros.
 - `deploy.sh` exige que `data_repo` sea la raíz de su propio repo git y que ninguno de los dos repos contenga al otro. En DEV acepta datos sin commit; en prod, no (R40).
+
+### 4.14 Límites de recursos y aplicaciones de escritorio
+
+- **Límites en todo contenedor (R46):** memoria (`--memory`), procesador (`--cpus`) y número de procesos (`PidsLimit=`), siempre como **variables del rol** con un valor por defecto prudente, que se cambian en el inventario. En Podman 4.9 la memoria y el procesador van en `PodmanArgs=`, porque Quadlet no tiene clave propia ([`COMPATIBILITY.md`](COMPATIBILITY.md)). Los valores salen de medir en DEV. Lo cumplen los contenedores nuevos desde el primero; los que ya existían lo completan en su siguiente PR.
+- **Lanzador en el menú (R47):** cada aplicación que el operador abre desde el escritorio tiene un lanzador `.desktop` que Ansible instala en la cuenta del operador (`~/.local/share/applications`), como el aviso de los backups. Su nombre y su dirección son datos del inventario.
 
 ## 5. CI/CD, firma y flujo de cambios
 
@@ -309,7 +315,7 @@ Son supuestos razonables pero no comprobados. Si alguno falla, detente y propón
 | 1 | Que ansible-navigator permite pedir la contraseña de sudo (`--ask-become-pass`) con la configuración del repo. **Comprobado en el código** de ansible-navigator 26.10.0 y ansible-runner 2.4.3: en `mode: stdout` el terminal pasa al contenedor (`--interactive`, y `--tty` si la entrada y la salida son un terminal) (R24). **Comprobado:** `deploy.sh` la pide en cada `plan` y `apply`, en el portátil, el GX10 y DEV, desde `v0.1.0` (2026-11-03) |
 | 1 | Que la imagen oficial de rest-server incluye `linux/arm64`. **Comprobado** el 2026-11-03 por el operador (0.14.0: amd64, arm64 y otras). Cómo se expone: con `tailscale serve` (R25), que Ansible ejecuta con sudo. Los certificados HTTPS ya están activados en la red del operador (sirve una página con `tailscale serve`, 2026-11-05). **Comprobado** en el GX10 (Tailscale 1.104.4) el 2026-11-05: `--tcp` no pide nada más y Ansible lee bien `tailscale serve status --json` (R44) |
 | 1 | Que `pgvector/pgvector:pg18` admite `initdb --locale-provider=builtin --builtin-locale=C.UTF-8`, deja los checksums de datos activados y arranca con el endurecimiento de [`POSTGRES.md`](POSTGRES.md) en Podman 4.9 (R34). **Comprobado** el 2026-11-03 en `lifecycle` (fase 1d): `b\|C.UTF-8\|UTF8`, checksums `on`, UTC, solo cinco capacidades y sistema de ficheros de solo lectura |
-| 2 | Que `ALTER ROLE … SET role = <app>_owner` hace que lo creado por un usuario de `_owner` quede a nombre del grupo, y que `_reader` no puede modificar datos (R35, R36) |
+| 2 | Que `ALTER ROLE … SET role = <app>_owner` hace que lo creado por un usuario de `_owner` quede a nombre del grupo, y que `_reader` no puede modificar datos (R35, R36). **Comprobado** el 2026-11-07 en `lifecycle` con PostgreSQL 18.6 y pgvector 0.8.7 (`tests/lifecycle/check-postgres-apps.sh access`): el usuario entra como `<app>_owner`, lo que crea es de `<app>_owner`, y `_reader` no puede insertar, modificar, borrar, vaciar, usar secuencias, crear tablas ni ejecutar una función `SECURITY DEFINER` |
 | 2 | Que el patrón de espera con `ExecStartPre` funciona en 4.9 y respeta `TimeoutStartSec` |
 | 3 | Cómo se instala `prometheus-podman-exporter` en Ubuntu 24.04 ARM64 (paquete o binario) |
 | 5 | Que una regla nftables por usuario captura el tráfico de salida de slirp4netns, y qué excepciones de DNS hacen falta (incluido el DNS de Tailscale, 100.100.100.100) |

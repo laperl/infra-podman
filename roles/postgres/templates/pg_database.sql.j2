@@ -1,0 +1,98 @@
+{# One application database (docs/POSTGRES.md, section 2), run connected to it as the
+   superuser, after pg_roles.sql. Same pattern: idempotent statements and a picture of the
+   catalogs before and after. postgres_db is one item of postgres_databases. #}
+{% set db = postgres_db.name %}
+{% macro state() -%}
+SELECT 'database' AS area, datname || ' ' || pg_get_userbyid(datdba) || ' ' || coalesce(datacl::text, '')
+       || ' ' || coalesce(shobj_description(oid, 'pg_database'), '') AS item
+  FROM pg_database WHERE datname = current_database()
+UNION ALL
+SELECT 'setting', r.rolname || ' ' || array_to_string(s.setconfig, ',')
+  FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
+  WHERE s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database())
+UNION ALL
+SELECT 'schema', nspname || ' ' || pg_get_userbyid(nspowner) || ' ' || coalesce(nspacl::text, '')
+  FROM pg_namespace WHERE nspname = '{{ db }}'
+UNION ALL
+SELECT 'extension', e.extname || ' ' || n.nspname
+  FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace WHERE e.extname = 'vector'
+UNION ALL
+SELECT 'relation', c.relname || ' ' || coalesce(c.relacl::text, '')
+  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = '{{ db }}' AND c.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+UNION ALL
+SELECT 'routine', p.oid::regprocedure::text || ' ' || coalesce(p.proacl::text, '')
+  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = '{{ db }}'
+UNION ALL
+SELECT 'default', pg_get_userbyid(d.defaclrole) || ' ' || coalesce(n.nspname, '*') || ' '
+       || d.defaclobjtype::text || ' ' || d.defaclacl::text
+  FROM pg_default_acl d LEFT JOIN pg_namespace n ON n.oid = d.defaclnamespace
+{%- endmacro %}
+\set ON_ERROR_STOP 1
+SET client_min_messages = warning;
+BEGIN;
+CREATE TEMP TABLE infra_before ON COMMIT DROP AS {{ state() }};
+
+-- Owner, the mark (the role only ever drops databases with it), and who may connect: the
+-- three groups (and so their users) and backup.
+ALTER DATABASE "{{ db }}" OWNER TO "{{ db }}_owner";
+COMMENT ON DATABASE "{{ db }}" IS '{{ postgres_managed_mark }}';
+REVOKE CONNECT, TEMPORARY ON DATABASE "{{ db }}" FROM PUBLIC;
+GRANT CONNECT ON DATABASE "{{ db }}" TO "{{ db }}_owner", "{{ db }}_writer", "{{ db }}_reader", backup;
+
+-- Each user works in the schema of its application; those of _owner, as _owner (R35).
+{% for user in postgres_db.users or [] %}
+ALTER ROLE "{{ user.name }}" IN DATABASE "{{ db }}" SET search_path = "{{ db }}";
+{% if user.group == 'owner' %}
+ALTER ROLE "{{ user.name }}" IN DATABASE "{{ db }}" SET role = "{{ db }}_owner";
+{% else %}
+ALTER ROLE "{{ user.name }}" IN DATABASE "{{ db }}" RESET role;
+{% endif %}
+{% endfor %}
+
+-- The schema of the application, with vector, and nothing for PUBLIC.
+CREATE SCHEMA IF NOT EXISTS "{{ db }}" AUTHORIZATION "{{ db }}_owner";
+ALTER SCHEMA "{{ db }}" OWNER TO "{{ db }}_owner";
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_extension WHERE extname = 'vector') THEN
+    CREATE EXTENSION vector SCHEMA "{{ db }}";
+  END IF;
+END $$;
+REVOKE ALL ON SCHEMA "{{ db }}" FROM PUBLIC;
+GRANT USAGE ON SCHEMA "{{ db }}" TO "{{ db }}_writer", "{{ db }}_reader";
+
+-- What _owner creates from now on (docs/POSTGRES.md, «Permisos»). EXECUTE is taken from
+-- PUBLIC for the whole database: per schema, default privileges can only add (R36).
+ALTER DEFAULT PRIVILEGES FOR ROLE "{{ db }}_owner" IN SCHEMA "{{ db }}"
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{{ db }}_writer";
+ALTER DEFAULT PRIVILEGES FOR ROLE "{{ db }}_owner" IN SCHEMA "{{ db }}"
+  GRANT SELECT ON TABLES TO "{{ db }}_reader";
+ALTER DEFAULT PRIVILEGES FOR ROLE "{{ db }}_owner" IN SCHEMA "{{ db }}"
+  GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO "{{ db }}_writer";
+ALTER DEFAULT PRIVILEGES FOR ROLE "{{ db }}_owner" IN SCHEMA "{{ db }}"
+  GRANT EXECUTE ON ROUTINES TO "{{ db }}_writer";
+ALTER DEFAULT PRIVILEGES FOR ROLE "{{ db }}_owner" REVOKE EXECUTE ON ROUTINES FROM PUBLIC;
+
+-- What already exists, whoever created it: the same permissions. The routines of the
+-- extension (vector) keep theirs.
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "{{ db }}" TO "{{ db }}_writer";
+GRANT SELECT ON ALL TABLES IN SCHEMA "{{ db }}" TO "{{ db }}_reader";
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA "{{ db }}" TO "{{ db }}_writer";
+DO $$
+DECLARE r regprocedure;
+BEGIN
+  FOR r IN SELECT p.oid::regprocedure FROM pg_proc p
+           WHERE p.pronamespace = '"{{ db }}"'::regnamespace
+             AND NOT EXISTS (SELECT FROM pg_depend d WHERE d.classid = 'pg_proc'::regclass
+                             AND d.objid = p.oid AND d.deptype = 'e')
+  LOOP
+    EXECUTE format('REVOKE EXECUTE ON ROUTINE %s FROM PUBLIC', r);
+    EXECUTE format('GRANT EXECUTE ON ROUTINE %s TO %I', r, '{{ db }}_writer');
+  END LOOP;
+END $$;
+
+SELECT 'changed|' || area || '|' || item FROM (
+  (SELECT * FROM ({{ state() }}) s EXCEPT SELECT * FROM infra_before)
+  UNION (SELECT * FROM infra_before EXCEPT SELECT * FROM ({{ state() }}) s)
+) d ORDER BY 1;
+{{ 'ROLLBACK' if ansible_check_mode else 'COMMIT' }};

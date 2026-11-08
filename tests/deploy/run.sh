@@ -132,6 +132,20 @@ if tail -1 "$log" | cut -f6 | grep -q '^data@[0-9a-f]*$'; then pass "the log rec
 expect ok "dev apply runs without --check" apply check --env dev --limit example-vm
 called_with "dev apply passes --diff, --ask-become-pass and --limit, not --check" \
   "^navigator run playbooks/check.yml -i $data/inventory/dev/hosts.yml -- --diff --ask-become-pass --limit example-vm\$"
+# --- --confirm-drop and --retire: only apply postgres (docs/POSTGRES.md, section 7) -----
+expect ok "apply postgres --confirm-drop passes the confirmation" apply postgres --env dev --confirm-drop main
+called_with "--confirm-drop becomes -e postgres_confirm_drop" \
+  "^navigator run playbooks/postgres.yml -i $data/inventory/dev/hosts.yml -- --diff --ask-become-pass -e postgres_confirm_drop=main\$"
+if tail -1 "$log" | cut -f4 | grep -qx 'postgres --confirm-drop main'; then pass "the log records --confirm-drop"; else fail "the log records --confirm-drop"; fi
+expect ok "apply postgres --retire passes the instance" apply postgres --env dev --limit example-vm --retire main
+called_with "--retire becomes -e postgres_retire" \
+  "^navigator run playbooks/postgres.yml -i $data/inventory/dev/hosts.yml -- --diff --ask-become-pass --limit example-vm -e postgres_retire=main\$"
+expect refused "--confirm-drop is refused with plan" plan postgres --env dev --confirm-drop main
+expect refused "--retire is refused with another playbook" apply check --env dev --retire main
+expect refused "--confirm-drop and --retire do not go together" apply postgres --env dev --confirm-drop main --retire main
+expect refused "an invalid instance name is refused" apply postgres --env dev --retire 'main;x'
+expect refused "--retire without a name is refused" apply postgres --env dev --retire
+
 touch "$data/scratch"
 expect ok "dev accepts unsigned and uncommitted data" plan check --env dev
 if tail -1 "$log" | cut -f6 | grep -q '+dirty$'; then pass "the log marks dirty data"; else fail "the log marks dirty data"; fi

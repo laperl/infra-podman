@@ -1,0 +1,98 @@
+---
+# Included by setup.yml (inside its block, with postgres_psql): the databases, groups and
+# users of the applications, as declared in postgres_databases (docs/POSTGRES.md, 2 and 4).
+# Each step reports what changed; a second apply gives zero changes. In a plan the SQL runs
+# and is rolled back, so the plan shows what would change. What is no longer in the
+# inventory is dropped by drop_check.yml and drop.yml (docs/POSTGRES.md, section 7).
+
+# 1. Groups and users, in the database postgres.
+- name: Converge the groups and users
+  ansible.builtin.command:
+    argv: "{{ postgres_psql + ['-d', 'postgres', '-f', '-'] }}"
+    stdin: "{{ lookup('ansible.builtin.template', 'pg_roles.sql.j2') }}"
+  environment: "{{ postgres_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: postgres_roles_sql
+  changed_when: postgres_roles_sql.stdout_lines | select('match', '^changed[|]') | list | length > 0
+  check_mode: false
+
+- name: Show what changed in the groups and users
+  ansible.builtin.debug:
+    msg: "{{ postgres_roles_sql.stdout_lines | select('match', '^changed[|]') | list }}"
+  when: postgres_roles_sql is changed  # noqa: no-handler
+
+# 2. The databases. CREATE DATABASE cannot run inside a transaction: one statement each.
+- name: Read which databases exist
+  ansible.builtin.command:
+    argv: "{{ postgres_psql + ['-d', 'postgres', '-c', 'SELECT datname FROM pg_database'] }}"
+  environment: "{{ postgres_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: postgres_existing_dbs
+  changed_when: false
+  check_mode: false
+
+- name: Create the missing databases
+  ansible.builtin.command:
+    argv: "{{ postgres_psql + ['-d', 'postgres', '-c', 'CREATE DATABASE \"' ~ item ~ '\" OWNER \"' ~ item ~ '_owner\"'] }}"
+  loop: "{{ postgres_databases | map(attribute='name') | reject('in', postgres_existing_dbs.stdout_lines) | list }}"
+  environment: "{{ postgres_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  changed_when: true
+
+# 3. Inside each database: owner, connect, schema, vector, permissions, user settings.
+#    In a plan, a database that does not exist yet has nothing to compare.
+- name: Converge each database
+  ansible.builtin.command:
+    argv: "{{ postgres_psql + ['-d', postgres_db.name, '-f', '-'] }}"
+    stdin: "{{ lookup('ansible.builtin.template', 'pg_database.sql.j2') }}"
+  loop: "{{ postgres_databases }}"
+  loop_control:
+    loop_var: postgres_db
+    label: "{{ postgres_db.name }}"
+  environment: "{{ postgres_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: postgres_db_sql
+  changed_when: postgres_db_sql.stdout_lines | select('match', '^changed[|]') | list | length > 0
+  check_mode: false
+  when: not ansible_check_mode or postgres_db.name in postgres_existing_dbs.stdout_lines
+
+- name: Show what changed inside the databases
+  ansible.builtin.debug:
+    msg: "{{ item.postgres_db.name }}: {{ item.stdout_lines | select('match', '^changed[|]') | list }}"
+  loop: "{{ postgres_db_sql.results | selectattr('changed', 'defined') | selectattr('changed') | list }}"
+  loop_control:
+    label: "{{ item.postgres_db.name }}"
+
+# 4. Passwords, from the Podman secret of each user. Computed as SCRAM on the server, so
+#    PostgreSQL never receives them in clear text (files/pg_passwords.py).
+- name: Set the passwords from the Podman secrets
+  ansible.builtin.script:
+    cmd: >-
+      pg_passwords.py --container {{ postgres_name }} --superuser {{ postgres_superuser }}
+      --users {{ postgres_password_users | to_json | quote }}
+      {{ '--check' if ansible_check_mode else '' }}
+    executable: python3
+    # Podman cannot run from a directory the service user cannot enter (the playbook's).
+    chdir: "{{ postgres_service_home }}"
+  vars:
+    postgres_password_users: >-
+      {{ postgres_user_names | map('regex_replace', '^(.*)$',
+           '{"role": "\1", "secret": "' ~ infra_env ~ '-pg-' ~ postgres_instance ~ '-\1-password"}')
+         | map('from_json') | list }}
+  environment: "{{ postgres_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: postgres_passwords
+  changed_when: (postgres_passwords.stdout | from_json).changed | default([]) | length > 0
+  failed_when: postgres_passwords.rc != 0
+  check_mode: false
+  when: postgres_user_names | length > 0
+
+- name: Show whose password changed
+  ansible.builtin.debug:
+    msg: "Password set from its secret: {{ (postgres_passwords.stdout | from_json).changed | join(', ') }}"
+  when: postgres_passwords is changed  # noqa: no-handler

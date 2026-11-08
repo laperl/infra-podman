@@ -1,0 +1,11 @@
+---
+# postgres job, after apps-step3.yml: demo2 is removed. This job has no backup service, so
+# the apply must refuse to drop it. Fictitious names only.
+postgres_instances:
+  - name: main
+    superuser: ci_admin
+    databases:
+      - name: demo
+        users:
+          - {name: demo_app, group: owner, consumer: demo}
+          - {name: demo_rw, group: writer, consumer: demo}
