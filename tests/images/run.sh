@@ -71,6 +71,33 @@ expect "a higher version, ignoring -rc, latest and lower ones" 1 \
 if grep -qF "| \`restic_image\` | \`0.19.1\` |" "$work/summary"; then echo "ok: the job summary lists it"; else echo "FAIL: summary"; failures=$((failures + 1)); fi
 rm "$REGISTRY/docker.io_restic_restic/0.20.0"
 
+# A version with a prefix, as Firefly III publishes them (version-6.7.9): only the same
+# prefix and shape count, so not version-6.8 (a moving minor), 6.8.0, latest or develop.
+ff=$(publish docker.io/fireflyiii/core version-6.7.9 "$(idx ff-679)")
+for tag in version-6.7 version-6.8 6.8.0 7.0.0 latest develop version-6.7.8 version-7.0.0-beta1; do
+  publish docker.io/fireflyiii/core "$tag" "$(idx "ff-$tag")" >/dev/null
+done
+images firefly docker.io/fireflyiii/core "$ff" version-6.7.9
+expect "a prefixed version, up to date" 0 "ok: firefly_image is up to date (docker.io/fireflyiii/core:version-6.7.9)"
+ff2=$(publish docker.io/fireflyiii/core version-6.7.10 "$(idx ff-6710)")
+expect "a higher prefixed version, 6.7.10 after 6.7.9" 1 \
+  "::error title=New version of firefly_image::docker.io/fireflyiii/core version-6.7.10 (images.yml tracks version-6.7.9). Digest: $ff2."
+publish docker.io/fireflyiii/core version-7.0.0 "$(idx ff-700)" >/dev/null
+expect "the highest of several, a new major" 1 \
+  "::error title=New version of firefly_image::docker.io/fireflyiii/core version-7.0.0 (images.yml tracks version-6.7.9)."
+images firefly docker.io/fireflyiii/core "$ff" version-6.7.9 postgres docker.io/pgvector/pgvector "$pg" pg18 \
+  restic docker.io/restic/restic "$r1" 0.19.1
+expect "the other images are unchanged beside it" 1 "ok: postgres_image is up to date" "ok: restic_image is up to date" \
+  "1 image(s) to update"
+# The v prefix keeps working, and does not mix with tags without it.
+v1=$(publish example.org/tool v1.2.3 "$(idx v-123)")
+v2=$(publish example.org/tool v1.2.4 "$(idx v-124)")
+publish example.org/tool 1.2.5 "$(idx n-125)" >/dev/null
+images tool example.org/tool "$v1" v1.2.3
+expect "a v prefix, not mixed with tags without it" 1 \
+  "::error title=New version of tool_image::example.org/tool v1.2.4 (images.yml tracks v1.2.3). Digest: $v2."
+images postgres docker.io/pgvector/pgvector "$pg" pg18 restic docker.io/restic/restic "$r1" 0.19.1
+
 pg2=$(publish docker.io/pgvector/pgvector pg18 "$(idx pg-2)")
 expect "a moving tag with a new digest" 1 \
   "::error title=New image for postgres_image::docker.io/pgvector/pgvector:pg18 now points to $pg2 (images.yml pins $pg). Platforms: linux/amd64,linux/arm64"

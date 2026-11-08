@@ -69,7 +69,7 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
 
   Nunca se actualiza sola.
 - **Antes de cambiar la imagen, una copia de la base**, como ya hace Postgres (`reason=pre-upgrade`). Una versión nueva cambia la estructura de la base al arrancar, y no se vuelve atrás solo con la imagen: volver atrás es restaurar la base más la imagen anterior.
-- **`image-updates` tiene que reconocer las etiquetas con versión de Firefly** 🔍 (si llevan prefijo, como `version-6.x.y`, hoy no las vería).
+- **Etiquetas de Firefly:** `fireflyiii/core` publica versiones exactas con prefijo, `version-6.7.9`, y etiquetas que se mueven con cada parche, `version-6.7` (consultado el 2026-11-08 con `skopeo list-tags`; su [documentación](https://docs.firefly-iii.org/references/faq/docker/) solo nombra `latest`, `beta`, `alpha` y `develop`). Se vigila la exacta: `# track: version-6.7.9`. `image-updates` reconoce las versiones con prefijo desde la fase 2 (la regla, en la cabecera de `playbooks/group_vars/all/images.yml`).
 - **Las tareas programadas de Firefly** (movimientos recurrentes, presupuestos automáticos y avisos de facturas), con un temporizador diario de `svc_runner` que lanza `php artisan firefly-iii:cron` dentro del contenedor. Sin red añadida, y sin `STATIC_CRON_TOKEN`: según la [documentación de Firefly](https://docs.firefly-iii.org/how-to/firefly-iii/advanced/cron/), el token solo hace falta para lanzarlo por la web.
 
 ## 5. Copias y restauración

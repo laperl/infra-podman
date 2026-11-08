@@ -4,8 +4,11 @@
 # image-updates; the operator learns of an update because the run fails (an e-mail).
 #
 # Each line of images.yml is "<name>_image: "<repository>@sha256:<digest>"  # track: <tag>".
-#   - A version tag (0.19.1, v1.2.3): newer when the registry has a higher version of
-#     the same shape (x.y.z stays x.y.z; no -rc, -alpine…).
+#   - A version tag: an optional prefix of lower case letters and hyphens, then numbers
+#     with dots (0.19.1, v1.2.3, version-6.7.9). Newer when the registry has a higher
+#     version with the same prefix and shape (x.y.z stays x.y.z; no -rc, -alpine…; for
+#     version-6.7.9 neither version-6.8 nor latest). One rule for every image: a new app
+#     only needs its line in images.yml.
 #   - Any other tag (pg18): it moves with each release; newer when its digest is no
 #     longer the pinned one.
 # In both cases it also says if the tag being tracked no longer points to the pinned
@@ -20,7 +23,7 @@ set -euo pipefail
 file=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/playbooks/group_vars/all/images.yml}
 skopeo=${SKOPEO:-skopeo}
 summary=${GITHUB_STEP_SUMMARY:-/dev/null}
-version_re='^v?[0-9]+(\.[0-9]+)+$'
+version_re='^([a-z][a-z-]*)?[0-9]+(\.[0-9]+)+$'
 
 # fd 3 is the real stdout: a problem found inside $(…) must still reach the annotations.
 exec 3>&1
@@ -40,10 +43,11 @@ index_of() {
   rm -f "$raw"
 }
 
-# Tags with the same shape as $2 (same number of parts, same v prefix), highest first.
+# Tags with the same shape as $2 (same prefix, same number of parts), highest first. The
+# prefix is what comes before the first digit: only [a-z-], so safe inside the pattern.
 newer_versions() {
-  local repo=$1 current=$2 prefix='' parts tags
-  [[ $current == v* ]] && prefix=v
+  local repo=$1 current=$2 prefix parts tags
+  prefix=${current%%[0-9]*}
   parts=$(tr -cd . <<<"$current" | wc -c)
   tags=$("$skopeo" list-tags --retry-times 3 "docker://$repo") || problem "cannot list the tags of $repo"
   jq -r '.Tags[]' <<<"$tags" | { grep -E "^${prefix}[0-9]+(\.[0-9]+){$parts}$" || true; } | sort -rV
