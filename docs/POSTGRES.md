@@ -206,7 +206,7 @@ Se crea el usuario con la contraseña de su secreto, en `app2_owner`, y solo pue
 
 **Todas las bases.** Si falta `databases:` o está vacío (`databases: []`) y hay bases que borrar, **se para** y te enseña la lista. Para confirmarlo, repites la orden así:
 ```
-./deploy.sh apply postgres --limit <máquina> -e postgres_confirm_drop=<instancia>
+./deploy.sh apply postgres --limit <máquina> --confirm-drop <instancia>
 ```
 
 **La red de una aplicación** que se queda sin usuarios se quita, y Postgres se reinicia una vez.
@@ -215,8 +215,8 @@ Se crea el usuario con la contraseña de su secreto, en `app2_owner`, y solo pue
 
 ### Instancias
 
-Quitar una instancia del fichero **no la borra ni la para**: cada `apply` avisa de que en esa máquina hay una instancia que no está declarada. Para retirarla:
+Quitar una instancia del fichero **no la borra ni la para**: cada `apply` avisa de que en esa máquina hay una instancia que no está declarada. Para retirarla, **mientras aún está en el fichero**:
 ```
-./deploy.sh apply postgres --limit <máquina> -e postgres_state=absent
+./deploy.sh apply postgres --limit <máquina> --retire <instancia>
 ```
-Para el contenedor y quita su servicio, pero **conserva el volumen con los datos** (SPEC, sección 8). Si vuelves a aplicar sin esa opción, arranca otra vez con los mismos datos. Borrar también los datos es un paso aparte, a mano.
+Para ese contenedor y quita su servicio, pero **conserva el volumen con los datos** (SPEC, sección 8). Las demás instancias de la máquina siguen igual. Después la quitas del fichero; si no, el siguiente `apply` la vuelve a arrancar con los mismos datos. Borrar también los datos es un paso aparte, a mano.

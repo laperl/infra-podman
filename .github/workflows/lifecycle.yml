@@ -288,7 +288,7 @@ jobs:
             echo "::error::every database went without confirmation"; exit 1
           fi
           cat drop.log >> all.log
-          grep -q 'postgres_confirm_drop=main' drop.log || { echo "::error::unexpected refusal"; exit 1; }
+          grep -q -- '--confirm-drop main' drop.log || { echo "::error::unexpected refusal"; exit 1; }
           $C db demo present
 
       - name: What was made by hand is only reported
@@ -303,9 +303,18 @@ jobs:
           $C db handmade present
           $C role handmade_user present
 
-      - name: Destroy, keeping the volume (SPEC 4.2)
+      # deploy.sh apply postgres --retire main (docs/POSTGRES.md, section 7): only a
+      # declared instance; stops it and keeps its volume.
+      - name: Retire the instance, keeping the volume (SPEC 4.2)
         run: |
-          tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml -e postgres_state=absent 2>&1 | tee -a all.log
+          if tests/lifecycle/playbook.sh -i "$INV" -e @tests/lifecycle/apps-step3.yml -e postgres_retire=nope \
+               playbooks/postgres.yml > retire.log 2>&1; then
+            echo "::error::an undeclared instance was accepted"; exit 1
+          fi
+          cat retire.log >> all.log
+          grep -q 'there is no instance nope in the' retire.log || { echo "::error::unexpected refusal"; exit 1; }
+          tests/lifecycle/playbook.sh -i "$INV" -e @tests/lifecycle/apps-step3.yml -e postgres_retire=main \
+            playbooks/postgres.yml 2>&1 | tee -a all.log
           tests/lifecycle/check-postgres.sh destroyed
 
       - name: Deploy again on the kept volume
@@ -463,7 +472,7 @@ jobs:
             echo "::error::every database went without confirmation"; exit 1
           fi
           cat drop.log >> all.log
-          grep -q 'postgres_confirm_drop=main' drop.log || { echo "::error::unexpected refusal"; exit 1; }
+          grep -q -- '--confirm-drop main' drop.log || { echo "::error::unexpected refusal"; exit 1; }
           tests/lifecycle/playbook.sh -i "$INV" playbooks/postgres.yml -e postgres_confirm_drop=main 2>&1 | tee drop.log | tee -a all.log
           grep -A1 'Run the backup now' drop.log | grep -q '^changed:' || { echo "::error::no backup before dropping"; exit 1; }
           $CHECK kept pre-drop demo

@@ -83,14 +83,14 @@
         fail_msg: >-
           {{ postgres_name }} has no databases: in the inventory, so these databases would be
           dropped: {{ postgres_drop_dbs | join(', ') }}. Nothing has been changed. If that is what
-          you want, run the same command with -e postgres_confirm_drop={{ postgres_instance }}
-          (docs/POSTGRES.md, section 7).
+          you want: ./deploy.sh apply postgres --limit {{ inventory_hostname }} --confirm-drop
+          {{ postgres_instance }} (docs/POSTGRES.md, section 7).
         quiet: true
       when: postgres_databases | length == 0 and postgres_drop_dbs | length > 0 and not ansible_check_mode
 
     - name: Say that the apply needs confirmation
       ansible.builtin.debug:
-        msg: "{{ postgres_name }} has no databases: in the inventory: the apply will stop unless run with -e postgres_confirm_drop={{ postgres_instance }}."
+        msg: "{{ postgres_name }} has no databases: in the inventory: the apply will stop unless run with --confirm-drop {{ postgres_instance }}."
       when: postgres_databases | length == 0 and postgres_drop_dbs | length > 0 and ansible_check_mode
 
     - name: Read who is connected to what would be dropped

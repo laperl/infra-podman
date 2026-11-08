@@ -164,6 +164,7 @@ Para OpenClaw, SearXNG y el servicio de audio: `NoNewPrivileges=true`, `DropCapa
 - `deploy.sh plan <playbook> [--env dev|prod] [--limit]`: ejecuta `--check --diff` y muestra el plan.
 - `deploy.sh apply <playbook> [--env dev|prod] [--limit]`: aplica. Lo lanza solo el operador, también en DEV.
 - `deploy.sh secrets [--env dev|prod] [--rotate nombre]`: pide la contraseña de KeePassXC y crea o rota secretos. Con `dev` usa `infra-dev.kdbx`.
+- Solo con `apply postgres`: `--confirm-drop <instancia>` confirma que se borran todas sus bases, y `--retire <instancia>` la retira conservando sus datos ([`POSTGRES.md`](POSTGRES.md), sección 7). Quedan en el registro, junto al playbook.
 - `--env` vale `prod` por defecto. Con `prod`, antes de `plan` o `apply` comprueba que el checkout es un **tag firmado** válido (`git verify-tag`). Con `dev` se despliega desde la rama del PR, sin tag.
 - `secrets --env prod` también exige el tag firmado: el playbook que se ejecuta recibe la contraseña maestra.
 - `apply --env prod` pide además escribir `prod` en un terminal interactivo. Sin terminal, se rechaza.

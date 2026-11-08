@@ -4,7 +4,11 @@
 #   deploy.sh plan    <playbook> [--env dev|prod] [--limit PATTERN]
 #   deploy.sh apply   <playbook> [--env dev|prod] [--limit PATTERN]
 #   deploy.sh secrets            [--env dev|prod] [--limit PATTERN] [--rotate NAME]
+#   deploy.sh apply   postgres   ... --confirm-drop INSTANCE | --retire INSTANCE
 #
+# Only with apply postgres (docs/POSTGRES.md, section 7): --confirm-drop confirms dropping
+# every database of an instance that has none left in the inventory; --retire stops one
+# instance and removes its service, keeping its data.
 # --env defaults to prod. In prod the checkout must be clean and HEAD must carry a tag
 # signed by a key listed in ~/.config/infra-podman/allowed_signers, a file that lives
 # OUTSIDE the repository (R4 in docs/DECISIONS.md).
@@ -32,11 +36,11 @@ NAVIGATOR=${INFRA_NAVIGATOR_BIN:-ansible-navigator}
 PODMAN=${INFRA_PODMAN_BIN:-podman}
 DATA_COPY_DIR=${INFRA_DATA_COPY_DIR:-/var/lib/infra-podman/data-repo}
 
-action="" target="" env_name="prod" limit="" rotate="" ref="-"
+action="" target="" env_name="prod" limit="" rotate="" ref="-" confirm_drop="" retire=""
 data_dir="" data_ref="-"
 
 usage() {
-  sed -n '3,6p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
+  sed -n '3,7p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -45,7 +49,8 @@ log_line() { # log_line <result>
   chmod 700 "$STATE_DIR"
   # date, env, action, playbook, code tag or branch, data commit, hosts, result (SPEC 4.10)
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date -Is)" "$env_name" "${action:--}" \
-    "${target:--}" "$ref" "$data_ref" "${limit:-all}" "$1" >>"$LOG_FILE"
+    "${target:--}${confirm_drop:+ --confirm-drop $confirm_drop}${retire:+ --retire $retire}" "$ref" "$data_ref" \
+    "${limit:-all}" "$1" >>"$LOG_FILE"
 }
 
 refuse() { # refuse <message>: stop before running anything, and log it
@@ -70,10 +75,12 @@ parse_args() {
   esac
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --env | --limit | --rotate) [[ $# -ge 2 ]] || usage ;;&
+      --env | --limit | --rotate | --confirm-drop | --retire) [[ $# -ge 2 ]] || usage ;;&
       --env) env_name=$2 ;;
       --limit) limit=$2 ;;
       --rotate) [[ $action == secrets ]] || usage; rotate=$2 ;;
+      --confirm-drop) confirm_drop=$2 ;;
+      --retire) retire=$2 ;;
       *) usage ;;
     esac
     shift 2
@@ -81,6 +88,13 @@ parse_args() {
   [[ $env_name =~ ^(dev|prod)$ ]] || refuse "--env debe ser dev o prod"
   [[ -z $limit || $limit =~ ^[A-Za-z0-9_.,:-]+$ ]] || refuse "--limit no válido: $limit"
   [[ -z $rotate || $rotate =~ ^[a-z0-9_-]+$ ]] || refuse "nombre de secreto no válido en --rotate: $rotate"
+  if [[ -n $confirm_drop || -n $retire ]]; then
+    [[ $action == apply && $target == postgres ]] \
+      || refuse "--confirm-drop y --retire solo valen con apply postgres"
+    [[ -z $confirm_drop || -z $retire ]] || refuse "--confirm-drop y --retire no van juntos"
+    [[ $confirm_drop$retire =~ ^[a-z0-9]+$ ]] \
+      || refuse "nombre de instancia no válido: $confirm_drop$retire (letras minúsculas y números)"
+  fi
   if [[ $action != secrets ]]; then
     [[ $target =~ ^[a-z0-9_-]+$ && -f $REPO_DIR/playbooks/$target.yml ]] \
       || refuse "playbook desconocido '$target' (se espera playbooks/<nombre>.yml)"
@@ -193,6 +207,8 @@ run_navigator() {
   # It never travels as an argument, an environment variable or a file (R11, R24).
   args+=(--diff --ask-become-pass)
   [[ -n $limit ]] && args+=(--limit "$limit")
+  [[ -n $confirm_drop ]] && args+=(-e "postgres_confirm_drop=$confirm_drop")
+  [[ -n $retire ]] && args+=(-e "postgres_retire=$retire")
   "$NAVIGATOR" "${args[@]}"
 }
 

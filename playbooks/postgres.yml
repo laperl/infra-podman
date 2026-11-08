@@ -3,13 +3,25 @@
 # is in the inventory (postgres_instances). Needs the base playbook and the secrets first.
 #   ./deploy.sh plan postgres --limit laptop
 # Databases and users: docs/POSTGRES.md, section 7. Dropping every database of an instance
-# needs -e postgres_confirm_drop=<instance>.
-# Retire an instance keeping its data: -e postgres_state=absent.
+# needs ./deploy.sh apply postgres --confirm-drop <instance>.
+# Retiring an instance, keeping its data: ./deploy.sh apply postgres --retire <instance>
+# (-e postgres_retire=<instance>), while it is still in the inventory. CI destroys every
+# instance with -e postgres_state=absent.
 - name: PostgreSQL instances
   hosts: postgres_hosts
   become: true
   gather_facts: false
   tasks:
+    - name: Check that the instance to retire is in the inventory
+      ansible.builtin.assert:
+        that: postgres_retire in postgres_instances | map(attribute='name')
+        fail_msg: >-
+          --retire {{ postgres_retire }}: there is no instance {{ postgres_retire }} in the
+          inventory of {{ inventory_hostname }}. Retire it while it is still declared, and
+          remove it from the inventory afterwards (docs/POSTGRES.md, section 7).
+        quiet: true
+      when: postgres_retire | default('') | length > 0
+
     - name: Deploy each instance
       ansible.builtin.include_role:
         name: postgres
@@ -19,6 +31,9 @@
         label: pg-{{ postgres_item.name }}
       vars:
         postgres_instance: "{{ postgres_item.name }}"
+        # --retire <instance>: only that one is stopped (its data kept); -e postgres_state,
+        # as an extra variable, still wins over this for every instance.
+        postgres_state: "{{ 'absent' if postgres_item.name == postgres_retire | default('') else 'present' }}"
         # Data of the operator (docs/POSTGRES.md, section 6): required, no default.
         postgres_superuser: "{{ postgres_item.superuser | default('') }}"
         # Its application databases, groups and users (docs/POSTGRES.md, section 6).
@@ -55,8 +70,8 @@
       ansible.builtin.debug:
         msg: >-
           Not in the inventory of {{ inventory_hostname }}, left running as they are:
-          {{ postgres_undeclared | join(', ') }}. To retire one keeping its data:
-          -e postgres_state=absent (docs/POSTGRES.md, section 7).
+          {{ postgres_undeclared | join(', ') }}. To retire one keeping its data, declare it
+          again and run ./deploy.sh apply postgres --retire <instance> (docs/POSTGRES.md, section 7).
       when: postgres_undeclared | length > 0
       vars:
         postgres_undeclared: >-

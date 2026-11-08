@@ -25,8 +25,11 @@ postgres_superuser: ""
 postgres_databases: []
 
 # Removing every database (databases: missing or empty) needs this set to the name of the
-# instance, on the command line: -e postgres_confirm_drop=<instance>.
+# instance: ./deploy.sh apply postgres --confirm-drop <instance>.
 postgres_confirm_drop: ""
+
+# --retire <instance> of deploy.sh: the instance to stop, keeping its data (playbook).
+postgres_retire: ""
 
 # What the role creates carries this comment in PostgreSQL; it only removes what has it.
 postgres_managed_mark: managed by infra-podman
