@@ -25,5 +25,5 @@ rest_server_image: "docker.io/restic/rest-server@sha256:d2aff06f47eb38637dff580c
 
 # Firefly III (phase 2, docs/services/firefly.md). Digest of the index computed by the
 # operator on 2026-11-08 with skopeo inspect --raw | sha256sum. linux/amd64 and
-# linux/arm64: still to be confirmed by the operator (only amd64 machines run it now).
+# linux/arm64, checked by the operator the same day (plus two attestation manifests).
 firefly_image: "docker.io/fireflyiii/core@sha256:d51ab6a3a7b91a5c892441578e0da7f2935f84f36bd1151fc3833acc6e060871"  # track: version-6.7.9

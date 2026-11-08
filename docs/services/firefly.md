@@ -53,7 +53,7 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
 - **Contenedor endurecido**, como el resto:
   - sin root (`www-data`) y sin capacidades extra;
   - con límites de memoria, CPU y procesos como variables (R46): 512 MB, 1 CPU y 200 procesos, 🔍 a confirmar midiendo en DEV; y healthcheck en `/health`, que solo responde `OK` si Firefly lee su base;
-  - imagen por digest; 🔍 falta confirmar que existe también para `linux/arm64` (hoy solo la usan máquinas `amd64`).
+  - imagen por digest, que existe para `linux/amd64` y `linux/arm64` (comprobado por el operador el 2026-11-08).
 - **Logs sin datos financieros:** `APP_DEBUG=false`, nivel `notice` y al journal de `svc_runner` (`LOG_CHANNEL=stdout`). El registro de auditoría, **apagado** (`AUDIT_LOG_LEVEL=emergency`, el valor por defecto): según Firefly, «puede contener información financiera sensible». Decidido por el operador el 2026-11-08.
 - **Postgres** (según [`POSTGRES.md`](../POSTGRES.md)):
   - una base `firefly` con su esquema `firefly` y sus grupos `firefly_owner`, `firefly_writer` y `firefly_reader` (R35, R36);
