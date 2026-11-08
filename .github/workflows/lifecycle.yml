@@ -425,6 +425,10 @@ jobs:
       - name: No way out (internet, host, the network of demo)
         run: $CHECK isolation
 
+      # Firefly's cron refuses to run without an owner: the first user, as the operator creates it.
+      - name: The first user, through the registration page, without internet
+        run: $CHECK user
+
       - name: The scheduled tasks run
         run: $CHECK cron
 

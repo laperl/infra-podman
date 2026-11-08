@@ -6,6 +6,7 @@
 #   schema     its tables in the schema firefly, owned by firefly_owner, nothing in public
 #   reader     firefly_ro (firefly_reader) reads Firefly's tables and cannot change them
 #   isolation  no way out: not to the internet, the host, or the network of demo
+#   user       the first user, through the registration page, as the operator does it
 #   cron       the scheduled tasks run inside the container, from their service
 #   launcher   the operator's .desktop file is valid and opens 127.0.0.1:18001
 #   wait       with PostgreSQL unhealthy it does not start, within its timeout (SPEC 4.3)
@@ -122,6 +123,24 @@ case ${1:-} in
       fail "Firefly reached or resolved a container of the network of demo"
     fi
     "$as" podman stop -t 0 lifecycle-demo-probe >/dev/null
+    ;;
+  user)
+    # A fictitious user, with a random password that goes to the list of secrets the job
+    # looks for in its output. Without internet: the password check against
+    # api.pwnedpasswords.com is the optional box, left unticked.
+    jar=$(mktemp)
+    password=$(openssl rand -hex 24)
+    echo "::add-mask::$password"
+    echo "$password" >> "${RUNNER_TEMP:?}/pw"
+    token=$(curl -fsS -c "$jar" "http://127.0.0.1:$port/register" | sed -n 's/.*name="_token" value="\([^"]*\)".*/\1/p' | head -1)
+    [[ -n $token ]] || fail "the registration page has no form token"
+    code=$(curl -s -b "$jar" -c "$jar" -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/register" \
+      --data-urlencode "_token=$token" --data-urlencode "email=lifecycle@example.com" \
+      --data-urlencode "password=$password" --data-urlencode "password_confirmation=$password")
+    rm -f "$jar"
+    [[ $code == 302 ]] || fail "the registration answered $code"
+    owners=$(sql "SELECT count(*) FROM role_user ru JOIN roles r ON r.id = ru.role_id WHERE r.name = 'owner'")
+    [[ $owners == 1 ]] || fail "the first user is not the owner ($owners owners)"
     ;;
   cron)
     [[ $("$as" systemctl --user is-active "$name-cron.timer") == active ]] || fail "$name-cron.timer is not active"
