@@ -433,3 +433,10 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Decisión:** cada aplicación que el operador abre desde el escritorio (Firefly, pgAdmin y las que lleguen) tiene un `.desktop` que Ansible instala en su cuenta, en `~/.local/share/applications`. El menú del portátil es rofi en modo `drun`, que lee esa carpeta.
 - **Aprobada por:** el operador, el 2026-11-07. Se implementa con Firefly.
 - **SPEC:** 4.14.
+
+### R48. Toda aplicación admite varias instancias
+
+- **Decisión:** cualquier aplicación (Firefly, pgAdmin y las que lleguen) puede desplegarse varias veces en la misma máquina, como ya hace Postgres (D8). Cada rol recibe una lista de instancias (`<app>_instances`) y el playbook lo aplica una vez por instancia. Cada instancia tiene su nombre (`^[a-z0-9]+$`), su puerto, su base, su red, sus secretos, su volumen y su lanzador. Nada se comparte entre instancias.
+- **Motivo:** lo pide el operador como regla general. Es el patrón de `postgres_instances` y el de los roles de sistema de Podman (`linux-system-roles.podman`, lista `podman_quadlet_specs`).
+- **Aprobada por:** el operador, el 2026-11-08. Firefly nace con una sola instancia (PR 3 de la fase 2); el paso a lista está en el ROADMAP.
+- **SPEC:** 4.12.
