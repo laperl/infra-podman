@@ -202,7 +202,7 @@ Para saber de un vistazo de quién es cada contenedor, red o volumen, para qué 
 | Secreto de Podman | `<entorno>-<nombre en KeePassXC>` | `prod-pg-main-firefly-password` ↔ `<instalación>/pg-main-firefly-password` (la misma ruta en dev y prod) |
 
 - **Postgres:** cada instancia se llama `pg-<instancia>`, por ejemplo `pg-main` o `pg-test`.
-- **Varias instancias de cualquier aplicación (R48):** cada una lleva su nombre detrás de la app, `<entorno>-<app>-<instancia>[-<pieza>]`, por ejemplo `prod-firefly-casa` y `prod-firefly-casa-upload`.
+- **Varias instancias de cualquier aplicación (R48):** cada una lleva su nombre detrás de la app, `<entorno>-<app>-<instancia>[-<pieza>]`, por ejemplo `prod-firefly-casa` y `prod-firefly-casa-uploads`.
 - **Ficheros Quadlet:** se llaman como el objeto (`prod-firefly.container` crea el servicio `prod-firefly.service`).
 - **Nombres explícitos:** siempre se fijan `ContainerName=`, `NetworkName=` y `VolumeName=`. Sin ellas, Podman antepone `systemd-` al nombre (comprobado con el generador de 4.9).
 

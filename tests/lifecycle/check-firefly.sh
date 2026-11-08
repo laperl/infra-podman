@@ -65,7 +65,7 @@ case ${1:-} in
     # shellcheck disable=SC2016  # a Go template, not a shell expansion
     nets=$(inspect '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}')
     [[ $nets == "$net " ]] || fail "networks: '$nets', expected only $net"
-    inspect '{{range .Mounts}}{{.Name}}:{{.Destination}} {{end}}' | grep -q "$name-upload:/var/www/html/storage/upload" \
+    inspect '{{range .Mounts}}{{.Name}}:{{.Destination}} {{end}}' | grep -q "$name-uploads:/var/www/html/storage/upload" \
       || fail "the attachments volume is not mounted"
     env=$(inspect '{{range .Config.Env}}{{println .}}{{end}}')
     if grep -Eq '^(APP_KEY|DB_PASSWORD)=' <<<"$env"; then fail "a secret is in the environment, not in a file"; fi
@@ -193,7 +193,7 @@ case ${1:-} in
     ;;
   destroyed)
     if "$as" podman container exists "$name"; then fail "the container still exists"; fi
-    "$as" podman volume exists "$name-upload" || fail "the attachments volume was removed"
+    "$as" podman volume exists "$name-uploads" || fail "the attachments volume was removed"
     home=$(getent passwd svc_runner | cut -d: -f6)
     if sudo test -e "$home/.config/systemd/user/$name-cron.timer"; then fail "the timer is still installed"; fi
     if [[ -e $launcher ]]; then fail "the launcher is still installed"; fi

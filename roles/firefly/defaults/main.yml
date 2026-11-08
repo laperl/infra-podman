@@ -50,7 +50,7 @@ firefly_service_home: /home/svc_runner
 
 # Names (SPEC 4.12). Derived; do not override.
 firefly_name: "{{ infra_env }}-firefly"
-firefly_volume: "{{ firefly_name }}-upload"
+firefly_volume: "{{ firefly_name }}-uploads"
 firefly_pg_name: "{{ infra_env }}-pg-{{ firefly_pg_instance }}"
 # Created by the postgres role for the consumer firefly (SPEC 4.4, D9).
 firefly_network: "{{ infra_env }}-firefly-pg-{{ firefly_pg_instance }}-net"
@@ -65,5 +65,5 @@ firefly_cron_name: "{{ firefly_name }}-cron"
 firefly_quadlet_units:
   - template: firefly.container.j2
     name: "{{ firefly_name }}.container"
-  - template: firefly-upload.volume.j2
+  - template: firefly-uploads.volume.j2
     name: "{{ firefly_volume }}.volume"
