@@ -17,7 +17,7 @@
 # Not present yet means it has to be pulled: a new image.
 - name: Read the ID of the image to deploy
   ansible.builtin.command:
-    argv: [podman, image, inspect, --format, "{% raw %}{{.Id}}{% endraw %}", "{{ firefly_image }}"]
+    argv: [podman, image, inspect, --format, "{% raw %}{{.Id}}{% endraw %}", "{{ firefly_container_image }}"]
   environment: "{{ firefly_env }}"
   become: true
   become_user: "{{ service_user }}"

@@ -1,11 +1,13 @@
 [Desktop Entry]
 # {{ ansible_managed | default('Managed by infra-podman') }}
-# Launcher in the operator's menu (R47): opens Firefly III in the default browser.
+# Launcher in the operator's menu (R47): opens this Firefly III instance in the browser of the inventory.
 Type=Application
 Version=1.5
 Name={{ firefly_launcher_name }}
-Comment=Firefly III ({{ infra_env }}), http://127.0.0.1:{{ firefly_port }}
-Exec=xdg-open http://127.0.0.1:{{ firefly_port }}
+Comment=Firefly III {{ firefly_instance }} ({{ infra_env }}), http://127.0.0.1:{{ firefly_port }}
+# The browser of the inventory (launcher_command), then the address. Each word is checked by
+# the role (tasks/main.yml): nothing that needs quoting in a Desktop Entry.
+Exec={{ (firefly_launcher_command + ['http://127.0.0.1:' ~ firefly_port]) | join(' ') }}
 Icon=applications-office
 Terminal=false
 Categories=Office;Finance;

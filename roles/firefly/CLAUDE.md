@@ -1,6 +1,6 @@
 # Rol `firefly`
 
-Firefly III en un contenedor Quadlet sin root, sobre la Postgres de la plataforma. Requisitos: [`docs/services/firefly.md`](../../docs/services/firefly.md).
+Firefly III en contenedores Quadlet sin root, sobre la Postgres de la plataforma, **por instancias** (R48): `playbooks/firefly.yml` aplica el rol una vez por cada elemento de `firefly_instances`. Requisitos: [`docs/services/firefly.md`](../../docs/services/firefly.md); lo común a toda aplicación: [`docs/services/README.md`](../../docs/services/README.md).
 
 ## Qué leer
 
@@ -10,8 +10,9 @@ Firefly III en un contenedor Quadlet sin root, sobre la Postgres de la plataform
 
 ## Qué no se toca
 
-- **La red.** Solo `<entorno>-firefly-pg-<instancia>-net`, interna. Ni una segunda red ni `Network=host`: es lo que impide que tus finanzas salgan del portátil.
-- **El puerto, solo en `127.0.0.1`** (R25).
+- **Nada compartido entre instancias**: cada nombre lleva la instancia (`defaults/main.yml`, «Names»). Una base de datos por instancia, nunca un esquema dentro de la base de otra.
+- **La red.** Solo la suya, `<entorno>-firefly<instancia>-pg-<postgres>-net`, interna. Ni una segunda red ni `Network=host`: es lo que impide que tus finanzas salgan del portátil.
+- **El puerto, solo en `127.0.0.1`** (R25); el número lo elige el operador, desde el 18100. El comando del navegador del lanzador, como lista de palabras comprobadas: nada que entrecomillar.
 - **El esquema y el usuario de Postgres**: los declara el operador en el repo de datos y los crea el rol `postgres`. Este rol solo comprueba que existen.
 - **Los secretos, como ficheros** (`*_FILE`), nunca en `Environment=`.
 - **`AUDIT_LOG_LEVEL=emergency`** (auditoría apagada): decisión del operador, 2026-11-08.
@@ -20,4 +21,4 @@ Firefly III en un contenedor Quadlet sin root, sobre la Postgres de la plataform
 ## Tests
 
 - `lint`: renderiza `firefly.container` y su `.volume`, política y generador de Podman 4.9.
-- `lifecycle`, job `firefly`, con `tests/lifecycle/check-firefly.sh`: rechazos claros sin secretos o con una clave de longitud mala; plan, apply, reaplicar y plan sin cambios; puerto, endurecimiento, esquema, `firefly_reader`, aislamiento, tareas diarias, lanzador, espera a Postgres, destruir conservando datos; y los bloques de Firefly de `docs/OPERATIONS.md`.
+- `lifecycle`, job `firefly`, con `tests/lifecycle/check-firefly.sh` y dos instancias (`casa` y `canary`, con otra imagen, otra memoria y otro navegador): rechazos claros (nombres o puertos repetidos, comando del navegador peligroso, sin secretos, clave de longitud mala); plan, apply, reaplicar y plan sin cambios; puerto, endurecimiento, base propia, `_reader`, aislamiento también entre instancias, primer usuario, tareas diarias, lanzadores, espera a Postgres; una instancia quitada del inventario solo se avisa; retirar una sin tocar la otra; destruir conservando datos; y los bloques de Firefly de `docs/OPERATIONS.md`.

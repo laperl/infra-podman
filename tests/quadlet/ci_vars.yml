@@ -7,12 +7,12 @@ demo_subnet: "10.89.250.0/24"
 demo_port: 8080
 postgres_superuser: ci_admin
 # Application databases with three consumers, so the role renders its .network units,
-# Firefly's among them (roles/firefly joins it).
+# Firefly's among them (roles/firefly renders its instance ci and joins it).
 postgres_databases:
   - name: demo
     users:
       - {name: demo_app, group: owner, consumer: demo}
       - {name: demo_ai, group: reader, consumer: ai}
-  - name: firefly
+  - name: firefly_ci
     users:
-      - {name: firefly, group: owner, consumer: firefly}
+      - {name: firefly_ci, group: owner, consumer: fireflyci}

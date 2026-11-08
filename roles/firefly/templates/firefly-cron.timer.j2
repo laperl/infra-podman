@@ -2,7 +2,7 @@
 # Starts {{ firefly_cron_name }}.service once a day. Persistent: if the machine was off at
 # that time, it runs when it starts again.
 [Unit]
-Description=Firefly III scheduled tasks, daily ({{ infra_env }})
+Description=Firefly III {{ firefly_instance }} scheduled tasks, daily ({{ infra_env }})
 
 [Timer]
 OnCalendar=*-*-* {{ firefly_cron_time }}:00

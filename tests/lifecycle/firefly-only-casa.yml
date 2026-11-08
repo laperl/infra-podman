@@ -1,0 +1,8 @@
+---
+# The inventory of the firefly job with the instance canary removed: it must only be
+# reported, never stopped (playbooks/firefly.yml).
+firefly_instances:
+  - name: casa
+    port: 18100
+    timezone: Europe/Madrid
+    start_timeout: 60

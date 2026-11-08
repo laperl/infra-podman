@@ -30,12 +30,12 @@
       - firefly_pg_exists.rc == 0
       - firefly_net_exists.rc == 0
     fail_msg: >-
-      Firefly needs the PostgreSQL instance {{ firefly_pg_name }} and the network
+      Firefly {{ firefly_instance }} needs the PostgreSQL instance {{ firefly_pg_name }} and the network
       {{ firefly_network }} on {{ inventory_hostname }}
       (found: instance {{ 'yes' if firefly_pg_exists.rc == 0 else 'no' }}, network
       {{ 'yes' if firefly_net_exists.rc == 0 else 'no' }}). Declare in postgres_hosts.yml of
       the data repository, in the instance {{ firefly_pg_instance }}, the database
-      {{ firefly_db_name }} with the user {{ firefly_db_user }} (group: owner, consumer: firefly),
+      {{ firefly_db_name }} with the user {{ firefly_db_user }} (group: owner, consumer: {{ firefly_consumer }}),
       and apply postgres first: ./deploy.sh apply postgres --env {{ infra_env }} --limit {{ inventory_hostname }}
       (docs/POSTGRES.md, section 6).
     quiet: true

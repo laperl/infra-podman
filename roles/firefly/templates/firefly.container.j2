@@ -1,6 +1,6 @@
 # {{ ansible_managed | default('Managed by infra-podman') }}
 [Unit]
-Description=Firefly III ({{ infra_env }})
+Description=Firefly III {{ firefly_instance }} ({{ infra_env }})
 # SPEC 4.3: it needs its PostgreSQL. Requires/After order the start; ExecStartPre (below)
 # waits until PostgreSQL is healthy, because Notify=healthy does not exist in Podman 4.9.
 Requires={{ firefly_pg_name }}.service
@@ -8,17 +8,18 @@ After={{ firefly_pg_name }}.service
 
 [Container]
 ContainerName={{ firefly_name }}
-Image={{ firefly_image }}
+Image={{ firefly_container_image }}
 Label=infra.env={{ infra_env }}
-Label=infra.app=firefly
+Label=infra.app=firefly-{{ firefly_instance }}
 Label=infra.component=app
 Label=infra.managed-by=infra-podman
 
 # Attachments: the volume the official image declares (docs/services/firefly.md, 5).
 Volume={{ firefly_volume }}.volume:/var/www/html/storage/upload:Z
 
-# Only its network to PostgreSQL: internal, no way out (SPEC 4.4, R45). The port is
-# published on 127.0.0.1 of the machine only (R25).
+# Only its own network to PostgreSQL: internal, no way out, and no other instance in it
+# (SPEC 4.4, R45, R48). The port is published on 127.0.0.1 of the machine only (R25): the
+# address is not a setting.
 Network={{ firefly_network }}.network
 PublishPort=127.0.0.1:{{ firefly_port }}:8080
 

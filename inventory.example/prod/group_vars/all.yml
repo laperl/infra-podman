@@ -20,11 +20,11 @@ infra_secrets:
   # One per application user of postgres_hosts.yml (docs/POSTGRES.md, section 4):
   # - name: pg-main-app1-password
   #   group: postgres_hosts
-  # Firefly III (docs/services/firefly.md): its user's password and its application key
-  # (exactly 32 letters and digits).
-  # - name: pg-main-firefly-password
+  # Firefly III, two per instance (docs/services/README.md): its user's password and its
+  # application key (exactly 32 letters and digits). For the instance casa:
+  # - name: pg-main-firefly_casa-password
   #   group: postgres_hosts
-  # - name: firefly-app-key
+  # - name: firefly-casa-app-key
   #   group: firefly_hosts
   - name: backup-restic-password  # key of the restic repositories: lose it, lose the backups
     group: backup_clients

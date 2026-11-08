@@ -17,7 +17,7 @@
 - name: Set the path of the launcher
   ansible.builtin.set_fact:
     firefly_launcher_file: >-
-      {{ ansible_facts['getent_passwd'][firefly_operator.stdout][4] }}/.local/share/applications/infra-podman-{{ firefly_name }}.desktop
+      {{ ansible_facts['getent_passwd'][firefly_operator.stdout][4] }}/.local/share/applications/{{ firefly_launcher_file_name }}
 
 - name: Create the operator's applications directory
   ansible.builtin.file:

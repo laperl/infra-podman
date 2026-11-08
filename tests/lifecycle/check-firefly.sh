@@ -1,36 +1,50 @@
 #!/usr/bin/env bash
-# Firefly III on the runner (docs/services/firefly.md), as deployed by the firefly job with
-# tests/lifecycle/firefly-vars.yml. Usage: check-firefly.sh <step>
-#   running    healthy, published only on 127.0.0.1:18001, /health and the login page answer
-#   standard   hardening, limits, one network, secrets as files, the time zone
-#   schema     its tables in the schema firefly, owned by firefly_owner, nothing in public
-#   reader     firefly_ro (firefly_reader) reads Firefly's tables and cannot change them
-#   isolation  no way out: not to the internet, the host, or the network of demo
+# Firefly III on the runner (docs/services/firefly.md), two instances (R48) as deployed by
+# the firefly job: casa on 127.0.0.1:18100 and canary on 127.0.0.1:18101, each with its own
+# database (tests/lifecycle/firefly-vars.yml). Usage: check-firefly.sh <step> [instance]
+# (default casa):
+#   running    healthy, published only on 127.0.0.1:<its port>, /health and the login page answer
+#   standard   hardening, limits, its one network, secrets as files, its settings
+#   schema     its tables in the schema of its database, owned by its _owner group
+#   reader     firefly_ro (firefly_casa_reader) reads casa's tables and cannot change them
+#   isolation  no way out: not to the internet, the host, demo's network or the other instance
 #   user       the first user, through the registration page, as the operator does it
 #   cron       the scheduled tasks run inside the container, from their service
-#   launcher   the operator's .desktop file is valid and opens 127.0.0.1:18001
+#   launcher   the operator's .desktop file is valid and opens 127.0.0.1:<its port>
 #   wait       with PostgreSQL unhealthy it does not start, within its timeout (SPEC 4.3)
-#   marker     write | read: a file in the attachments volume and the migrations row count
-#   destroyed  container, timer and launcher gone; the volume kept (SPEC 4.2)
+#   marker     write | read (the third word): a file in its volume and its migrations count
+#   destroyed  container, timer and launcher gone; volume and database kept (SPEC 4.2)
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 as=$here/as-svc.sh
-name=dev-firefly
+step=${1:-}
+instance=${2:-casa}
+case $instance in
+  casa) port=18100 other=canary ;;
+  canary) port=18101 other=casa ;;
+  *) echo "unknown instance $instance" >&2; exit 2 ;;
+esac
+name=dev-firefly-$instance
+db=firefly_$instance
 pg=dev-pg-main
 su=ci_admin  # fictitious superuser of tests/lifecycle/inventory.yml
-net=dev-firefly-pg-main-net
+net=dev-firefly$instance-pg-main-net
+other_name=dev-firefly-$other
+other_net=dev-firefly$other-pg-main-net
 demo_net=dev-demo-pg-main-net
 ai_net=dev-ai-pg-main-net
-port=18001
 launcher=$HOME/.local/share/applications/infra-podman-$name.desktop
-state=${RUNNER_TEMP:-/tmp}/firefly-marker
-fail() { local m="$*"; echo "::error title=check-firefly::${m//$'\n'/ | }"; exit 1; }
+state=${RUNNER_TEMP:-/tmp}/firefly-marker-$instance
+fail() { local m="$*"; echo "::error title=check-firefly $step $instance::${m//$'\n'/ | }"; exit 1; }
 sql() { # sql <query> [database]: as the superuser, through the socket
-  "$as" podman exec "$pg" psql -X -U "$su" -d "${2:-firefly}" -v ON_ERROR_STOP=1 -tAq -c "$1" </dev/null
+  "$as" podman exec "$pg" psql -X -U "$su" -d "${2:-$db}" -v ON_ERROR_STOP=1 -tAq -c "$1" </dev/null
 }
 inspect() { "$as" podman inspect "$name" --format "$1"; }
 in_ff() { "$as" podman exec "$name" bash -c "$1" </dev/null; }
 pg_image() { "$as" podman inspect "$pg" --format '{{.ImageName}}'; }
+ip_in() { # ip_in <container> <network>
+  "$as" podman inspect "$1" --format "{{(index .NetworkSettings.Networks \"$2\").IPAddress}}"
+}
 healthy() { # healthy <seconds>
   local i
   for ((i = 0; i < $1; i += 5)); do
@@ -40,7 +54,7 @@ healthy() { # healthy <seconds>
   return 1
 }
 
-case ${1:-} in
+case $step in
   running)
     [[ $("$as" systemctl --user is-active "$name.service") == active ]] || fail "$name.service is not active"
     "$as" podman healthcheck run "$name" >/dev/null || fail "$name is not healthy"
@@ -59,7 +73,10 @@ case ${1:-} in
     caps=$(inspect '{{.EffectiveCaps}}')
     [[ $caps == "[]" ]] || fail "capabilities left: $caps"
     inspect '{{.HostConfig.SecurityOpt}}' | grep -q 'no-new-privileges' || fail "no-new-privileges is not set"
-    [[ $(inspect '{{.HostConfig.Memory}}') == 536870912 ]] || fail "memory limit: $(inspect '{{.HostConfig.Memory}}')"
+    # canary sets memory: 768m in the inventory; casa keeps the default, 512m.
+    memory=536870912
+    [[ $instance == canary ]] && memory=805306368
+    [[ $(inspect '{{.HostConfig.Memory}}') == "$memory" ]] || fail "memory limit: $(inspect '{{.HostConfig.Memory}}')"
     [[ $(inspect '{{.HostConfig.NanoCpus}}') == 1000000000 ]] || fail "CPU limit: $(inspect '{{.HostConfig.NanoCpus}}')"
     [[ $(inspect '{{.HostConfig.PidsLimit}}') == 200 ]] || fail "pids limit: $(inspect '{{.HostConfig.PidsLimit}}')"
     # shellcheck disable=SC2016  # a Go template, not a shell expansion
@@ -71,30 +88,42 @@ case ${1:-} in
     if grep -Eq '^(APP_KEY|DB_PASSWORD)=' <<<"$env"; then fail "a secret is in the environment, not in a file"; fi
     grep -qx 'DB_PASSWORD_FILE=/run/secrets/db-password' <<<"$env" || fail "DB_PASSWORD_FILE is not set"
     [[ $(in_ff 'stat -c %U:%a /run/secrets/db-password') == www-data:400 ]] || fail "the secret file is not www-data, 0400"
-    grep -qx 'TZ=Europe/Madrid' <<<"$env" || fail "TZ is not the one of the inventory (Europe/Madrid)"
+    tz=UTC
+    [[ $instance == casa ]] && tz=Europe/Madrid
+    grep -qx "TZ=$tz" <<<"$env" || fail "TZ is not the one of the inventory ($tz)"
+    for v in DB_DATABASE DB_USERNAME PGSQL_SCHEMA; do
+      grep -qx "$v=$db" <<<"$env" || fail "$v is not its own ($db)"
+    done
     # What the measurement of the limits starts from (R46): shown, never a failure.
-    echo "::notice title=Firefly resources::$("$as" podman stats --no-stream --format '{{.MemUsage}} mem, {{.PIDs}} processes' "$name")"
+    echo "::notice title=Firefly $instance resources::$("$as" podman stats --no-stream --format '{{.MemUsage}} mem, {{.PIDs}} processes' "$name")"
     ;;
   schema)
-    n=$(sql "SELECT count(*) FROM pg_tables WHERE schemaname = 'firefly'")
-    [[ $n -gt 20 ]] || fail "only $n tables in the schema firefly"
-    others=$(sql "SELECT count(*) FROM pg_tables WHERE schemaname NOT IN ('firefly', 'pg_catalog', 'information_schema')")
-    [[ $others == 0 ]] || fail "$others tables outside the schema firefly"
-    owners=$(sql "SELECT string_agg(DISTINCT tableowner, ',') FROM pg_tables WHERE schemaname = 'firefly'")
-    [[ $owners == firefly_owner ]] || fail "tables owned by '$owners', expected firefly_owner (R35)"
-    [[ $(sql "SELECT to_regclass('firefly.users') IS NOT NULL") == t ]] || fail "no table firefly.users"
+    # One database per instance, with one schema of the same name (docs/POSTGRES.md, 2).
+    n=$(sql "SELECT count(*) FROM pg_tables WHERE schemaname = '$db'")
+    [[ $n -gt 20 ]] || fail "only $n tables in the schema $db"
+    others=$(sql "SELECT count(*) FROM pg_tables WHERE schemaname NOT IN ('$db', 'pg_catalog', 'information_schema')")
+    [[ $others == 0 ]] || fail "$others tables outside the schema $db"
+    owners=$(sql "SELECT string_agg(DISTINCT tableowner, ',') FROM pg_tables WHERE schemaname = '$db'")
+    [[ $owners == "${db}_owner" ]] || fail "tables owned by '$owners', expected ${db}_owner (R35)"
+    [[ $(sql "SELECT to_regclass('$db.users') IS NOT NULL") == t ]] || fail "no table $db.users"
     ;;
   reader)
     client() { # client <query>: as firefly_ro over TCP, from the network of ai
       "$as" podman --log-level=error run --rm --network "$ai_net" \
         --secret dev-pg-main-firefly_ro-password,type=env,target=PGPASSWORD --entrypoint psql "$(pg_image)" \
-        -X -h "$pg" -U firefly_ro -d firefly -v ON_ERROR_STOP=1 -tAq -c "$1" </dev/null
+        -X -h "$pg" -U firefly_ro -d firefly_casa -v ON_ERROR_STOP=1 -tAq -c "$1" </dev/null
     }
     out=$(client "SELECT count(*) FROM users" 2>&1) || fail "firefly_ro cannot read users: $out"
     if out=$(client "DELETE FROM migrations" 2>&1); then fail "firefly_ro deleted rows"; fi
     grep -q 'permission denied' <<<"$out" || fail "the delete failed for another reason: $out"
     if out=$(client "CREATE TABLE lifecycle_t (n int)" 2>&1); then fail "firefly_ro created a table"; fi
     grep -q 'permission denied' <<<"$out" || fail "the create failed for another reason: $out"
+    # Nor into the database of the other instance (pg_hba.conf and CONNECT, R48).
+    if out=$("$as" podman --log-level=error run --rm --network "$ai_net" \
+         --secret dev-pg-main-firefly_ro-password,type=env,target=PGPASSWORD --entrypoint psql "$(pg_image)" \
+         -X -h "$pg" -U firefly_ro -d firefly_canary -tAq -c "SELECT 1" </dev/null 2>&1); then
+      fail "firefly_ro connected to the database of canary"
+    fi
     ;;
   isolation)
     # Controls from the runner, so a failure below means isolation and not a broken runner.
@@ -112,10 +141,10 @@ case ${1:-} in
     if in_ff 'getent hosts example.com' >/dev/null 2>&1; then fail "Firefly resolved example.com"; fi
     if in_ff 'curl -s -m 5 -o /dev/null https://example.com' 2>/dev/null; then fail "Firefly fetched https://example.com"; fi
     if in_ff "timeout 5 bash -c '</dev/tcp/$host_ip/18999'" 2>/dev/null; then fail "Firefly reached the host ($host_ip:18999)"; fi
-    # The network of demo: PostgreSQL's address there, and another container in it.
+    # Another application (demo): PostgreSQL's address in its network, and a container in it.
     "$as" podman run -d --rm --name lifecycle-demo-probe --network "$demo_net" --entrypoint sleep "$(pg_image)" 120 >/dev/null
-    pg_demo_ip=$("$as" podman inspect "$pg" --format "{{(index .NetworkSettings.Networks \"$demo_net\").IPAddress}}")
-    probe_ip=$("$as" podman inspect lifecycle-demo-probe --format "{{(index .NetworkSettings.Networks \"$demo_net\").IPAddress}}")
+    pg_demo_ip=$(ip_in "$pg" "$demo_net")
+    probe_ip=$(ip_in lifecycle-demo-probe "$demo_net")
     if in_ff "timeout 5 bash -c '</dev/tcp/$pg_demo_ip/5432'" 2>/dev/null; then
       fail "Firefly reached PostgreSQL through the network of demo ($pg_demo_ip)"
     fi
@@ -123,6 +152,17 @@ case ${1:-} in
       fail "Firefly reached or resolved a container of the network of demo"
     fi
     "$as" podman stop -t 0 lifecycle-demo-probe >/dev/null
+    # The other instance (R48): another network, another subnet, nothing reachable.
+    [[ $("$as" podman network inspect "$net" --format '{{range .Subnets}}{{.Subnet}}{{end}}') != \
+       $("$as" podman network inspect "$other_net" --format '{{range .Subnets}}{{.Subnet}}{{end}}') ]] \
+      || fail "$net and $other_net share their subnet"
+    other_ip=$(ip_in "$other_name" "$other_net")
+    pg_other_ip=$(ip_in "$pg" "$other_net")
+    if in_ff "timeout 5 bash -c '</dev/tcp/$other_ip/8080'" 2>/dev/null; then fail "Firefly reached $other_name ($other_ip:8080)"; fi
+    if in_ff "getent hosts $other_name" >/dev/null 2>&1; then fail "Firefly resolved $other_name"; fi
+    if in_ff "timeout 5 bash -c '</dev/tcp/$pg_other_ip/5432'" 2>/dev/null; then
+      fail "Firefly reached PostgreSQL through the network of $other ($pg_other_ip)"
+    fi
     ;;
   user)
     # A fictitious user, with a random password that goes to the list of secrets the job
@@ -144,7 +184,7 @@ case ${1:-} in
       --data-urlencode "password=$password" --data-urlencode "password_confirmation=$password") || code="curl failed"
     rm -f "$jar"
     [[ $code == 302 ]] || fail "the registration answered $code"
-    owners=$(sql "SELECT count(*) FROM firefly.role_user ru JOIN firefly.roles r ON r.id = ru.role_id WHERE r.name = 'owner'")
+    owners=$(sql "SELECT count(*) FROM $db.role_user ru JOIN $db.roles r ON r.id = ru.role_id WHERE r.name = 'owner'")
     [[ $owners == 1 ]] || fail "the first user is not the owner ($owners owners)"
     ;;
   cron)
@@ -158,7 +198,11 @@ case ${1:-} in
   launcher)
     [[ -f $launcher ]] || fail "no launcher at $launcher"
     desktop-file-validate "$launcher" || fail "the launcher is not a valid .desktop file"
-    grep -qx "Exec=xdg-open http://127.0.0.1:$port" "$launcher" || fail "the launcher does not open 127.0.0.1:$port"
+    # casa: the default browser; canary: the launcher_command of the inventory.
+    exec_line="Exec=xdg-open http://127.0.0.1:$port"
+    [[ $instance == canary ]] && exec_line="Exec=flatpak run org.mozilla.firefox --new-window http://127.0.0.1:$port"
+    grep -qxF "$exec_line" "$launcher" || fail "the launcher does not say '$exec_line': $(grep '^Exec=' "$launcher")"
+    grep -qx "Name=Firefly III ($instance)" "$launcher" || fail "the launcher is not named after its instance"
     ;;
   wait)
     # PostgreSQL paused: its healthcheck fails, so Firefly must wait and give up at
@@ -179,16 +223,16 @@ case ${1:-} in
     echo "::notice title=Wait for PostgreSQL (SPEC 4.3)::gave up after $took s with PostgreSQL paused; started by itself after"
     ;;
   marker)
-    case ${2:-} in
+    case ${3:-} in
       write)
         in_ff 'echo lifecycle > /var/www/html/storage/upload/lifecycle-marker'
-        sql "SELECT count(*) FROM firefly.migrations" > "$state"
+        sql "SELECT count(*) FROM $db.migrations" > "$state"
         ;;
       read)
         [[ $(in_ff 'cat /var/www/html/storage/upload/lifecycle-marker') == lifecycle ]] || fail "the attachments volume lost its file"
-        [[ $(sql "SELECT count(*) FROM firefly.migrations") == "$(cat "$state")" ]] || fail "the database changed"
+        [[ $(sql "SELECT count(*) FROM $db.migrations") == "$(cat "$state")" ]] || fail "the database changed"
         ;;
-      *) fail "usage: marker write|read" ;;
+      *) fail "usage: marker <instance> write|read" ;;
     esac
     ;;
   destroyed)
@@ -197,10 +241,11 @@ case ${1:-} in
     home=$(getent passwd svc_runner | cut -d: -f6)
     if sudo test -e "$home/.config/systemd/user/$name-cron.timer"; then fail "the timer is still installed"; fi
     if [[ -e $launcher ]]; then fail "the launcher is still installed"; fi
+    [[ $(sql "SELECT count(*) FROM $db.migrations") -gt 0 ]] || fail "its database lost its data"
     ;;
   *)
-    echo "usage: $0 running|standard|schema|reader|isolation|cron|launcher|wait|marker|destroyed" >&2
+    echo "usage: $0 running|standard|schema|reader|isolation|user|cron|launcher|wait|marker|destroyed [casa|canary]" >&2
     exit 2
     ;;
 esac
-echo "ok: $1"
+echo "ok: $step $instance"

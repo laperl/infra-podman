@@ -436,7 +436,7 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 
 ### R48. Toda aplicación admite varias instancias
 
-- **Decisión:** cualquier aplicación (Firefly, pgAdmin y las que lleguen) puede desplegarse varias veces en la misma máquina, como ya hace Postgres (D8). Cada rol recibe una lista de instancias (`<app>_instances`) y el playbook lo aplica una vez por instancia. Cada instancia tiene su nombre (`^[a-z0-9]+$`), su puerto, su base, su red, sus secretos, su volumen y su lanzador. Nada se comparte entre instancias.
-- **Motivo:** lo pide el operador como regla general. Es el patrón de `postgres_instances` y el de los roles de sistema de Podman (`linux-system-roles.podman`, lista `podman_quadlet_specs`).
-- **Aprobada por:** el operador, el 2026-11-08. Firefly nace con una sola instancia (PR 3 de la fase 2); el paso a lista está en el ROADMAP.
+- **Decisión:** cualquier aplicación (Firefly, pgAdmin y las que lleguen) se despliega por instancias, aunque haya una sola, como ya hace Postgres (D8). Cada rol recibe una lista (`<app>_instances`) y el playbook lo aplica una vez por instancia. Cada instancia tiene su nombre (`^[a-z0-9]{1,14}$`), su puerto, su imagen, su red con su subred, su volumen, sus secretos y su lanzador. Nada se comparte entre instancias. **En Postgres, cada instancia tiene su propia base de datos, con un único esquema del mismo nombre; nunca dos instancias en la misma base**, aunque varias aplicaciones e instancias compartan la misma Postgres. Puertos desde el 18100, elegidos por el operador. Detalle en [`services/README.md`](services/README.md).
+- **Motivo:** lo pide el operador como regla general, para tener instancias de uso, canary y test. Es el patrón de `postgres_instances` y el de los roles de sistema de Podman (`linux-system-roles.podman`, lista `podman_quadlet_specs`). La base por instancia, y no el esquema compartido, la eligió el operador: aísla más y cada instancia se copia y restaura sola.
+- **Aprobada por:** el operador, el 2026-11-08. Firefly es la primera aplicación que la cumple (PR 3 de la fase 2).
 - **SPEC:** 4.12.

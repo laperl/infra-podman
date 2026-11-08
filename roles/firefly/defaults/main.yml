@@ -1,65 +1,86 @@
 ---
-# Firefly III (phase 2, docs/services/firefly.md). One installation per machine, in the
-# PostgreSQL instance firefly_pg_instance of the same machine. The image lives in
-# playbooks/group_vars/all/images.yml (firefly_image).
+# Firefly III (phase 2, docs/services/firefly.md), as INSTANCES (R48, docs/services/README.md).
+# playbooks/firefly.yml calls this role once per item of firefly_instances, with that item
+# in firefly_item. Each instance has its own container, port, network, database, secrets,
+# volume, scheduled tasks and launcher: nothing is shared between instances.
+
+# The instances of this machine, in the data repository (group_vars/firefly_hosts.yml).
+# Each item:
+#   name:     ^[a-z0-9]{1,14}$, for example casa, canary, test (required)
+#   port:     its port on 127.0.0.1, from 18100 up, chosen by the operator (required)
+#   pg_instance:  the PostgreSQL instance of this machine with its database (default main)
+#   image:    the variable of playbooks/group_vars/all/images.yml with its image (default
+#             firefly_image; for example firefly_canary_image for a canary)
+#   language, timezone, log_level, memory, cpus, pids_limit, start_timeout, cron_time:
+#             as the defaults below
+#   launcher: false on a machine without a desktop (default true)
+#   launcher_name:    its name in the menu (default "Firefly III (<name>)")
+#   launcher_command: the browser, as a list of words, without the address, which the role
+#             adds (default [xdg-open]). For example [flatpak, run, org.mozilla.firefox, --new-window]
+# Set these per instance, never as firefly_* variables in the inventory: those would win
+# over every instance.
+firefly_instances: []
+
+# The instance of this call (set by the playbook). The value here only serves to render the
+# templates in CI.
+firefly_item: {name: ci, port: 18100}
+
+# --retire <name>: the instance to stop and remove, keeping its data (playbook).
+firefly_retire: ""
 
 firefly_state: present
 
-# Port on 127.0.0.1 of the machine, the only way in (SPEC 4.4, R25). The address the
-# browser opens: http://127.0.0.1:<port>.
-firefly_port: 18001
-
-# Language of new users and of the login page, and time zone (the image's own variables
-# DEFAULT_LANGUAGE and TZ). The operator's choice, in the data repository.
-firefly_language: en_US
-firefly_timezone: UTC
-
-# Log level of the application (APP_LOG_LEVEL). The logs go to the journal of the
-# service user. The audit log is off (AUDIT_LOG_LEVEL=emergency, decided by the operator
-# on 2026-11-08): Firefly says it may contain financial information.
-firefly_log_level: notice
-
+# What each instance gets when it does not say otherwise.
+firefly_instance: "{{ firefly_item.name }}"
+firefly_port: "{{ firefly_item.port | default('') }}"
+firefly_pg_instance: "{{ firefly_item.pg_instance | default('main') }}"
+firefly_image_var: "{{ firefly_item.image | default('firefly_image') }}"
+firefly_container_image: "{{ lookup('ansible.builtin.vars', firefly_image_var) }}"
+# Language of new users and of the login page, and time zone (DEFAULT_LANGUAGE and TZ).
+firefly_language: "{{ firefly_item.language | default('en_US') }}"
+firefly_timezone: "{{ firefly_item.timezone | default('UTC') }}"
+# APP_LOG_LEVEL. The logs go to the journal of the service user. The audit log is off
+# (AUDIT_LOG_LEVEL=emergency, decided by the operator on 2026-11-08): Firefly says it may
+# contain financial information.
+firefly_log_level: "{{ firefly_item.log_level | default('notice') }}"
 # Resource limits (R46). Podman 4.9 has no Memory= key: memory and CPU go through
 # PodmanArgs (docs/COMPATIBILITY.md). Measured in DEV (docs/services/firefly.md).
-firefly_memory: 512m
-firefly_cpus: "1"
-firefly_pids_limit: 200
-
+firefly_memory: "{{ firefly_item.memory | default('512m') }}"
+firefly_cpus: "{{ firefly_item.cpus | default('1') }}"
+firefly_pids_limit: "{{ firefly_item.pids_limit | default(200) }}"
 # How long the start may wait for PostgreSQL to be healthy (SPEC 4.3): TimeoutStartSec.
-firefly_start_timeout: 300
-
+firefly_start_timeout: "{{ firefly_item.start_timeout | default(300) }}"
 # Daily run of Firefly's own scheduled tasks (recurring transactions, automatic budgets,
 # bill warnings): php artisan firefly-iii:cron, at this time (HH:MM). Persistent: if the
 # machine was off, it runs when it starts again.
-firefly_cron_time: "05:30"
-
-# Launcher in the operator's menu (R47): its name. false in firefly_launcher for a machine
-# without a desktop.
-firefly_launcher: true
-firefly_launcher_name: Firefly III
-
-# Where its data is (docs/POSTGRES.md, section 6): the instance, the database and the user
-# declared in postgres_hosts.yml of the data repository, with consumer: firefly.
-firefly_pg_instance: main
-firefly_db_name: firefly
-firefly_db_user: firefly
+firefly_cron_time: "{{ firefly_item.cron_time | default('05:30') }}"
+# Launcher in the operator's menu (R47).
+firefly_launcher: "{{ firefly_item.launcher | default(true) }}"
+firefly_launcher_name: "{{ firefly_item.launcher_name | default('Firefly III (' ~ firefly_instance ~ ')') }}"
+firefly_launcher_command: "{{ firefly_item.launcher_command | default(['xdg-open']) }}"
 
 # Home of the service user. Overwritten by the role with the real one (getent); this value
 # only serves to render the templates in CI.
 firefly_service_home: /home/svc_runner
 
-# Names (SPEC 4.12). Derived; do not override.
-firefly_name: "{{ infra_env }}-firefly"
+# Names (SPEC 4.12, R48). Derived; do not override.
+firefly_name: "{{ infra_env }}-firefly-{{ firefly_instance }}"
 firefly_volume: "{{ firefly_name }}-uploads"
 firefly_pg_name: "{{ infra_env }}-pg-{{ firefly_pg_instance }}"
-# Created by the postgres role for the consumer firefly (SPEC 4.4, D9).
-firefly_network: "{{ infra_env }}-firefly-pg-{{ firefly_pg_instance }}-net"
+# Its database, schema and user: one database per instance (docs/POSTGRES.md, section 2),
+# declared by the operator in postgres_hosts.yml with this consumer (D9).
+firefly_db_name: firefly_{{ firefly_instance }}
+firefly_db_user: firefly_{{ firefly_instance }}
+firefly_consumer: firefly{{ firefly_instance }}
+# Created by the postgres role for that consumer (SPEC 4.4).
+firefly_network: "{{ infra_env }}-{{ firefly_consumer }}-pg-{{ firefly_pg_instance }}-net"
 # KeePassXC entries <infra_site>/<key>; Podman secrets with the environment in front.
-firefly_app_key_secret_key: firefly-app-key
+firefly_app_key_secret_key: firefly-{{ firefly_instance }}-app-key
 firefly_app_key_secret: "{{ infra_env }}-{{ firefly_app_key_secret_key }}"
 firefly_db_secret_key: pg-{{ firefly_pg_instance }}-{{ firefly_db_user }}-password
 firefly_db_secret: "{{ infra_env }}-{{ firefly_db_secret_key }}"
 firefly_cron_name: "{{ firefly_name }}-cron"
+firefly_launcher_file_name: infra-podman-{{ firefly_name }}.desktop
 
 # What quadlet_deploy installs, and what CI renders (scripts/render-quadlets.yml).
 firefly_quadlet_units:
