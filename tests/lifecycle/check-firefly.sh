@@ -47,8 +47,9 @@ case ${1:-} in
     [[ $ports == "8080/tcp -> 127.0.0.1:$port" ]] || fail "published ports: '$ports', expected only 127.0.0.1:$port"
     body=$(curl -fsS "http://127.0.0.1:$port/health") || fail "/health does not answer on 127.0.0.1:$port"
     [[ $body == OK ]] || fail "/health says '$body'"
-    code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/login")
-    [[ $code == 200 ]] || fail "the login page answers $code"
+    # Without users yet Firefly sends /login on to /register: follow it, it must stay here.
+    got=$(curl -sL -o /dev/null -w '%{http_code} %{url_effective}' "http://127.0.0.1:$port/login")
+    [[ $got =~ ^200\ http://127\.0\.0\.1:$port/ ]] || fail "the login page answers '$got'"
     host_ip=$(hostname -I | awk '{print $1}')
     if timeout 5 bash -c "</dev/tcp/$host_ip/$port" 2>/dev/null; then fail "port $port answers on $host_ip"; fi
     ;;
