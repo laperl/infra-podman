@@ -126,7 +126,9 @@ case ${1:-} in
   cron)
     [[ $("$as" systemctl --user is-active "$name-cron.timer") == active ]] || fail "$name-cron.timer is not active"
     since=$(date '+%Y-%m-%d %H:%M:%S')
-    "$as" systemctl --user start "$name-cron.service" || fail "the scheduled tasks failed: $(sudo journalctl _SYSTEMD_USER_UNIT="$name-cron.service" --since "$since" --no-pager | tail -5)"
+    # The journal of the unit also holds the healthchecks of its ExecStartPre: left out.
+    "$as" systemctl --user start "$name-cron.service" || fail "the scheduled tasks failed: $(sudo journalctl \
+      _SYSTEMD_USER_UNIT="$name-cron.service" --since "$since" --no-pager -o cat | grep -v 'health_status' | tail -15)"
     [[ $("$as" systemctl --user show -p Result --value "$name-cron.service") == success ]] || fail "the scheduled tasks did not end well"
     ;;
   launcher)
