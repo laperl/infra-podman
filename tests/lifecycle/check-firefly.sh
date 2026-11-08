@@ -144,7 +144,7 @@ case ${1:-} in
       --data-urlencode "password=$password" --data-urlencode "password_confirmation=$password") || code="curl failed"
     rm -f "$jar"
     [[ $code == 302 ]] || fail "the registration answered $code"
-    owners=$(sql "SELECT count(*) FROM role_user ru JOIN roles r ON r.id = ru.role_id WHERE r.name = 'owner'")
+    owners=$(sql "SELECT count(*) FROM firefly.role_user ru JOIN firefly.roles r ON r.id = ru.role_id WHERE r.name = 'owner'")
     [[ $owners == 1 ]] || fail "the first user is not the owner ($owners owners)"
     ;;
   cron)
@@ -182,11 +182,11 @@ case ${1:-} in
     case ${2:-} in
       write)
         in_ff 'echo lifecycle > /var/www/html/storage/upload/lifecycle-marker'
-        sql "SELECT count(*) FROM migrations" > "$state"
+        sql "SELECT count(*) FROM firefly.migrations" > "$state"
         ;;
       read)
         [[ $(in_ff 'cat /var/www/html/storage/upload/lifecycle-marker') == lifecycle ]] || fail "the attachments volume lost its file"
-        [[ $(sql "SELECT count(*) FROM migrations") == "$(cat "$state")" ]] || fail "the database changed"
+        [[ $(sql "SELECT count(*) FROM firefly.migrations") == "$(cat "$state")" ]] || fail "the database changed"
         ;;
       *) fail "usage: marker write|read" ;;
     esac
