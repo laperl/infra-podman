@@ -132,11 +132,16 @@ case ${1:-} in
     password=$(openssl rand -hex 24)
     echo "::add-mask::$password"
     echo "$password" >> "${RUNNER_TEMP:?}/pw"
-    token=$(curl -fsS -c "$jar" "http://127.0.0.1:$port/register" | sed -n 's/.*name="_token" value="\([^"]*\)".*/\1/p' | head -1)
+    page=$(mktemp)
+    code=$(curl -sS -c "$jar" -o "$page" -w '%{http_code}' "http://127.0.0.1:$port/register") || code="curl failed"
+    [[ $code == 200 ]] || fail "the registration page answers $code: $(head -c 300 "$page")"
+    token=$(sed -n 's/.*name="_token" value="\([^"]*\)".*/\1/p' "$page")
+    token=${token%%$'\n'*}
+    rm -f "$page"
     [[ -n $token ]] || fail "the registration page has no form token"
     code=$(curl -s -b "$jar" -c "$jar" -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/register" \
       --data-urlencode "_token=$token" --data-urlencode "email=lifecycle@example.com" \
-      --data-urlencode "password=$password" --data-urlencode "password_confirmation=$password")
+      --data-urlencode "password=$password" --data-urlencode "password_confirmation=$password") || code="curl failed"
     rm -f "$jar"
     [[ $code == 302 ]] || fail "the registration answered $code"
     owners=$(sql "SELECT count(*) FROM role_user ru JOIN roles r ON r.id = ru.role_id WHERE r.name = 'owner'")
