@@ -26,10 +26,15 @@
       check_mode: false
       changed_when: false
 
+    # The new units first, then the installed ones: a unit may use one another role installs
+    # (Firefly's container, the .network of the postgres role), and Podman 5 refuses a
+    # reference it cannot find. On the same name the first directory wins (cmd/quadlet,
+    # loadUnitsFromDir), so the new version is the one checked. Same in Podman 4.9.
     - name: Run the generator in dry-run mode (SPEC 4.2)
       ansible.builtin.command:
         cmd: "{{ quadlet_deploy_generator }} --user --dryrun"
-      environment: "{{ quadlet_deploy_env | combine({'QUADLET_UNIT_DIRS': quadlet_deploy_tmp.path}) }}"
+      environment: >-
+        {{ quadlet_deploy_env | combine({'QUADLET_UNIT_DIRS': quadlet_deploy_tmp.path ~ ':' ~ quadlet_deploy_dir}) }}
       become: true
       become_user: "{{ service_user }}"
       register: quadlet_deploy_dryrun

@@ -84,6 +84,7 @@ El 2026-11-03, en `ubuntu-24.04` con Podman 4.9.3 sin root y systemd de usuario:
 - **`HealthCmd=`** con comillas y una tubería: Quadlet 4.9 lo pasa entero a `--health-cmd` y Podman lo ejecuta con `sh -c`.
 - **Contenedores de un solo uso (backup, fase 1e1):** `Type=oneshot` en `[Service]` funciona en 4.9. El generador no añade `--sdnotify`, conserva `ExecStartPre=` y `ExecStopPost=` propios y, sin `[Install]`, el servicio no arranca al encender. Lo arranca un `.timer` normal de systemd.
 - **`Entrypoint=` no existe en Quadlet 4.9** (`unsupported key`). Se usa `PodmanArgs=--entrypoint=…`.
+- **Validación de una unidad que usa otra de otro rol:** Podman 5 rechaza `Network=<x>.network` si no encuentra ese `.network` (`requested Quadlet unit … was not found`); 4.9 no lo comprueba. Por eso `quadlet_deploy` valida con `QUADLET_UNIT_DIRS=<temporal>:<carpeta instalada>`: las unidades nuevas primero y, detrás, las ya instaladas. Si un nombre está en las dos, gana la primera carpeta (`cmd/quadlet/main.go`, `loadUnitsFromDir`, igual en 4.9.3). Visto en la VM DEV al desplegar Firefly.
 - **`StopSignal=` tampoco existe en Quadlet 4.9** (no está en `podman-systemd.unit.5.md` del tag `v4.9.3`). Firefly usa `PodmanArgs=--stop-signal=SIGINT`.
 - **Firefly (fase 2), comprobado en `lifecycle` con 4.9.3:**
   - `Network=<x>.network` de un `.network` que instala otro rol (Postgres) funciona: el generador lee el `NetworkName=` porque los dos ficheros están en la misma carpeta (`addNetworks` en `quadlet.go`).
