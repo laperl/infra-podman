@@ -1,6 +1,6 @@
-# Instalar Postgres y una aplicación, paso a paso
+# Instalar y quitar Postgres y una aplicación, paso a paso
 
-La guía para montar desde cero una instancia de Postgres y una aplicación encima. El ejemplo completo es **Firefly III en el portátil, en producción**. Las reglas (por qué cada instancia es independiente y cómo se forman los nombres) están en [`README.md`](README.md); aquí solo el procedimiento.
+La guía para montar desde cero una instancia de Postgres y una aplicación encima, y para quitarlas (apartados 10 y 11). El ejemplo completo es **Firefly III en el portátil, en producción**. Las reglas (por qué cada instancia es independiente y cómo se forman los nombres) están en [`README.md`](README.md); aquí solo el procedimiento.
 
 **Para DEV** es igual, con tres cambios:
 - `inventory/dev/` en vez de `inventory/prod/`;
@@ -249,15 +249,96 @@ Dentro, primero `SET default_transaction_read_only = on;` y `SET search_path = f
 
 Cada mensaje dice qué falta y qué hacer. Si no basta, búscalo en [`TROUBLESHOOTING.md`](../TROUBLESHOOTING.md): el apartado 5 es Postgres y el 11 es Firefly.
 
-## 10. Si ya tenías otra Postgres vacía (por ejemplo `prod-pg-main`)
+## 10. Quitar una instancia de Firefly y borrar su base
 
-1. **Crea primero la nueva**, con los pasos 4 a 7.
-2. **Retira la vieja** mientras aún está declarada en `postgres_hosts.yml`:
-   ```bash
-   ./deploy.sh apply postgres --env prod --limit laptop --retire main
-   ```
-3. **Quítala del fichero**, con su línea `pg-main-superuser-password` de `infra_secrets`. Haz un commit firmado y luego:
-   ```bash
-   ./deploy.sh apply backup --env prod --limit laptop
-   ```
-4. **Borra sus datos, su secreto y, si quieres, sus copias.** Está en [`POSTGRES.md`](../POSTGRES.md), apartado 7, «Borrar del todo una instancia retirada».
+En este orden: primero la aplicación, luego su base. Mientras Firefly esté conectado, Postgres no deja borrarla.
+
+Se usan estos nombres; cámbialos por los tuyos:
+- `<entorno>`: `dev` o `prod`;
+- `<máquina>`: el alias de la máquina en `hosts.yml` (tu VM, `laptop`…);
+- `<instancia>`: la de Firefly, por ejemplo `laptop`;
+- `<postgres>`: la instancia de Postgres donde está su base, por ejemplo `main`.
+
+En DEV, `--env dev` y `infra-dev.kdbx`; en producción, desde un tag ([`WORKFLOW.md`](../WORKFLOW.md)).
+
+**Antes de nada, si los datos importan:** la copia diaria ya tiene su base. Si quieres una copia de este momento, lanza `svc systemctl --user start <entorno>-backup.service` ([`OPERATIONS.md`](../OPERATIONS.md), apartado 3).
+
+**1. Retirar la instancia**, mientras **sigue** en `firefly_instances`:
+```bash
+./deploy.sh apply firefly --env <entorno> --limit <máquina> --retire <instancia>
+```
+Para Firefly y quita su contenedor, sus tareas diarias y su lanzador. Las demás instancias siguen igual. Se quedan sus justificantes, su base y sus secretos.
+
+**2. Quitarla del repo de datos** y hacer un commit firmado:
+- en `group_vars/firefly_hosts.yml`, su bloque `- name: <instancia>` de `firefly_instances`. Si era la única instancia, deja `firefly_instances: []`;
+- en `group_vars/postgres_hosts.yml`, su base `- name: ff_<instancia>`, con su usuario, dentro de `databases:`;
+- en `group_vars/all.yml`, sus dos líneas de `infra_secrets`: `pg-<postgres>-ff_<instancia>-password` y `ff-<instancia>-app-key`.
+
+**3. Borrar su base:**
+```bash
+./deploy.sh plan  postgres --env <entorno> --limit <máquina>   # lee qué va a borrar
+./deploy.sh apply postgres --env <entorno> --limit <máquina>
+```
+El `apply` hace esto, en orden ([`POSTGRES.md`](../POSTGRES.md), apartado 7):
+1. comprueba que nadie está conectado a la base;
+2. hace una copia completa antes de borrar (`reason=pre-drop`), que llega también al GX10;
+3. borra la base `ff_<instancia>` y sus tres grupos;
+4. borra el usuario `ff_<instancia>` y su secreto de Podman, y quita su red. Para eso Postgres se reinicia una vez, y las otras aplicaciones de esa Postgres pierden la conexión unos segundos;
+5. al final, te recuerda borrar su entrada de KeePassXC.
+
+Si era la **última** base de esa Postgres, se para y te pide confirmarlo. Repite el `apply` con `--confirm-drop <postgres>`.
+
+**4. Borrar lo que queda en la máquina.** En ella, con la función `svc` ([`SETUP.md`](../SETUP.md), paso 12):
+```bash
+sudo rm ~svc_runner/.config/containers/systemd/<entorno>-ff-<instancia>-uploads.volume   # la unidad del volumen
+svc systemctl --user daemon-reload
+svc podman volume rm <entorno>-ff-<instancia>-uploads                                     # LOS JUSTIFICANTES
+svc podman secret rm <entorno>-ff-<instancia>-app-key                                     # su clave
+```
+Si alguna cosa ya no existe, la orden lo dice y no pasa nada.
+
+**5. En KeePassXC:** borra las entradas `ff-<instancia>-app-key` y `pg-<postgres>-ff_<instancia>-password`.
+
+**6. Sus copias, si también las quieres borrar** (opcional). La de su base es la ruta `/backup/pg-<postgres>/pgdump/ff_<instancia>`. Se borran como las de una instancia de Postgres ([`POSTGRES.md`](../POSTGRES.md), apartado 7, «Borrar del todo una instancia retirada», paso 4), cambiando el filtro `--tag app=pg-<postgres>` por:
+```
+--path /backup/pg-<postgres>/pgdump/ff_<instancia>
+```
+Así solo se borran las copias de esa base, no las de otras bases de la misma Postgres.
+
+**Comprobar:**
+- `svc podman ps -a --filter name=<entorno>-ff-<instancia>` no saca ninguna línea;
+- `svc podman exec <entorno>-pg-<postgres> psql -U <tu_admin> -d postgres -c '\l'` ya no lista `ff_<instancia>`.
+
+## 11. Quitar una instancia de Postgres (y crear otra con otro nombre)
+
+**Primero quita todas sus aplicaciones** (apartado 10). Lo que quede en ella se pierde cuando borres sus datos. Para ver qué bases tiene:
+```bash
+svc podman exec <entorno>-pg-<postgres> psql -U <tu_admin> -d postgres -c '\l'
+```
+Si solo salen `postgres`, `template0` y `template1`, está vacía.
+
+**1. Si vas a crear otra, créala primero**, con los pasos 4 a 7: sus entradas en KeePassXC, su bloque en `postgres_instances`, `secrets` y `apply postgres`. Las dos pueden convivir. Así, si algo falla, la vieja sigue ahí.
+
+**2. Retirar la vieja**, mientras **sigue** en `postgres_instances`:
+```bash
+./deploy.sh apply postgres --env <entorno> --limit <máquina> --retire <postgres>
+```
+Para su contenedor y quita su servicio, y conserva su volumen.
+
+**3. Quitarla del repo de datos y aplicar el backup.** Haz estos cambios y un commit firmado:
+- borra su bloque de `postgres_instances`;
+- borra su línea `pg-<postgres>-superuser-password` de `infra_secrets`.
+
+Y **en seguida**:
+```bash
+./deploy.sh apply backup --env <entorno> --limit <máquina>
+```
+La copia diaria vuelca todas las instancias declaradas. Hasta este `apply` sigue intentando volcar la retirada, y falla con `<entorno>-pg-<postgres> no está en marcha`.
+
+**4. Borrar sus datos, su configuración y su secreto en la máquina, y su entrada de KeePassXC.** Son las órdenes de [`POSTGRES.md`](../POSTGRES.md), apartado 7, «Borrar del todo una instancia retirada», pasos 2 y 3. **Sin vuelta atrás.**
+
+**5. Sus copias, si las quieres borrar** (opcional): el paso 4 de esa misma sección, en el portátil y en el GX10. Primero con `--dry-run`.
+
+**Comprobar:**
+- `svc podman ps -a --filter name=<entorno>-pg-<postgres>` y `svc podman volume ls --filter name=<entorno>-pg-<postgres>` no sacan nada;
+- `./deploy.sh apply postgres …` ya no avisa de ninguna instancia sin declarar.

@@ -5,10 +5,12 @@
 #   deploy.sh apply   <playbook> [--env dev|prod] [--limit PATTERN]
 #   deploy.sh secrets            [--env dev|prod] [--limit PATTERN] [--rotate NAME]
 #   deploy.sh apply   postgres   ... --confirm-drop INSTANCE | --retire INSTANCE
+#   deploy.sh apply   firefly    ... --retire INSTANCE
 #
-# Only with apply postgres (docs/POSTGRES.md, section 7): --confirm-drop confirms dropping
-# every database of an instance that has none left in the inventory; --retire stops one
-# instance and removes its service, keeping its data.
+# --confirm-drop, only with apply postgres (docs/POSTGRES.md, section 7): confirms dropping
+# every database of an instance that has none left in the inventory. --retire, with apply
+# postgres or apply firefly: stops one instance and removes its service, keeping its data
+# (docs/services/README.md, section 7). It becomes -e <playbook>_retire=INSTANCE.
 # --env defaults to prod. In prod the checkout must be clean and HEAD must carry a tag
 # signed by a key listed in ~/.config/infra-podman/allowed_signers, a file that lives
 # OUTSIDE the repository (R4 in docs/DECISIONS.md).
@@ -89,8 +91,10 @@ parse_args() {
   [[ -z $limit || $limit =~ ^[A-Za-z0-9_.,:-]+$ ]] || refuse "--limit no válido: $limit"
   [[ -z $rotate || $rotate =~ ^[a-z0-9_-]+$ ]] || refuse "nombre de secreto no válido en --rotate: $rotate"
   if [[ -n $confirm_drop || -n $retire ]]; then
-    [[ $action == apply && $target == postgres ]] \
-      || refuse "--confirm-drop y --retire solo valen con apply postgres"
+    [[ -z $confirm_drop || ($action == apply && $target == postgres) ]] \
+      || refuse "--confirm-drop solo vale con apply postgres"
+    [[ -z $retire || ($action == apply && $target =~ ^(postgres|firefly)$) ]] \
+      || refuse "--retire solo vale con apply postgres o apply firefly"
     [[ -z $confirm_drop || -z $retire ]] || refuse "--confirm-drop y --retire no van juntos"
     [[ $confirm_drop$retire =~ ^[a-z0-9]+$ ]] \
       || refuse "nombre de instancia no válido: $confirm_drop$retire (letras minúsculas y números)"
@@ -208,7 +212,7 @@ run_navigator() {
   args+=(--diff --ask-become-pass)
   [[ -n $limit ]] && args+=(--limit "$limit")
   [[ -n $confirm_drop ]] && args+=(-e "postgres_confirm_drop=$confirm_drop")
-  [[ -n $retire ]] && args+=(-e "postgres_retire=$retire")
+  [[ -n $retire ]] && args+=(-e "${target}_retire=$retire")
   "$NAVIGATOR" "${args[@]}"
 }
 

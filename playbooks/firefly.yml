@@ -6,8 +6,8 @@
 # laptop is prod-ff-laptop.
 #   ./deploy.sh plan firefly --env dev --limit <vm>
 # An instance removed from the inventory is never stopped by removing it: it is only
-# reported. Retiring one, keeping its data: -e firefly_retire=<name>, while it is still
-# declared (not through deploy.sh yet). CI removes every instance with -e firefly_state=absent.
+# reported. Retiring one, keeping its data, while it is still declared:
+#   ./deploy.sh apply firefly --retire <name>   (-e firefly_retire=<name>) CI removes every instance with -e firefly_state=absent.
 - name: Firefly III instances
   hosts: firefly_hosts
   gather_facts: false
@@ -71,7 +71,7 @@
         msg: >-
           Not in the inventory of {{ inventory_hostname }}, left running as they are:
           {{ firefly_undeclared | join(', ') }}. To retire one keeping its data, declare it again
-          and run with -e firefly_retire=<name> (docs/services/README.md).
+          and run ./deploy.sh apply firefly --retire <name> (docs/services/INSTALL.md, section 10).
       when: firefly_undeclared | length > 0
       vars:
         firefly_undeclared: >-

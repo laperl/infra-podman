@@ -102,5 +102,7 @@ Lo que una instancia no dice lo toma del valor por defecto del rol (`roles/<app>
 ## 7. Quitar una instancia
 
 - **Borrarla del inventario no la para ni la borra:** el `apply` solo avisa de que sigue en marcha (`left running as they are`), como Postgres.
-- **Retirarla conservando sus datos:** mientras sigue declarada, `-e <app>_retire=<instancia>`. Se van el contenedor, el temporizador y el lanzador. Se quedan su base y su volumen. Las demás instancias no se tocan. `deploy.sh` aún no lo pasa (ROADMAP).
-- **Su base** se borra como cualquier otra: quitándola de `postgres_hosts.yml`, con su copia previa (`POSTGRES.md`, apartado 7).
+- **Retirarla**, mientras sigue declarada: `./deploy.sh apply <app> --retire <instancia>`. Se van el contenedor, sus tareas y su lanzador. Se quedan su base, su volumen y sus secretos, y las demás instancias no se tocan.
+- **Borrar sus datos y su base** son pasos aparte, a mano y sin vuelta atrás salvo restaurar una copia.
+
+El procedimiento completo, orden por orden, está en [`INSTALL.md`](INSTALL.md), apartado 10.

@@ -22,7 +22,8 @@ Qué hacer cuando algo falla, ordenado por pieza. Busca el mensaje que ves (Ctrl
 | Lo que ves | Por qué | Qué hacer |
 | --- | --- | --- |
 | `deploy.sh: no existe el repo de datos …. ¿Está montado el volumen cifrado?` | El volumen `SECURE_vc` no está montado | Móntalo en VeraCrypt y repite |
-| `deploy.sh: --confirm-drop y --retire solo valen con apply postgres` | Las usaste con `plan` o con otro playbook | Solo `./deploy.sh apply postgres … --confirm-drop <instancia>` o `--retire <instancia>` |
+| `deploy.sh: --confirm-drop solo vale con apply postgres` | La usaste con `plan` o con otro playbook | Solo `./deploy.sh apply postgres … --confirm-drop <instancia>` |
+| `deploy.sh: --retire solo vale con apply postgres o apply firefly` | La usaste con `plan` o con otro playbook | `./deploy.sh apply postgres … --retire <instancia>` o `./deploy.sh apply firefly … --retire <instancia>` |
 | `deploy.sh: nombre de instancia no válido: …` | El nombre no es solo letras minúsculas y números | El de `name:` en `postgres_instances` |
 | `deploy.sh: define data_repo = <ruta del repo de datos> en …` | Falta la línea `data_repo` en `~/.config/infra-podman/deploy.conf` | Añádela ([`SETUP.md`](SETUP.md), paso 7) |
 | `deploy.sh: falta inventory/prod/hosts.yml en el repo de datos …` | El repo de datos no tiene el inventario de ese entorno | Revisa su estructura con [`inventory.example/`](../inventory.example/README.md) |
@@ -188,5 +189,5 @@ Cada instancia tiene sus nombres ([`services/README.md`](services/README.md)): c
 | `prod-ff-<instancia> would start a new image, which changes its database, and there is no backup service on …` | Al cambiar la imagen de una instancia se hace antes una copia, y no hay servicio de backup | `./deploy.sh apply backup --limit laptop` y repite |
 | `The backup before changing the image of prod-ff-<instancia> failed, so the image has NOT been changed` | La copia previa ha fallado; esa instancia sigue con su imagen anterior | El apartado 6 (backup local), con los logs que salen en el mensaje |
 | `There is no user in the system with the "owner"-role, cannot continue.` (en los logs de `prod-ff-<instancia>-cron.service`) | Las tareas diarias necesitan un usuario, y aún no has creado el tuyo en esa instancia | Crea tu usuario en `http://127.0.0.1:<puerto>` (el primero es el administrador). Hasta entonces, el temporizador falla cada día sin más consecuencia |
-| `Not in the inventory of …, left running as they are: ff-<instancia>` | Has quitado una instancia del inventario y sigue en marcha: quitarla no la para | Si querías retirarla, vuelve a declararla y aplica con `-e firefly_retire=<instancia>` ([`services/README.md`](services/README.md), apartado 7) |
+| `Not in the inventory of …, left running as they are: ff-<instancia>` | Has quitado una instancia del inventario y sigue en marcha: quitarla no la para | Si querías retirarla, vuelve a declararla y `./deploy.sh apply firefly … --retire <instancia>` ([`services/INSTALL.md`](services/INSTALL.md), apartado 10; apartado 7) |
 | La página no carga en `http://127.0.0.1:<puerto>` | Esa instancia está parada o arrancando, o el puerto es de otra | `svc podman port prod-ff-<instancia>` dice su puerto. `svc systemctl --user status prod-ff-<instancia>.service` |
