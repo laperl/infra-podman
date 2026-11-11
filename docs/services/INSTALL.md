@@ -269,6 +269,8 @@ En DEV, `--env dev` y `infra-dev.kdbx`; en producción, desde un tag ([`WORKFLOW
 ```
 Para Firefly y quita su contenedor, sus tareas diarias y su lanzador. Las demás instancias siguen igual. Se quedan sus justificantes, su base y sus secretos.
 
+**No ejecutes otro `apply firefly` hasta el paso 2.** Mientras siga declarada en el fichero, un `apply` sin `--retire` la vuelve a crear.
+
 **2. Quitarla del repo de datos** y hacer un commit firmado:
 - en `group_vars/firefly_hosts.yml`, su bloque `- name: <instancia>` de `firefly_instances`. Si era la única instancia, deja `firefly_instances: []`;
 - en `group_vars/postgres_hosts.yml`, su base `- name: ff_<instancia>`, con su usuario, dentro de `databases:`;
@@ -324,6 +326,8 @@ Si solo salen `postgres`, `template0` y `template1`, está vacía.
 ./deploy.sh apply postgres --env <entorno> --limit <máquina> --retire <postgres>
 ```
 Para su contenedor y quita su servicio, y conserva su volumen.
+
+**No ejecutes otro `apply postgres` hasta el paso 3.** Mientras siga declarada en el fichero, un `apply` sin `--retire` la vuelve a crear con sus mismos datos.
 
 **3. Quitarla del repo de datos y aplicar el backup.** Haz estos cambios y un commit firmado:
 - borra su bloque de `postgres_instances`;
