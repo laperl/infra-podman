@@ -10,6 +10,6 @@
     - name: Loop over a lookup with a false condition
       ansible.builtin.set_fact:
         kdbx_never: "{{ item }}"
-      loop: "{{ query('kdbx', 'test_dummy', database='/nonexistent/never.kdbx') }}"
+      loop: "{{ query('kdbx', 'test-dummy', database='/nonexistent/never.kdbx') }}"
       no_log: true
       when: false

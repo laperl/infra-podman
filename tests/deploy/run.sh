@@ -263,7 +263,7 @@ python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' 
 
 : >"$calls"
 fake_become="fake-sudo-password-$RANDOM"  # fictitious, test only
-if printf '%s\n%s\n' "$fake_password" "$fake_become" | "$repo/deploy.sh" secrets --env dev --limit example-vm --rotate test_dummy >"$work/out" 2>&1; then
+if printf '%s\n%s\n' "$fake_password" "$fake_become" | "$repo/deploy.sh" secrets --env dev --limit example-vm --rotate test-dummy >"$work/out" 2>&1; then
   pass "dev secrets runs"
 else
   fail "dev secrets runs"; sed 's/^/    /' "$work/out"
@@ -273,7 +273,7 @@ called_with "the sudo password follows it on stdin" "^${fake_become}\$"
 if grep '^podman ' "$calls" | grep -qF -e "$fake_password" -e "$fake_become"; then fail "the passwords are not in podman's arguments"; else pass "the passwords are not in podman's arguments"; fi
 if grep -qF -e "$fake_password" -e "$fake_become" "$log" "$work/out"; then fail "the passwords are not in the log or output"; else pass "the passwords are not in the log or output"; fi
 called_with "secrets uses the pinned image, the host network, the dev inventory, --limit and --rotate" \
-  '^podman run --rm -i --user root --security-opt label=disable --network=host .* ghcr\.io/[^ ]+@sha256:[0-9a-f]{64} bash -c .* secrets playbooks/secrets.yml -i /inventory/hosts.yml --limit example-vm,localhost -e secrets_rotate=test_dummy$'
+  '^podman run --rm -i --user root --security-opt label=disable --network=host .* ghcr\.io/[^ ]+@sha256:[0-9a-f]{64} bash -c .* secrets playbooks/secrets.yml -i /inventory/hosts.yml --limit example-vm,localhost -e secrets_rotate=test-dummy$'
 called_with "secrets mounts the inventory of the data repository read-only" "-v $data/inventory/dev:/inventory:ro "
 called_with "secrets mounts the database read-only" "-v $work/dev.kdbx:/kdbx/database.kdbx:ro"
 called_with "secrets mounts the SSH agent at the same path, like ansible-navigator" "-v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK -e SSH_AUTH_SOCK=$SSH_AUTH_SOCK "

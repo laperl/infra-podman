@@ -14,7 +14,7 @@ firefly_instances:
     # cron_time: "05:30"         # its daily scheduled tasks
     # launcher_command: [flatpak, run, org.mozilla.firefox, --new-window]   # default [xdg-open]
   # A canary, to try a new image before casa: its own database ff_canary, consumer
-  # ffcanary and secrets ff-canary-app-key and pg-main-ff_canary-password.
+  # ff-canary and secrets ff-canary-app-key and ff-canary-db-password.
   # - name: canary
   #   port: 18101
   #   image: firefly_canary_image   # a variable of playbooks/group_vars/all/images.yml

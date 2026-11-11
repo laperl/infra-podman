@@ -117,7 +117,7 @@ Esta sección debe copiarse a `docs/COMPATIBILITY.md`.
 
 ### 4.4 Redes y Postgres
 
-- Una red por consumidor de Postgres, `<entorno>-<consumidor>-pg-<instancia>-net` (por ejemplo `prod-ffcasa-pg-main-net`), **interna** (`Internal=true`: sin salida a internet, a la red de casa ni al host; y `DNS=127.0.0.1`, para que tampoco salgan consultas de DNS) y con `Options=isolate=true`. **Sin subred fija:** la elige Podman, sin solaparse con sus otras redes, y Ansible la lee para `pg_hba.conf` (R45). Los consumidores llegan a Postgres por su nombre de contenedor.
+- Una red por consumidor de Postgres, `<entorno>-<consumidor>-pg-<instancia>-net` (por ejemplo `prod-ff-casa-pg-main-net`), **interna** (`Internal=true`: sin salida a internet, a la red de casa ni al host; y `DNS=127.0.0.1`, para que tampoco salgan consultas de DNS) y con `Options=isolate=true`. **Sin subred fija:** la elige Podman, sin solaparse con sus otras redes, y Ansible la lee para `pg_hba.conf` (R45). Los consumidores llegan a Postgres por su nombre de contenedor.
 - El contenedor de Postgres se une a todas esas redes. Los consumidores no se ven entre sí.
 - Con varias instancias en la misma máquina, cada red de consumidor se une solo a la instancia que usa ese consumidor. No hay una red común para todos los Postgres.
 - En Postgres, el modelo de [`POSTGRES.md`](POSTGRES.md): una base y tres grupos por aplicación y usuarios a demanda. En `pg_hba.conf`, generado desde el inventario, cada usuario solo se admite en su base y desde la subred de su red. El superusuario y `backup` nunca entran por TCP, salvo el superusuario desde la red de pgAdmin (R37).
@@ -197,12 +197,13 @@ Para saber de un vistazo de quién es cada contenedor, red o volumen, para qué 
 | Objeto | Patrón | Ejemplos |
 | --- | --- | --- |
 | Contenedor y su servicio systemd | `<entorno>-<app>[-<pieza>]` | `prod-pg-main`, `prod-ff-casa`, `prod-backup` |
-| Red | `<entorno>-<consumidor>-<proveedor>-net` | `prod-ffcasa-pg-main-net`: la instancia `casa` de Firefly habla con el Postgres `main` |
+| Red | `<entorno>-<consumidor>-<proveedor>-net` | `prod-ff-casa-pg-main-net`: la instancia `casa` de Firefly habla con el Postgres `main` |
 | Volumen | `<entorno>-<app>-<contenido>` | `prod-pg-main-data`, `prod-ff-casa-uploads`, `prod-backup-repo` |
-| Secreto de Podman | `<entorno>-<nombre en KeePassXC>` | `prod-pg-main-ff_casa-password` ↔ `<instalación>/pg-main-ff_casa-password` (la misma ruta en dev y prod) |
+| Secreto de Podman | `<entorno>-<nombre en KeePassXC>` | `prod-ff-casa-db-password` ↔ `<instalación>/ff-casa-db-password` (la misma ruta en dev y prod) |
 
 - **Postgres:** cada instancia se llama `pg-<instancia>`, por ejemplo `pg-main` o `pg-test`.
 - **Toda aplicación va por instancias (R48):** cada una lleva el **nombre corto** de la aplicación y su instancia, `<entorno>-<corto>-<instancia>[-<pieza>]`. Firefly III es **`ff`**: la instancia `laptop` es `prod-ff-laptop`, con su volumen `prod-ff-laptop-uploads` y su base `ff_laptop`. En el código y el inventario la aplicación se llama por su nombre entero (`roles/firefly`, `firefly_instances`). Cada instancia tiene su propia base de datos, red, puerto, secretos y volumen. Las reglas comunes y la tabla de nombres cortos, en [`services/README.md`](services/README.md).
+- **Una sola regla de nombres (R50):** cada instancia tiene un identificador `<corto>-<instancia>` y todo lo suyo cuelga de él con `-` (contenedor, red, secretos). Solo dentro de Postgres el `-` pasa a `_` (`ff_laptop`). La contraseña de un usuario de base es `<usuario>-db-password`. El entorno va delante en las máquinas (`prod-…`) y nunca en KeePassXC.
 - **Ficheros Quadlet:** se llaman como el objeto (`prod-ff-casa.container` crea el servicio `prod-ff-casa.service`).
 - **Nombres explícitos:** siempre se fijan `ContainerName=`, `NetworkName=` y `VolumeName=`. Sin ellas, Podman antepone `systemd-` al nombre (comprobado con el generador de 4.9).
 
@@ -306,7 +307,7 @@ Son supuestos razonables pero no comprobados. Si alguno falla, detente y propón
 | Fase | Qué verificar |
 | --- | --- |
 | 0 | Cómo instalar ansible-navigator en Fedora Atomic 44 y que la imagen de Ansible funcione con el Podman del portátil (5 en Fedora 44; 6 al pasar a Fedora 45) y el reenvío del agente SSH. Instalación: **comprobada** (`docs/SETUP.md`). Agente SSH: **comprobado** el 2026-11-02 con `deploy.sh plan check --env dev` y `--security-opt=label=disable` (R16) |
-| 0 | Que `keepassxc-cli` dentro de la imagen de Ansible abre un `.kdbx` guardado con KeePassXC 2.8, cómo se instala en esa imagen y qué versión trae. Se instala con el paquete `keepassxc` de Fedora 44 y trae la **2.8.0**. **Comprobado** el 2026-11-02 por el operador: el lookup lee `Infra_Podman/test_dummy` (hoy `<instalación>/test_dummy`, R42) de `infra-dev.kdbx` creado con KeePassXC 2.8 de escritorio (`docs/SETUP.md`, paso 4) |
+| 0 | Que `keepassxc-cli` dentro de la imagen de Ansible abre un `.kdbx` guardado con KeePassXC 2.8, cómo se instala en esa imagen y qué versión trae. Se instala con el paquete `keepassxc` de Fedora 44 y trae la **2.8.0**. **Comprobado** el 2026-11-02 por el operador: el lookup lee `Infra_Podman/test-dummy` (hoy `<instalación>/test-dummy`, R42) de `infra-dev.kdbx` creado con KeePassXC 2.8 de escritorio (`docs/SETUP.md`, paso 4) |
 | 0 | Que `keepassxc-cli` acepta la contraseña maestra por la entrada estándar sin terminal. La documentación oficial describe `-q` (silencia la petición de contraseña) y `-s`/`-a`, pero no detalla este comportamiento. **Comprobado** con 2.7.6 en local y con 2.8.0, la que trae la imagen de Ansible, en CI (`tests/ee/run.sh`) |
 | 0 | Que Ansible no evalúa el lookup de KeePassXC en una tarea saltada (`when:` falso) cuando el secreto ya existe. **Comprobado**, salvo en `loop:` (ver 4.5) |
 | 1 | Que el runner `ubuntu-24.04` permite usar Podman 4.9 rootless con systemd de usuario para `lifecycle` (y `ubuntu-24.04-arm` cuando haya servicios del GX10 con datos). **Comprobado** el 2026-11-03 (jobs `base` y `postgres`): usuario de servicio con linger, Podman 4.9.3 rootless, Quadlet, healthcheck y reinicio. Salvedad del runner, no de los servidores: su `/etc/environment` fija `XDG_*` para su propio usuario y el workflow lo quita (`docs/COMPATIBILITY.md`) |

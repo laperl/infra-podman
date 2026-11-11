@@ -20,7 +20,7 @@ sql() { # sql <query> [database]: as the superuser, through the socket
 }
 image() { "$as" podman inspect "$name" --format '{{.ImageName}}'; }
 client() { # client <network> <user> <query>: psql over TCP from a container on that network
-  "$as" podman --log-level=error run --rm --network "$1" --secret "dev-pg-main-$2-password,type=env,target=PGPASSWORD" \
+  "$as" podman --log-level=error run --rm --network "$1" --secret "dev-${2//_/-}-db-password,type=env,target=PGPASSWORD" \
     --entrypoint psql "$(image)" -X -h "$name" -U "$2" -d demo -v ON_ERROR_STOP=1 -tAq -c "$3" </dev/null
 }
 errors=$(mktemp)
@@ -127,7 +127,7 @@ case $1 in
     # pg_hba.conf: each user only from its consumer's network, only to its database.
     refused "demo_app from the network of ai" "$ai_net" demo_app "SELECT 1" 'pg_hba.conf'
     refused "demo_ai from the network of demo" "$demo_net" demo_ai "SELECT 1" 'pg_hba.conf'
-    if out=$("$as" podman --log-level=error run --rm --network "$demo_net" --secret dev-pg-main-demo_app-password,type=env,target=PGPASSWORD \
+    if out=$("$as" podman --log-level=error run --rm --network "$demo_net" --secret dev-demo-app-db-password,type=env,target=PGPASSWORD \
                --entrypoint psql "$(image)" -X -h "$name" -U demo_app -d postgres -c 'SELECT 1' </dev/null 2>&1); then
       fail "demo_app connected to the database postgres"
     fi

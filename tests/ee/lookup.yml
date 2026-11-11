@@ -8,7 +8,7 @@
   tasks:
     - name: Read the test secret
       ansible.builtin.set_fact:
-        kdbx_test_value: "{{ lookup('kdbx', 'test_dummy') }}"
+        kdbx_test_value: "{{ lookup('kdbx', 'test-dummy') }}"
       no_log: true
 
     - name: Check the value matches what was stored
@@ -22,6 +22,6 @@
     # missing database below would make the play fail.
     - name: Skipped task does not run the lookup
       ansible.builtin.set_fact:
-        kdbx_never: "{{ lookup('kdbx', 'test_dummy', database='/nonexistent/never.kdbx') }}"
+        kdbx_never: "{{ lookup('kdbx', 'test-dummy', database='/nonexistent/never.kdbx') }}"
       no_log: true
       when: false

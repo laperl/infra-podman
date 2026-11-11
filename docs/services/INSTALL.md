@@ -16,7 +16,7 @@ Primero DEV, luego producción ([`WORKFLOW.md`](../WORKFLOW.md)).
 | Postgres | `prod-pg-laptop` | El servidor de bases de datos. Puede alojar las bases de muchas aplicaciones |
 | Base de Firefly | `ff_laptop` (base, esquema y usuario) | Los datos de esta instancia de Firefly. Solo suya |
 | Firefly | `prod-ff-laptop` | La aplicación. **`ff` es Firefly III** |
-| Red | `prod-fflaptop-pg-laptop-net` | El único camino de Firefly: a su Postgres, sin internet |
+| Red | `prod-ff-laptop-pg-laptop-net` | El único camino de Firefly: a su Postgres, sin internet |
 | Puerto | `127.0.0.1:18100` | Por donde entras tú con el navegador, solo desde el portátil |
 | Justificantes | volumen `prod-ff-laptop-uploads` | Los ficheros que adjuntas en Firefly |
 | Tareas diarias | `prod-ff-laptop-cron.timer`, a las 05:30 | Movimientos recurrentes, presupuestos y avisos de Firefly |
@@ -29,7 +29,7 @@ Solo eliges **dos nombres cortos**, en minúsculas y cifras, sin guiones. Todo l
 | Qué eliges | Dónde se escribe | Ejemplo | De él sale |
 | --- | --- | --- | --- |
 | La instancia de Postgres | `name:` en `postgres_hosts.yml` | `laptop` | `prod-pg-laptop` y los secretos `pg-laptop-…` |
-| La instancia de la aplicación | `name:` en `firefly_hosts.yml` | `laptop` | `prod-ff-laptop`, `ff_laptop`, `fflaptop`, `ff-laptop-app-key` |
+| La instancia de la aplicación | `name:` en `firefly_hosts.yml` | `laptop` | su identificador `ff-laptop`, y de él `prod-ff-laptop`, `ff-laptop-app-key`, `ff-laptop-db-password` y, dentro de Postgres, `ff_laptop` |
 
 **Escribe solo el nombre corto.** Con `name: laptop` sale `prod-ff-laptop`. Si escribieras `name: prod-ff-laptop`, el despliegue se para: no admite guiones. Así no puede salir `prod-ff-prod-ff-laptop`.
 
@@ -47,7 +47,7 @@ Solo eliges **dos nombres cortos**, en minúsculas y cifras, sin guiones. Todo l
 | Entrada en KeePassXC | Qué es | Quién la usa | ¿Tiene que coincidir con otra cosa? |
 | --- | --- | --- | --- |
 | `pg-laptop-superuser-password` | Contraseña del superusuario de `prod-pg-laptop` | Ansible y la consola | No |
-| `pg-laptop-ff_laptop-password` | Contraseña del usuario de Postgres `ff_laptop` | **Dos lados:** Postgres (Ansible se la pone al usuario) y Firefly (la lee para entrar en su base) | Sí, y por eso es **una sola entrada**: los dos leen el mismo secreto y siempre coinciden |
+| `ff-laptop-db-password` | Contraseña del usuario de Postgres `ff_laptop` | **Dos lados:** Postgres (Ansible se la pone al usuario) y Firefly (la lee para entrar en su base) | Sí, y por eso es **una sola entrada**: los dos leen el mismo secreto y siempre coinciden |
 | `ff-laptop-app-key` | La clave interna de Firefly (`APP_KEY`): cifra sus sesiones y las claves de su API. No es un usuario | Solo Firefly | No. Exactamente **32 letras y números**, y no se cambia nunca con Firefly en uso |
 | `backup-restic-password`, `backup-server-password` (ya las tienes) | Las de los backups ([`SECRETS_INVENTORY.md`](../SECRETS_INVENTORY.md)) | Los backups | Ya están puestas |
 
@@ -63,7 +63,7 @@ head /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c 32; echo     # 32 letr
 En `infra-pro.kdbx`, grupo `<instalación>`, crea:
 
 1. `pg-laptop-superuser-password`;
-2. `pg-laptop-ff_laptop-password`;
+2. `ff-laptop-db-password`;
 3. `ff-laptop-app-key`, con exactamente 32 letras y números.
 
 El nombre de cada entrada es el **título** y el valor va en el campo **contraseña**.
@@ -113,7 +113,7 @@ service_user: svc_runner
 infra_secrets:
   - name: pg-laptop-superuser-password
     group: postgres_hosts
-  - name: pg-laptop-ff_laptop-password
+  - name: ff-laptop-db-password
     group: postgres_hosts
   - name: ff-laptop-app-key
     group: firefly_hosts
@@ -139,10 +139,10 @@ postgres_instances:
         users:
           - name: ff_laptop         # el usuario con el que entra Firefly
             group: owner            # puede crear sus tablas (Firefly las crea al arrancar)
-            consumer: fflaptop      # solo desde la red de esa instancia de Firefly
+            consumer: ff-laptop     # el identificador de esa instancia de Firefly: solo desde su red
 ```
 
-Los nombres `ff_laptop` y `fflaptop` salen de la instancia de Firefly ([`README.md`](README.md), apartado 3). Otra aplicación sería otro bloque `- name:` dentro de `databases:`.
+`ff-laptop` es el identificador de la instancia de Firefly, y `ff_laptop` lo mismo con `_`, porque Postgres no admite `-` ([`README.md`](README.md), apartado 3). Otra aplicación sería otro bloque `- name:` dentro de `databases:`.
 
 ### `group_vars/firefly_hosts.yml`
 
@@ -272,7 +272,7 @@ Para Firefly y quita su contenedor, sus tareas diarias y su lanzador. Las demás
 **2. Quitarla del repo de datos** y hacer un commit firmado:
 - en `group_vars/firefly_hosts.yml`, su bloque `- name: <instancia>` de `firefly_instances`. Si era la única instancia, deja `firefly_instances: []`;
 - en `group_vars/postgres_hosts.yml`, su base `- name: ff_<instancia>`, con su usuario, dentro de `databases:`;
-- en `group_vars/all.yml`, sus dos líneas de `infra_secrets`: `pg-<postgres>-ff_<instancia>-password` y `ff-<instancia>-app-key`.
+- en `group_vars/all.yml`, sus dos líneas de `infra_secrets`: `ff-<instancia>-db-password` y `ff-<instancia>-app-key`.
 
 **3. Borrar su base:**
 ```bash
@@ -297,7 +297,7 @@ svc podman secret rm <entorno>-ff-<instancia>-app-key                           
 ```
 Si alguna cosa ya no existe, la orden lo dice y no pasa nada.
 
-**5. En KeePassXC:** borra las entradas `ff-<instancia>-app-key` y `pg-<postgres>-ff_<instancia>-password`.
+**5. En KeePassXC:** borra las entradas `ff-<instancia>-app-key` y `ff-<instancia>-db-password`.
 
 **6. Sus copias, si también las quieres borrar** (opcional). La de su base es la ruta `/backup/pg-<postgres>/pgdump/ff_<instancia>`. Se borran como las de una instancia de Postgres ([`POSTGRES.md`](../POSTGRES.md), apartado 7, «Borrar del todo una instancia retirada», paso 4), cambiando el filtro `--tag app=pg-<postgres>` por:
 ```

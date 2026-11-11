@@ -80,8 +80,8 @@
     chdir: "{{ postgres_service_home }}"
   vars:
     postgres_password_users: >-
-      {{ postgres_user_names | map('regex_replace', '^(.*)$',
-           '{"role": "\1", "secret": "' ~ infra_env ~ '-pg-' ~ postgres_instance ~ '-\1-password"}')
+      {{ postgres_user_names | zip(postgres_user_names | map('replace', '_', '-')) | map('join', ' ')
+         | map('regex_replace', '^(\S+) (\S+)$', '{"role": "\1", "secret": "' ~ infra_env ~ '-\2-db-password"}')
          | map('from_json') | list }}
   environment: "{{ postgres_env }}"
   become: true

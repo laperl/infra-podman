@@ -97,11 +97,11 @@ No hay red compartida entre consumidores: cada consumidor tiene su red, `<entorn
 
 ## 4. Contraseñas
 
-- **KeePassXC** es la copia maestra: `<instalación>/pg-<instancia>-<usuario>-password` (por ejemplo `laperl/…`; SETUP, paso 16). El superusuario es `pg-<instancia>-superuser-password`. `backup` no tiene.
-- **Secretos de Podman** (`podman secret`): `<entorno>-pg-<instancia>-<usuario>-password`. Así llega cada contraseña a su aplicación, como fichero (SPEC 4.5). Se declaran en `infra_secrets` (grupo `postgres_hosts`) y se crean con `deploy.sh secrets`. Sin ellos, `apply postgres` se para y dice cuáles faltan.
+- **KeePassXC** es la copia maestra: `<instalación>/<usuario>-db-password`, con `-` en lugar de `_` en el nombre del usuario: el usuario `ff_laptop` es `ff-laptop-db-password` ([`services/README.md`](services/README.md), apartado 3; SETUP, paso 16). Un nombre de usuario no se repite en dos instancias de la misma máquina: su secreto sería el mismo, y el `apply` se para. El superusuario es `pg-<instancia>-superuser-password`. `backup` no tiene.
+- **Secretos de Podman** (`podman secret`): `<entorno>-<usuario>-db-password` (por ejemplo `prod-ff-laptop-db-password`). Así llega cada contraseña a su aplicación, como fichero (SPEC 4.5). Se declaran en `infra_secrets` (grupo `postgres_hosts`) y se crean con `deploy.sh secrets`. Sin ellos, `apply postgres` se para y dice cuáles faltan.
 - **En la base, desde el secreto:** en cada `apply`, Ansible compara la contraseña guardada con la del secreto y, si no coincide, la cambia. Envía el SCRAM ya calculado, nunca la contraseña en claro, que podría acabar en el log de PostgreSQL (R45). Solo letras, números y símbolos ASCII: es lo que genera KeePassXC por defecto.
 - **No hay `.pgpass` ni ficheros de contraseñas.**
-- **Cambiar una contraseña:** de un usuario de aplicación, `deploy.sh secrets --rotate pg-<instancia>-<usuario>-password`, después `apply postgres` y por último reiniciar la aplicación. Del superusuario, primero `ALTER ROLE` en la base y después `--rotate` (SPEC 4.5).
+- **Cambiar una contraseña:** de un usuario de aplicación, `deploy.sh secrets --rotate <usuario>-db-password`, después `apply postgres` y por último reiniciar la aplicación. Del superusuario, primero `ALTER ROLE` en la base y después `--rotate` (SPEC 4.5).
 
 ## 5. Cómo se conecta el operador
 
@@ -130,7 +130,7 @@ postgres_instances:
         users:
           - name: app1          # ^[a-z][a-z0-9_]{0,62}$
             group: owner        # owner | writer | reader: entra en app1_owner
-            consumer: app1      # la aplicación que entra con él: su red, y solo desde ella; ^[a-z][a-z0-9]{0,20}$, sin guiones
+            consumer: app1      # la instancia de aplicación que entra con él (por ejemplo ff-laptop): su red, y solo desde ella
           - name: app1_ia
             group: reader       # entra en app1_reader
             consumer: ia
@@ -138,7 +138,7 @@ postgres_instances:
 
 - **`group:`** es siempre `owner`, `writer` o `reader`. El grupo real es `<base>_<grupo>`, y lo que puede hacer cada uno está en la sección 2.
 - **`users:`** es opcional. Sin usuarios, la base existe pero nadie entra salvo el administrador.
-- **Una base por instancia de aplicación** (R48): dos Firefly son dos bases (`ff_casa`, `ff_canary`), cada una con su usuario y su consumidor (`ffcasa`, `ffcanary`). Nunca dos instancias en la misma base. Detalle en [`services/README.md`](services/README.md).
+- **Una base por instancia de aplicación** (R48): dos Firefly son dos bases (`ff_casa`, `ff_canary`), cada una con su usuario y su consumidor (`ff-casa`, `ff-canary`). Nunca dos instancias en la misma base. Detalle en [`services/README.md`](services/README.md).
 - **Una instancia en otra máquina** va en `host_vars/<máquina>.yml` del repo de datos, con su propio nombre (por ejemplo `gx10`). Cada aplicación tiene que estar en la misma máquina que su Postgres: las redes de Podman no salen de la máquina.
 
 ## 7. Altas, cambios y bajas
@@ -163,10 +163,10 @@ El `plan` enseña lo que va a cambiar sin tocar nada, y las bajas en un bloque a
 Se crean la base `app2`, su esquema `app2` con `vector` y sus tres grupos, `app2_owner`, `app2_writer` y `app2_reader`.
 
 **Un usuario.** Antes de aplicar:
-1. En KeePassXC, la entrada `<instalación>/pg-<instancia>-<usuario>-password`, por ejemplo `laperl/pg-main-app2-password`.
+1. En KeePassXC, la entrada `<instalación>/<usuario>-db-password` (con `-` en lugar de `_`), por ejemplo `laperl/app2-db-password`.
 2. En `group_vars/all.yml` del repo de datos, dentro de `infra_secrets`:
    ```yaml
-     - name: pg-main-app2-password
+     - name: app2-db-password
        group: postgres_hosts
    ```
 3. Su línea dentro de la base:
@@ -187,7 +187,7 @@ Se crea el usuario con la contraseña de su secreto, en `app2_owner`, y solo pue
 | --- | --- | --- |
 | `group:` de un usuario | Sale de su grupo y entra en el nuevo | Reinicia la aplicación: el cambio vale para las conexiones nuevas |
 | `consumer:` de un usuario | Solo puede entrar desde la red de la aplicación nueva. Si esa red no existía, Postgres se reinicia una vez | Reinicia las dos aplicaciones |
-| Su contraseña | `./deploy.sh secrets --rotate pg-<instancia>-<usuario>-password --limit <máquina>` y `apply postgres` (sección 4) | Reinicia la aplicación |
+| Su contraseña | `./deploy.sh secrets --rotate <usuario>-db-password --limit <máquina>` y `apply postgres` (sección 4) | Reinicia la aplicación |
 
 **No se renombra nada en el fichero:** ni bases, ni usuarios, ni instancias. Cambiar un nombre es borrar lo viejo y crear algo nuevo, vacío. Con una base, eso son sus datos. Si de verdad hace falta, es una mudanza a mano: base nueva, restaurar la copia en ella (OPERATIONS, apartado 5) y borrar la vieja.
 

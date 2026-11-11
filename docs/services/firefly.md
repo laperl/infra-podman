@@ -25,7 +25,7 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
 
 ## 2. Red: sin salida a internet
 
-- **Cada instancia está en su red de Podman interna**, sin salida, cuyo único otro miembro es su Postgres: `prod-ff<instancia>-pg-main-net` ([SPEC](../SPEC.md) 4.4, 4.12). Ni internet, ni la red de casa, ni otros contenedores.
+- **Cada instancia está en su red de Podman interna**, sin salida, cuyo único otro miembro es su Postgres: `prod-ff-<instancia>-pg-main-net` ([SPEC](../SPEC.md) 4.4, 4.12). Ni internet, ni la red de casa, ni otros contenedores.
 - **Se llega a él solo desde el portátil**, por un puerto en `127.0.0.1`, publicado desde esa misma red interna. Elegido por el operador el 2026-11-07 frente a un proxy delante o una segunda red. Sin root funciona y el contenedor sigue sin salida (comprobado con Podman 4.9.3, [`COMPATIBILITY.md`](../COMPATIBILITY.md)); con root no funcionaría. Probado en `lifecycle` con Podman 4.9; 🔍 falta probarlo en el portátil, con Podman 5 y SELinux.
 - **Siempre en marcha**, como servicio de `svc_runner`, y se abre desde el menú de Sway con su lanzador (R47).
 - **Se prueba en `lifecycle`**, que comprueba que desde el contenedor de Firefly:
@@ -53,7 +53,7 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
   - sesiones con caducidad.
 - **Secretos** en KeePassXC, grupo de la instalación, pasados como secretos de Podman. Firefly lee del fichero las variables terminadas en `_FILE`:
   - `ff-<instancia>-app-key`: `APP_KEY`, exactamente 32 caracteres. Si se pierde, se pierden las sesiones y las claves de la API; va en KeePassXC como cualquier otro secreto;
-  - `pg-main-ff_<instancia>-password`: la contraseña de su usuario de Postgres (`ff_<instancia>`).
+  - `ff-<instancia>-db-password`: la contraseña de su usuario de Postgres (`ff_<instancia>`).
 - **Contenedor endurecido**, como el resto:
   - sin root (`www-data`) y sin capacidades extra;
   - con límites de memoria, CPU y procesos como variables (R46): 512 MB, 1 CPU y 200 procesos, que se cambian por instancia en el inventario (`memory`, `cpus`, `pids_limit`). Medido en DEV el 2026-11-11, en uso: 70 MB, 3 % de CPU y 12 procesos; los valores por defecto dejan holgura de sobra; y healthcheck en `/health`, que solo responde `OK` si Firefly lee su base;
@@ -61,7 +61,7 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
 - **Logs sin datos financieros:** `APP_DEBUG=false`, nivel `notice` y al journal de `svc_runner` (`LOG_CHANNEL=stdout`). El registro de auditoría, **apagado** (`AUDIT_LOG_LEVEL=emergency`, el valor por defecto): según Firefly, «puede contener información financiera sensible». Decidido por el operador el 2026-11-08.
 - **Postgres** (según [`POSTGRES.md`](../POSTGRES.md)):
   - **una base por instancia**, nunca compartida: `ff_<instancia>`, con su esquema del mismo nombre y sus grupos `ff_<instancia>_owner`, `_writer` y `_reader` (R35, R36, R48);
-  - Firefly migra sola, así que cada instancia usa un único usuario, `ff_<instancia>`, en su `_owner` (`POSTGRES.md`, tabla de usuarios), con `consumer: ff<instancia>`;
+  - Firefly migra sola, así que cada instancia usa un único usuario, `ff_<instancia>`, en su `_owner` (`POSTGRES.md`, tabla de usuarios), con `consumer: ff-<instancia>`;
   - sus tablas, en el esquema de su base (`PGSQL_SCHEMA=ff_<instancia>`) y de su `_owner`: la base no tiene esquema `public` (probado en `lifecycle`);
   - `pg_hba` generado: cada usuario, solo en su base y solo desde la red de Firefly, cuya subred elige Podman (R45).
 

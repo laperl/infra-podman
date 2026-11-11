@@ -22,6 +22,34 @@
         quiet: true
       when: postgres_retire | default('') | length > 0
 
+    # Each user has one secret per machine, <env>-<user>-db-password: the same name in two
+    # instances would share it (docs/services/README.md, 3).
+    - name: Check that no user name is in two instances of this machine
+      ansible.builtin.assert:
+        that: postgres_users_per_instance | length == postgres_users_per_instance | unique | list | length
+        fail_msg: >-
+          A user name is in more than one PostgreSQL instance of {{ inventory_hostname }}:
+          {{ postgres_users_twice | join(', ') }}.
+          Its password secret (<user>-db-password) would be shared: give it another name in one of them.
+        quiet: true
+      vars:
+        postgres_users_twice: >-
+          {%- set seen = [] -%}{%- set twice = [] -%}
+          {%- for n in postgres_users_per_instance -%}
+            {%- if n in seen -%}{%- set _ = twice.append(n) -%}{%- else -%}{%- set _ = seen.append(n) -%}{%- endif -%}
+          {%- endfor -%}
+          {{ twice | unique | list }}
+        postgres_users_per_instance: >-
+          {%- set out = [] -%}
+          {%- for i in postgres_instances -%}
+            {%- set names = [] -%}
+            {%- for d in (i.databases | default([], true)) -%}
+              {%- for u in (d.users | default([], true)) -%}{%- set _ = names.append(u.name) -%}{%- endfor -%}
+            {%- endfor -%}
+            {%- set _ = out.extend(names | unique) -%}
+          {%- endfor -%}
+          {{ out }}
+
     - name: Deploy each instance
       ansible.builtin.include_role:
         name: postgres

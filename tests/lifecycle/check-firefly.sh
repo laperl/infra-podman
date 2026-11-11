@@ -28,9 +28,9 @@ name=dev-ff-$instance
 db=ff_$instance
 pg=dev-pg-main
 su=ci_admin  # fictitious superuser of tests/lifecycle/inventory.yml
-net=dev-ff$instance-pg-main-net
+net=dev-ff-$instance-pg-main-net
 other_name=dev-ff-$other
-other_net=dev-ff$other-pg-main-net
+other_net=dev-ff-$other-pg-main-net
 demo_net=dev-demo-pg-main-net
 ai_net=dev-ai-pg-main-net
 launcher=$HOME/.local/share/applications/infra-podman-$name.desktop
@@ -110,7 +110,7 @@ case $step in
   reader)
     client() { # client <query>: as ff_ro over TCP, from the network of ai
       "$as" podman --log-level=error run --rm --network "$ai_net" \
-        --secret dev-pg-main-ff_ro-password,type=env,target=PGPASSWORD --entrypoint psql "$(pg_image)" \
+        --secret dev-ff-ro-db-password,type=env,target=PGPASSWORD --entrypoint psql "$(pg_image)" \
         -X -h "$pg" -U ff_ro -d ff_casa -v ON_ERROR_STOP=1 -tAq -c "$1" </dev/null
     }
     out=$(client "SELECT count(*) FROM users" 2>&1) || fail "ff_ro cannot read users: $out"
@@ -120,7 +120,7 @@ case $step in
     grep -q 'permission denied' <<<"$out" || fail "the create failed for another reason: $out"
     # Nor into the database of the other instance (pg_hba.conf and CONNECT, R48).
     if out=$("$as" podman --log-level=error run --rm --network "$ai_net" \
-         --secret dev-pg-main-ff_ro-password,type=env,target=PGPASSWORD --entrypoint psql "$(pg_image)" \
+         --secret dev-ff-ro-db-password,type=env,target=PGPASSWORD --entrypoint psql "$(pg_image)" \
          -X -h "$pg" -U ff_ro -d ff_canary -tAq -c "SELECT 1" </dev/null 2>&1); then
       fail "ff_ro connected to the database of canary"
     fi

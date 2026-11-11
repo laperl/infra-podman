@@ -18,11 +18,11 @@ infra_secrets:
   - name: pg-main-superuser-password
     group: postgres_hosts
   # One per application user of postgres_hosts.yml (docs/POSTGRES.md, section 4):
-  # - name: pg-main-app1-password
+  # - name: app1-db-password
   #   group: postgres_hosts
   # Firefly III, two per instance (docs/services/README.md): its user's password and its
   # application key (exactly 32 letters and digits). For the instance casa:
-  # - name: pg-main-ff_casa-password
+  # - name: ff-casa-db-password
   #   group: postgres_hosts
   # - name: ff-casa-app-key
   #   group: firefly_hosts

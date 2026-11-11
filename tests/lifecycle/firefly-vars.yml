@@ -8,11 +8,11 @@ postgres_instances:
     databases:
       - name: ff_casa
         users:
-          - {name: ff_casa, group: owner, consumer: ffcasa}
+          - {name: ff_casa, group: owner, consumer: ff-casa}
           - {name: ff_ro, group: reader, consumer: ai}
       - name: ff_canary
         users:
-          - {name: ff_canary, group: owner, consumer: ffcanary}
+          - {name: ff_canary, group: owner, consumer: ff-canary}
       - name: demo
         users:
           - {name: demo_app, group: owner, consumer: demo}

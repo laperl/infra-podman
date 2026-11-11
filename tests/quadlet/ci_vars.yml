@@ -15,4 +15,4 @@ postgres_databases:
       - {name: demo_ai, group: reader, consumer: ai}
   - name: ff_ci
     users:
-      - {name: ff_ci, group: owner, consumer: ffci}
+      - {name: ff_ci, group: owner, consumer: ff-ci}

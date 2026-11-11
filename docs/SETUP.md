@@ -52,7 +52,7 @@ podman login ghcr.io --username laperl   # pega el token cuando lo pida
 Con KeePassXC 2.8 crea `infra-dev.kdbx` **fuera del repo** (el `.gitignore` excluye `*.kdbx` igualmente):
 
 - un grupo con el **nombre de tu instalación**, `laperl` (el mismo que pondrás en `infra_site` del repo de datos, paso 16);
-- entrada `test_dummy` con una contraseña ficticia cualquiera;
+- entrada `test-dummy` con una contraseña ficticia cualquiera;
 - contraseña maestra distinta de la de `infra-pro.kdbx`.
 
 Este fichero **vive solo en el portátil**: no se copia a la VM y no hace falta hacerle copia de seguridad. Solo contiene valores ficticios y se recrea en dos minutos con el grupo y los nombres de `infra_secrets` en `inventory/dev/group_vars/all.yml` de tu repo de datos (paso 14; R17). La copia de seguridad que sí importa es la de `infra-pro.kdbx`: está apuntada en el `ROADMAP`.
@@ -74,7 +74,7 @@ unset P
 
 `--user root` hace falta porque, en Podman sin root, el root del contenedor es tu propio usuario en el portátil: así puede leer tu `.kdbx`, que normalmente solo tú puedes leer. ansible-navigator hace lo mismo.
 
-Resultado esperado: `OK: read laperl/test_dummy (N characters)`. El valor no se muestra.
+Resultado esperado: `OK: read laperl/test-dummy (N characters)`. El valor no se muestra.
 
 La contraseña viaja así: `read -s` (no se ve ni queda en el historial) → `printf`, que es una orden interna de bash y por tanto no aparece en la lista de procesos → entrada estándar del contenedor → variable de entorno solo dentro del contenedor → entrada estándar de `keepassxc-cli`. No toca el disco.
 
@@ -142,7 +142,7 @@ En tu copia del repo, en la rama del PR, con KeePassXC desbloqueado:
 
 ```bash
 ./deploy.sh plan check --env dev       # conecta con vmiadev y comprueba Podman >= 4.9 sin cambiar nada
-./deploy.sh secrets --env dev          # pide la contraseña de infra-dev.kdbx y lee test_dummy
+./deploy.sh secrets --env dev          # pide la contraseña de infra-dev.kdbx y lee test-dummy
 tail -2 ~/.local/state/infra-podman/deploy.log
 ```
 
@@ -478,7 +478,7 @@ Desde tu copia del código, en la rama del PR para DEV y en el tag para producci
 ./deploy.sh secrets --limit laptop              # no crea nada: los secretos ya existen
 ```
 
-`secrets` solo lee KeePassXC para lo que falta y para `test_dummy`, así que la primera orden comprueba de verdad que el grupo nuevo se lee. En las máquinas no cambia nada.
+`secrets` solo lee KeePassXC para lo que falta y para `test-dummy`, así que la primera orden comprueba de verdad que el grupo nuevo se lee. En las máquinas no cambia nada.
 
 Si sale `cannot list the group 'laperl'`, el grupo no está renombrado en ese fichero. Si sale `the name of the installation is missing`, falta `infra_site` en el repo de datos.
 

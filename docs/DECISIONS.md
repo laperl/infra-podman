@@ -443,7 +443,19 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 
 ### R49. Cada aplicación tiene un nombre corto en lo que se crea
 
-- **Decisión:** lo que una aplicación crea en la máquina (contenedores, volúmenes, bases, usuarios, redes, secretos, etiquetas) lleva su **nombre corto**, no el entero. Firefly III es **`ff`**: la instancia `laptop` es `prod-ff-laptop`, su base `ff_laptop`, su red `prod-fflaptop-pg-<postgres>-net` y su clave `ff-laptop-app-key`. En el código y el inventario la aplicación conserva su nombre entero (`roles/firefly`, `firefly_hosts`, `firefly_instances`, `firefly_image`), para que se sepa qué es. El nombre corto vive en una sola variable del rol (`firefly_short`), no en el inventario. El operador solo escribe la instancia, y el código rechaza guiones en ella: un nombre entero no puede acabar duplicado (`prod-ff-prod-ff-laptop`).
+- **Decisión:** lo que una aplicación crea en la máquina (contenedores, volúmenes, bases, usuarios, redes, secretos, etiquetas) lleva su **nombre corto**, no el entero. Firefly III es **`ff`**: la instancia `laptop` es `prod-ff-laptop`, su base `ff_laptop`, su red `prod-ff-laptop-pg-<postgres>-net` y su clave `ff-laptop-app-key`. En el código y el inventario la aplicación conserva su nombre entero (`roles/firefly`, `firefly_hosts`, `firefly_instances`, `firefly_image`), para que se sepa qué es. El nombre corto vive en una sola variable del rol (`firefly_short`), no en el inventario. El operador solo escribe la instancia, y el código rechaza guiones en ella: un nombre entero no puede acabar duplicado (`prod-ff-prod-ff-laptop`).
 - **Motivo:** lo pide el operador (nombres como `prod-ff-laptop`). La tabla de nombres cortos está en [`services/README.md`](services/README.md), apartado 3.
 - **Aprobada por:** el operador, el 2026-11-11.
 - **SPEC:** 4.12.
+
+### R50. Una sola regla de nombres
+
+- **Decisión:**
+  - **Un identificador por instancia**, `<corto>-<instancia>` (`ff-laptop`). Todo lo suyo cuelga de él con `-`: contenedor `prod-ff-laptop`, red `prod-ff-laptop-pg-<postgres>-net` (el `consumer:` de Postgres es ese identificador) y secretos `ff-laptop-app-key` y `ff-laptop-db-password`.
+  - **Solo dentro de Postgres** el `-` pasa a `_`: base, esquema y usuario `ff_laptop`, porque Postgres no admite `-` en un nombre sin comillas. Fuera, la regla de los nombres DNS (RFC 1123): minúsculas, cifras y `-`.
+  - **La contraseña de cualquier usuario de base** es `<usuario>-db-password` con `-` en lugar de `_`. Sustituye a `pg-<instancia>-<usuario>-password`. Un nombre de usuario no se repite en dos instancias de Postgres de una máquina; si se repite, el `apply` se para.
+  - `test_dummy` pasa a `test-dummy`.
+  - **El entorno** va delante de todo lo que corre en las máquinas (`prod-…`), y nunca en los títulos de KeePassXC: allí lo separa el fichero (`infra-dev.kdbx`, `infra-pro.kdbx`).
+- **Motivo:** el operador veía los nombres incoherentes: `ffdevlaptop`, `ff_devlaptop` y `ff-devlaptop` para lo mismo, y secretos de una aplicación repartidos. El entorno se mantiene en las máquinas para que un error entre dev y prod se vea.
+- **Aprobada por:** el operador, el 2026-11-11. Corrige R49 en el consumidor y en el nombre de las contraseñas.
+- **SPEC:** 4.5, 4.12.

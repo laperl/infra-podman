@@ -185,7 +185,7 @@ jobs:
           if ansible-playbook -i "$INV" $APPS playbooks/postgres.yml --check > refusal.log 2>&1; then
             echo "::error::postgres ran without the secrets of its users"; exit 1
           fi
-          grep -q 'dev-pg-main-demo_app-password' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+          grep -q 'dev-demo-app-db-password' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
 
       - name: Create the secrets of the users with random values
         run: |
@@ -193,7 +193,7 @@ jobs:
             v=$(openssl rand -hex 24)
             echo "::add-mask::$v"
             echo "$v" >> "$RUNNER_TEMP/pw"
-            printf '%s' "$v" | tests/lifecycle/as-svc.sh podman secret create "dev-pg-main-$user-password" -
+            printf '%s' "$v" | tests/lifecycle/as-svc.sh podman secret create "dev-${user//_/-}-db-password" -
           done
 
       - name: Plan, apply, apply again (zero changes), plan again (zero changes)
@@ -223,8 +223,8 @@ jobs:
           v=$(openssl rand -hex 24)
           echo "::add-mask::$v"
           echo "$v" >> "$RUNNER_TEMP/pw"
-          tests/lifecycle/as-svc.sh podman secret rm dev-pg-main-demo_rw-password
-          printf '%s' "$v" | tests/lifecycle/as-svc.sh podman secret create dev-pg-main-demo_rw-password -
+          tests/lifecycle/as-svc.sh podman secret rm dev-demo-rw-db-password
+          printf '%s' "$v" | tests/lifecycle/as-svc.sh podman secret create dev-demo-rw-db-password -
           tests/lifecycle/playbook.sh -i "$INV" $APPS playbooks/postgres.yml 2>&1 | tee rotate.log | tee -a all.log
           grep -q 'Password set from its secret: demo_rw"' rotate.log || { echo "::error::the password of demo_rw was not set"; exit 1; }
           tests/lifecycle/check-postgres-apps.sh password demo_rw
@@ -242,7 +242,7 @@ jobs:
           # An idle connection, as an application keeps: psql waits on its input. (A running
           # query would outlive the stop: PostgreSQL only notices when it ends.)
           tests/lifecycle/as-svc.sh podman run -d --rm --name lifecycle-session --network dev-ai-pg-main-net \
-            --secret dev-pg-main-demo_ai-password,type=env,target=PGPASSWORD --entrypoint sh "$image" \
+            --secret dev-demo-ai-db-password,type=env,target=PGPASSWORD --entrypoint sh "$image" \
             -c 'sleep 300 | psql -X -h dev-pg-main -U demo_ai -d demo' >/dev/null
           sleep 3
           if tests/lifecycle/playbook.sh -i "$INV" $STEP playbooks/postgres.yml > drop.log 2>&1; then
@@ -253,9 +253,9 @@ jobs:
           $C role demo_ai present
           tests/lifecycle/as-svc.sh podman stop -t 0 lifecycle-session >/dev/null
           tests/lifecycle/playbook.sh -i "$INV" $STEP playbooks/postgres.yml 2>&1 | tee drop.log | tee -a all.log
-          grep -q 'KeePassXC entries: ci-site/pg-main-demo_ai-password' drop.log || { echo "::error::no reminder"; exit 1; }
+          grep -q 'KeePassXC entries: ci-site/demo-ai-db-password' drop.log || { echo "::error::no reminder"; exit 1; }
           $C role demo_ai absent
-          $C secret dev-pg-main-demo_ai-password absent
+          $C secret dev-demo-ai-db-password absent
           $C net dev-ai-pg-main-net absent
           $C groups demo_ro demo2_reader,demo_reader
           $C role demo_reader present
@@ -270,7 +270,7 @@ jobs:
           tests/lifecycle/playbook.sh -i "$INV" $STEP playbooks/postgres.yml 2>&1 | tee -a all.log
           $C role demo_ro present
           $C groups demo_ro demo2_reader
-          $C secret dev-pg-main-demo_ro-password present
+          $C secret dev-demo-ro-db-password present
           tests/lifecycle/playbook.sh -i "$INV" $STEP playbooks/postgres.yml 2>&1 | tee second.log | tee -a all.log
           grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply changed something"; exit 1; }
 
@@ -371,7 +371,7 @@ jobs:
             v=$(openssl rand -hex 24)
             echo "::add-mask::$v"
             echo "$v" >> "$RUNNER_TEMP/pw"
-            name=dev-pg-main-$s-password
+            name=dev-${s//_/-}-db-password
             [[ $s == superuser ]] && name=dev-pg-main-superuser-password
             printf '%s' "$v" | $AS podman secret create "$name" -
           done
@@ -654,7 +654,7 @@ jobs:
             v=$(openssl rand -hex 24)
             echo "::add-mask::$v"
             echo "$v" >> "$RUNNER_TEMP/pw"
-            printf '%s' "$v" | $AS podman secret create "dev-pg-main-$user-password" -
+            printf '%s' "$v" | $AS podman secret create "dev-${user//_/-}-db-password" -
           done
           tests/lifecycle/playbook.sh -i "$INV" -e @tests/lifecycle/apps-vars.yml playbooks/postgres.yml 2>&1 | tee -a all.log
           $C db demo present
@@ -668,7 +668,7 @@ jobs:
           $CHECK kept pre-drop demo
           $C db demo absent
           for role in demo_owner demo_writer demo_reader demo_app demo_rw demo_ro demo_ai; do $C role "$role" absent; done
-          for user in demo_app demo_rw demo_ro demo_ai; do $C secret "dev-pg-main-$user-password" absent; done
+          for user in demo_app demo_rw demo_ro demo_ai; do $C secret "dev-${user//_/-}-db-password" absent; done
           $C net dev-demo-pg-main-net absent
           $C net dev-ai-pg-main-net absent
           [[ $($AS podman inspect dev-pg-main --format '{{.HostConfig.NetworkMode}}') == none ]] \

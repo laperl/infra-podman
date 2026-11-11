@@ -31,7 +31,7 @@
 # rm, Podman 4.9). The application using it was stopped (drop_check.yml).
 - name: Remove the Podman secrets of the dropped users
   ansible.builtin.command:
-    argv: [podman, secret, rm, "{{ infra_env }}-pg-{{ postgres_instance }}-{{ item }}-password"]
+    argv: [podman, secret, rm, "{{ infra_env }}-{{ item | replace('_', '-') }}-db-password"]
   loop: "{{ postgres_drop_users }}"
   environment: "{{ postgres_env }}"
   become: true
@@ -99,11 +99,12 @@
   ansible.builtin.debug:
     msg:
       - "Dropped from {{ postgres_name }}: users {{ postgres_drop_users | join(', ') }}. Remove by hand:"
-      - "KeePassXC entries: {{ postgres_drop_users | map('regex_replace', '^(.*)$', postgres_kdbx_prefix ~ '\\1-password') | join(', ') }}"
+      - "KeePassXC entries: {{ postgres_drop_entries | map('regex_replace', '^(.*)$', postgres_kdbx_prefix ~ '\\1') | join(', ') }}"
       - "infra_secrets lines still declared (or deploy.sh secrets creates them again): {{ postgres_still_declared | join(', ') or 'none' }}"
   when: postgres_drop_users | length > 0
   vars:
-    postgres_kdbx_prefix: "{{ infra_site | default('<infra_site>') }}/pg-{{ postgres_instance }}-"
+    postgres_kdbx_prefix: "{{ infra_site | default('<infra_site>') }}/"
+    postgres_drop_entries: "{{ postgres_drop_users | map('replace', '_', '-') | map('regex_replace', '$', '-db-password') | list }}"
     postgres_still_declared: >-
-      {{ postgres_drop_users | map('regex_replace', '^(.*)$', 'pg-' ~ postgres_instance ~ '-\1-password')
+      {{ postgres_drop_entries
          | select('in', infra_secrets | default([]) | map(attribute='name') | list) | list }}

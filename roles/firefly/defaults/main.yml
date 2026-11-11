@@ -76,13 +76,13 @@ firefly_pg_name: "{{ infra_env }}-pg-{{ firefly_pg_instance }}"
 # declared by the operator in postgres_hosts.yml with this consumer (D9).
 firefly_db_name: "{{ firefly_short }}_{{ firefly_instance }}"
 firefly_db_user: "{{ firefly_short }}_{{ firefly_instance }}"
-firefly_consumer: "{{ firefly_short }}{{ firefly_instance }}"
+firefly_consumer: "{{ firefly_short }}-{{ firefly_instance }}"
 # Created by the postgres role for that consumer (SPEC 4.4).
 firefly_network: "{{ infra_env }}-{{ firefly_consumer }}-pg-{{ firefly_pg_instance }}-net"
 # KeePassXC entries <infra_site>/<key>; Podman secrets with the environment in front.
 firefly_app_key_secret_key: "{{ firefly_short }}-{{ firefly_instance }}-app-key"
 firefly_app_key_secret: "{{ infra_env }}-{{ firefly_app_key_secret_key }}"
-firefly_db_secret_key: pg-{{ firefly_pg_instance }}-{{ firefly_db_user }}-password
+firefly_db_secret_key: "{{ firefly_db_user | replace('_', '-') }}-db-password"
 firefly_db_secret: "{{ infra_env }}-{{ firefly_db_secret_key }}"
 firefly_cron_name: "{{ firefly_name }}-cron"
 firefly_launcher_file_name: infra-podman-{{ firefly_name }}.desktop

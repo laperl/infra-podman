@@ -12,11 +12,11 @@ Cómo es **cualquier** aplicación de la plataforma (Firefly III, pgAdmin y las 
 | --- | --- | --- |
 | Contenedor y servicio | El suyo | `prod-ff-casa` |
 | Puerto, solo en `127.0.0.1` | El suyo, si la aplicación lo necesita | `127.0.0.1:18100` |
-| Red e IPs | Su red interna, con su propia subred | `prod-ffcasa-pg-main-net` |
+| Red e IPs | Su red interna, con su propia subred | `prod-ff-casa-pg-main-net` |
 | Postgres | **Su propia base de datos**, con un único esquema del mismo nombre, y su usuario | base, esquema y usuario `ff_casa` |
 | Imagen | La que elijas de `images.yml` | `firefly_image` |
 | Volumen | El suyo | `prod-ff-casa-uploads` |
-| Secretos | Los suyos | `ff-casa-app-key`, `pg-main-ff_casa-password` |
+| Secretos | Los suyos | `ff-casa-app-key`, `ff-casa-db-password` |
 | Tareas programadas | Las suyas | `prod-ff-casa-cron.timer` |
 | Lanzador del menú | El suyo, con su navegador | «Firefly III (casa)» |
 | Copias | Su base, en sus propias copias (`pgdump/ff_casa`) | — |
@@ -52,12 +52,18 @@ Cada aplicación tiene **dos nombres**:
 | Volumen | `<entorno>-<corto>-<instancia>-<contenido>` | `prod-ff-laptop-uploads` |
 | Tareas programadas | `<entorno>-<corto>-<instancia>-cron` | `prod-ff-laptop-cron.timer` |
 | Base, esquema y usuario de Postgres | `<corto>_<instancia>` | `ff_laptop` |
-| Consumidor de Postgres y su red | `<corto><instancia>`, sin guion | `fflaptop`, red `prod-fflaptop-pg-<postgres>-net` |
-| Secretos (KeePassXC) | `<corto>-<instancia>-<clave>` y `pg-<postgres>-<usuario>-password` | `ff-laptop-app-key`, `pg-laptop-ff_laptop-password` |
+| Identificador de la instancia: `consumer:` en Postgres, y su red | `<corto>-<instancia>` | `ff-laptop`, red `prod-ff-laptop-pg-<postgres>-net` |
+| Secretos (KeePassXC) | `<corto>-<instancia>-<qué>` | `ff-laptop-app-key`, `ff-laptop-db-password` |
 | Etiqueta `infra.app` | `<corto>-<instancia>` | `ff-laptop` |
 | Lanzador | `infra-podman-<entorno>-<corto>-<instancia>.desktop` | «Firefly III (laptop)» en el menú |
 
-El consumidor va sin guion porque así lo exige la red de Postgres (`POSTGRES.md`, apartado 6). En el código, el nombre corto es `firefly_short` en `roles/firefly/defaults/main.yml`. No es un ajuste del inventario.
+**La regla, en una línea:** todo es `<corto>-<instancia>` y lo que cuelga de él (`-uploads`, `-cron`, `-app-key`, `-db-password`), con `-`. **Solo dentro de Postgres** el `-` pasa a `_` (`ff_laptop`), porque Postgres no admite `-` en un nombre sin comillas. Fuera de Postgres, todo sigue la regla de los nombres DNS (RFC 1123): minúsculas, cifras y `-`, como en Kubernetes y Podman.
+
+- **Los secretos van con su dueño.** Los de una instancia empiezan por su identificador: `ff-laptop-app-key`, `ff-laptop-db-password`. Los de Postgres, por el suyo: `pg-laptop-superuser-password`. Los de los backups, por `backup-`.
+- **La contraseña de cualquier usuario de base** es `<usuario>-db-password`, con `-` en lugar de `_`. El usuario `ff_laptop` es `ff-laptop-db-password`; un lector `ai_reader` sería `ai-reader-db-password`. Por eso un nombre de usuario no se repite en dos instancias de Postgres de la misma máquina: el `apply` se para.
+- **En KeePassXC no hay entorno** en ningún nombre: dev y prod son dos ficheros (`infra-dev.kdbx` e `infra-pro.kdbx`) con los mismos títulos. **En las máquinas sí:** todo lleva delante `dev-` o `prod-` (`prod-ff-laptop`, `prod-ff-laptop-db-password`), para que nunca haya duda de qué es cada cosa.
+
+En el código, el nombre corto es `firefly_short` en `roles/firefly/defaults/main.yml`. No es un ajuste del inventario.
 
 ## 4. Puertos
 
