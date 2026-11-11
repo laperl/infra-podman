@@ -6,7 +6,8 @@
 
 # The instances of this machine, in the data repository (group_vars/firefly_hosts.yml).
 # Each item:
-#   name:     ^[a-z0-9]{1,14}$, for example casa, canary, test (required)
+#   name:     ^[a-z0-9]{1,14}$, only the instance, for example laptop, casa, canary, test
+#             (required). The role adds the rest: prod-ff-<name> (ff = Firefly III)
 #   port:     its port on 127.0.0.1, from 18100 up, chosen by the operator (required)
 #   pg_instance:  the PostgreSQL instance of this machine with its database (default main)
 #   image:    the variable of playbooks/group_vars/all/images.yml with its image (default
@@ -63,21 +64,25 @@ firefly_launcher_command: "{{ firefly_item.launcher_command | default(['xdg-open
 # only serves to render the templates in CI.
 firefly_service_home: /home/svc_runner
 
-# Names (SPEC 4.12, R48). Derived; do not override.
-firefly_name: "{{ infra_env }}-firefly-{{ firefly_instance }}"
+# Names (SPEC 4.12, R48). Derived; do not override. Every name the role creates starts with
+# the short name of the application, ff = Firefly III: the instance laptop in prod is
+# prod-ff-laptop, its database ff_laptop. Declare only the instance (name: laptop), never a
+# whole name: the name check refuses hyphens, so prod-ff-prod-ff-laptop cannot happen.
+firefly_short: ff
+firefly_name: "{{ infra_env }}-{{ firefly_short }}-{{ firefly_instance }}"
 firefly_volume: "{{ firefly_name }}-uploads"
 firefly_pg_name: "{{ infra_env }}-pg-{{ firefly_pg_instance }}"
 # Its database, schema and user: one database per instance (docs/POSTGRES.md, section 2),
 # declared by the operator in postgres_hosts.yml with this consumer (D9).
-firefly_db_name: firefly_{{ firefly_instance }}
-firefly_db_user: firefly_{{ firefly_instance }}
-firefly_consumer: firefly{{ firefly_instance }}
+firefly_db_name: "{{ firefly_short }}_{{ firefly_instance }}"
+firefly_db_user: "{{ firefly_short }}_{{ firefly_instance }}"
+firefly_consumer: "{{ firefly_short }}-{{ firefly_instance }}"
 # Created by the postgres role for that consumer (SPEC 4.4).
 firefly_network: "{{ infra_env }}-{{ firefly_consumer }}-pg-{{ firefly_pg_instance }}-net"
 # KeePassXC entries <infra_site>/<key>; Podman secrets with the environment in front.
-firefly_app_key_secret_key: firefly-{{ firefly_instance }}-app-key
+firefly_app_key_secret_key: "{{ firefly_short }}-{{ firefly_instance }}-app-key"
 firefly_app_key_secret: "{{ infra_env }}-{{ firefly_app_key_secret_key }}"
-firefly_db_secret_key: pg-{{ firefly_pg_instance }}-{{ firefly_db_user }}-password
+firefly_db_secret_key: "{{ firefly_db_user | replace('_', '-') }}-db-password"
 firefly_db_secret: "{{ infra_env }}-{{ firefly_db_secret_key }}"
 firefly_cron_name: "{{ firefly_name }}-cron"
 firefly_launcher_file_name: infra-podman-{{ firefly_name }}.desktop

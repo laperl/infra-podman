@@ -3,7 +3,7 @@
 
 Run by the postgres role as the service user, on the server:
     pg_passwords.py --container dev-pg-main --superuser ci_admin \
-        --users '[{"role": "app1", "secret": "dev-pg-main-app1-password"}]' [--check]
+        --users '[{"role": "app1", "secret": "dev-app1-db-password"}]' [--check]
 
 - The secret is read with `podman secret inspect --showsecret` and never leaves this process:
   not in arguments, not in the output.

@@ -15,8 +15,8 @@ El día a día: qué hay en marcha, cómo van las copias, cómo lanzar algo a ma
 | Contenedor | Máquina | Cómo corre | Quién lo lanza |
 | --- | --- | --- | --- |
 | `prod-pg-main` (Postgres) | Portátil | **Siempre** | systemd, al encender |
-| `prod-firefly-<instancia>` (Firefly III, uno por instancia) | Portátil | **Siempre** | systemd, al encender, cuando Postgres está sano |
-| `prod-firefly-<instancia>-cron` (tareas de esa instancia) | Portátil | No es un contenedor: lanza una orden dentro de su Firefly | `prod-firefly-<instancia>-cron.timer`, cada día a las 05:30 |
+| `prod-ff-<instancia>` (Firefly III, uno por instancia) | Portátil | **Siempre** | systemd, al encender, cuando Postgres está sano |
+| `prod-ff-<instancia>-cron` (tareas de esa instancia) | Portátil | No es un contenedor: lanza una orden dentro de su Firefly | `prod-ff-<instancia>-cron.timer`, cada día a las 05:30 |
 | `prod-backup` (copia diaria) | Portátil | **Duerme** y despierta un rato | `prod-backup.timer`, cada día a las 13:00 |
 | `prod-backup-copy` (envío al GX10) | Portátil | **Duerme** y despierta un rato | `prod-backup-copy.timer`, cada hora a y media |
 | `prod-backup-server` (recibe las copias) | GX10 | **Siempre** | systemd, al encender |
@@ -39,8 +39,8 @@ Firefly, en el portátil. Cada instancia (por ejemplo `casa` o `canary`, [`servi
 <!-- test: deployed-firefly -->
 ```bash
 svc podman ps --filter label=infra.component=app      # todas las aplicaciones, cada instancia con (healthy)
-svc systemctl --user list-timers 'prod-firefly-*'      # las tareas de cada instancia: cuándo tocan (NEXT) y la última vez (LAST)
-svc podman port prod-firefly-<instancia>               # su puerto: 8080/tcp -> 127.0.0.1:<puerto>
+svc systemctl --user list-timers 'prod-ff-*'      # las tareas de cada instancia: cuándo tocan (NEXT) y la última vez (LAST)
+svc podman port prod-ff-<instancia>               # su puerto: 8080/tcp -> 127.0.0.1:<puerto>
 ```
 
 Cada instancia se abre desde su lanzador del menú («Firefly III (<instancia>)») o en el navegador, en `http://127.0.0.1:<puerto>`.
@@ -131,9 +131,9 @@ Por cada instancia, con su nombre y su puerto:
 
 <!-- test: healthy-firefly -->
 ```bash
-svc systemctl --user is-active prod-firefly-<instancia>.service prod-firefly-<instancia>-cron.timer
-svc podman healthcheck run prod-firefly-<instancia> && echo sano
-svc podman port prod-firefly-<instancia>
+svc systemctl --user is-active prod-ff-<instancia>.service prod-ff-<instancia>-cron.timer
+svc podman healthcheck run prod-ff-<instancia> && echo sano
+svc podman port prod-ff-<instancia>
 curl -s http://127.0.0.1:<puerto>/health; echo
 ```
 

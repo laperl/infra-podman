@@ -10,7 +10,7 @@ After={{ firefly_pg_name }}.service
 ContainerName={{ firefly_name }}
 Image={{ firefly_container_image }}
 Label=infra.env={{ infra_env }}
-Label=infra.app=firefly-{{ firefly_instance }}
+Label=infra.app={{ firefly_short }}-{{ firefly_instance }}
 Label=infra.component=app
 Label=infra.managed-by=infra-podman
 

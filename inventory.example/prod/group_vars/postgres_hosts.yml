@@ -12,7 +12,8 @@ postgres_instances:
 
 # Application databases, groups and users (docs/POSTGRES.md, sections 2 and 6), as data.
 # Names are chosen by the operator and never go into the code repository. Each user needs
-# its secret pg-<instance>-<user>-password in infra_secrets (group postgres_hosts) and in
+# its secret <user>-db-password (- for _: app1_ai -> app1-ai-db-password) in infra_secrets
+# (group postgres_hosts) and in
 # KeePassXC. Uncomment and adapt:
 #
 # postgres_instances:
@@ -33,9 +34,9 @@ postgres_instances:
 #             group: reader
 #             consumer: ai
 #       # Firefly III: one database per instance, never shared (docs/services/README.md).
-#       # The instance casa: its user in firefly_casa_owner, from its own network.
-#       - name: firefly_casa
+#       # The instance casa: its user in ff_casa_owner, from its own network.
+#       - name: ff_casa
 #         users:
-#           - name: firefly_casa
+#           - name: ff_casa
 #             group: owner
-#             consumer: fireflycasa
+#             consumer: ff-casa

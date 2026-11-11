@@ -185,7 +185,7 @@ jobs:
           if ansible-playbook -i "$INV" $APPS playbooks/postgres.yml --check > refusal.log 2>&1; then
             echo "::error::postgres ran without the secrets of its users"; exit 1
           fi
-          grep -q 'dev-pg-main-demo_app-password' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+          grep -q 'dev-demo-app-db-password' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
 
       - name: Create the secrets of the users with random values
         run: |
@@ -193,7 +193,7 @@ jobs:
             v=$(openssl rand -hex 24)
             echo "::add-mask::$v"
             echo "$v" >> "$RUNNER_TEMP/pw"
-            printf '%s' "$v" | tests/lifecycle/as-svc.sh podman secret create "dev-pg-main-$user-password" -
+            printf '%s' "$v" | tests/lifecycle/as-svc.sh podman secret create "dev-${user//_/-}-db-password" -
           done
 
       - name: Plan, apply, apply again (zero changes), plan again (zero changes)
@@ -223,8 +223,8 @@ jobs:
           v=$(openssl rand -hex 24)
           echo "::add-mask::$v"
           echo "$v" >> "$RUNNER_TEMP/pw"
-          tests/lifecycle/as-svc.sh podman secret rm dev-pg-main-demo_rw-password
-          printf '%s' "$v" | tests/lifecycle/as-svc.sh podman secret create dev-pg-main-demo_rw-password -
+          tests/lifecycle/as-svc.sh podman secret rm dev-demo-rw-db-password
+          printf '%s' "$v" | tests/lifecycle/as-svc.sh podman secret create dev-demo-rw-db-password -
           tests/lifecycle/playbook.sh -i "$INV" $APPS playbooks/postgres.yml 2>&1 | tee rotate.log | tee -a all.log
           grep -q 'Password set from its secret: demo_rw"' rotate.log || { echo "::error::the password of demo_rw was not set"; exit 1; }
           tests/lifecycle/check-postgres-apps.sh password demo_rw
@@ -242,7 +242,7 @@ jobs:
           # An idle connection, as an application keeps: psql waits on its input. (A running
           # query would outlive the stop: PostgreSQL only notices when it ends.)
           tests/lifecycle/as-svc.sh podman run -d --rm --name lifecycle-session --network dev-ai-pg-main-net \
-            --secret dev-pg-main-demo_ai-password,type=env,target=PGPASSWORD --entrypoint sh "$image" \
+            --secret dev-demo-ai-db-password,type=env,target=PGPASSWORD --entrypoint sh "$image" \
             -c 'sleep 300 | psql -X -h dev-pg-main -U demo_ai -d demo' >/dev/null
           sleep 3
           if tests/lifecycle/playbook.sh -i "$INV" $STEP playbooks/postgres.yml > drop.log 2>&1; then
@@ -253,9 +253,9 @@ jobs:
           $C role demo_ai present
           tests/lifecycle/as-svc.sh podman stop -t 0 lifecycle-session >/dev/null
           tests/lifecycle/playbook.sh -i "$INV" $STEP playbooks/postgres.yml 2>&1 | tee drop.log | tee -a all.log
-          grep -q 'KeePassXC entries: ci-site/pg-main-demo_ai-password' drop.log || { echo "::error::no reminder"; exit 1; }
+          grep -q 'KeePassXC entries: ci-site/demo-ai-db-password' drop.log || { echo "::error::no reminder"; exit 1; }
           $C role demo_ai absent
-          $C secret dev-pg-main-demo_ai-password absent
+          $C secret dev-demo-ai-db-password absent
           $C net dev-ai-pg-main-net absent
           $C groups demo_ro demo2_reader,demo_reader
           $C role demo_reader present
@@ -270,7 +270,7 @@ jobs:
           tests/lifecycle/playbook.sh -i "$INV" $STEP playbooks/postgres.yml 2>&1 | tee -a all.log
           $C role demo_ro present
           $C groups demo_ro demo2_reader
-          $C secret dev-pg-main-demo_ro-password present
+          $C secret dev-demo-ro-db-password present
           tests/lifecycle/playbook.sh -i "$INV" $STEP playbooks/postgres.yml 2>&1 | tee second.log | tee -a all.log
           grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply changed something"; exit 1; }
 
@@ -354,7 +354,8 @@ jobs:
       - name: Install Podman 4.9 from Ubuntu 24.04, and desktop-file-utils
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq podman desktop-file-utils
+          # Retries: the runner's mirror sometimes fails to resolve for a while.
+          sudo apt-get install -y -qq -o Acquire::Retries=5 podman desktop-file-utils
           podman --version | grep -Eq ' 4\.9\.' || { echo "Expected Podman 4.9"; exit 1; }
 
       - name: Install pinned ansible-core
@@ -367,11 +368,11 @@ jobs:
       - name: Service user, and PostgreSQL with one database per Firefly instance
         run: |
           tests/lifecycle/playbook.sh -i "$INV" playbooks/base.yml > base.log
-          for s in superuser firefly_casa firefly_canary firefly_ro demo_app; do
+          for s in superuser ff_casa ff_canary ff_ro demo_app; do
             v=$(openssl rand -hex 24)
             echo "::add-mask::$v"
             echo "$v" >> "$RUNNER_TEMP/pw"
-            name=dev-pg-main-$s-password
+            name=dev-${s//_/-}-db-password
             [[ $s == superuser ]] && name=dev-pg-main-superuser-password
             printf '%s' "$v" | $AS podman secret create "$name" -
           done
@@ -393,22 +394,31 @@ jobs:
           fi
           grep -q 'launcher_command a list of words' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
 
+      # Only the instance is written: a whole name would end up as dev-ff-dev-ff-casa (R49).
+      - name: A whole name instead of the instance is refused
+        run: |
+          printf 'firefly_instances: [{name: dev-ff-casa, port: 18100}]\n' > whole.yml
+          if ansible-playbook -i "$INV" -e @whole.yml playbooks/firefly.yml --check > refusal.log 2>&1; then
+            echo "::error::a name with hyphens was accepted"; exit 1
+          fi
+          grep -q 'name ^\[a-z0-9\]{1,14}\$' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+
       - name: Plan before the application keys exist, expecting a clear refusal
         run: |
           if ansible-playbook -i "$INV" playbooks/firefly.yml --check > refusal.log 2>&1; then
             echo "::error::firefly ran without its application key"; exit 1
           fi
-          grep -q 'Missing Podman secrets on localhost: dev-firefly-casa-app-key' refusal.log \
+          grep -q 'Missing Podman secrets on localhost: dev-ff-casa-app-key' refusal.log \
             || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
 
       - name: An application key that is not 32 characters is refused
         run: |
-          printf '%s' "$(openssl rand -hex 8)" | $AS podman secret create dev-firefly-casa-app-key -
+          printf '%s' "$(openssl rand -hex 8)" | $AS podman secret create dev-ff-casa-app-key -
           if ansible-playbook -i "$INV" playbooks/firefly.yml --check > refusal.log 2>&1; then
             echo "::error::firefly accepted a key of 16 characters"; exit 1
           fi
           grep -q 'has 16 characters' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
-          $AS podman secret rm dev-firefly-casa-app-key >/dev/null
+          $AS podman secret rm dev-ff-casa-app-key >/dev/null
 
       - name: Create the application keys with random values
         run: |
@@ -416,7 +426,7 @@ jobs:
             v=$(openssl rand -hex 16)
             echo "::add-mask::$v"
             echo "$v" >> "$RUNNER_TEMP/pw"
-            printf '%s' "$v" | $AS podman secret create "dev-firefly-$i-app-key" -
+            printf '%s' "$v" | $AS podman secret create "dev-ff-$i-app-key" -
           done
 
       - name: Plan, apply, apply again (zero changes), plan again (zero changes)
@@ -443,7 +453,7 @@ jobs:
           $CHECK schema casa
           $CHECK schema canary
 
-      - name: firefly_casa_reader reads and cannot change anything, nor reach canary (phases 4 and 5)
+      - name: ff_casa_reader reads and cannot change anything, nor reach canary (phases 4 and 5)
         run: $CHECK reader
 
       - name: No way out (internet, host, another application, the other instance)
@@ -477,7 +487,7 @@ jobs:
         run: |
           tests/lifecycle/playbook.sh -i "$INV" -e @tests/lifecycle/firefly-only-casa.yml playbooks/firefly.yml 2>&1 \
             | tee undeclared.log | tee -a all.log
-          grep 'left running as they are' undeclared.log | grep -q 'firefly-canary' || { echo "::error::canary not reported"; exit 1; }
+          grep 'left running as they are' undeclared.log | grep -q 'ff-canary' || { echo "::error::canary not reported"; exit 1; }
           $CHECK running canary
 
       - name: Retire one instance; the other keeps running (R48)
@@ -510,7 +520,7 @@ jobs:
         if: failure()
         run: |
           tests/lifecycle/diagnose.sh
-          for i in casa canary; do tests/lifecycle/as-svc.sh podman logs --tail 30 "dev-firefly-$i" 2>&1 | sed "s/^/firefly-$i: /" || true; done
+          for i in casa canary; do tests/lifecycle/as-svc.sh podman logs --tail 30 "dev-ff-$i" 2>&1 | sed "s/^/firefly-$i: /" || true; done
 
   backup:
     runs-on: ubuntu-24.04
@@ -645,7 +655,7 @@ jobs:
             v=$(openssl rand -hex 24)
             echo "::add-mask::$v"
             echo "$v" >> "$RUNNER_TEMP/pw"
-            printf '%s' "$v" | $AS podman secret create "dev-pg-main-$user-password" -
+            printf '%s' "$v" | $AS podman secret create "dev-${user//_/-}-db-password" -
           done
           tests/lifecycle/playbook.sh -i "$INV" -e @tests/lifecycle/apps-vars.yml playbooks/postgres.yml 2>&1 | tee -a all.log
           $C db demo present
@@ -659,7 +669,7 @@ jobs:
           $CHECK kept pre-drop demo
           $C db demo absent
           for role in demo_owner demo_writer demo_reader demo_app demo_rw demo_ro demo_ai; do $C role "$role" absent; done
-          for user in demo_app demo_rw demo_ro demo_ai; do $C secret "dev-pg-main-$user-password" absent; done
+          for user in demo_app demo_rw demo_ro demo_ai; do $C secret "dev-${user//_/-}-db-password" absent; done
           $C net dev-demo-pg-main-net absent
           $C net dev-ai-pg-main-net absent
           [[ $($AS podman inspect dev-pg-main --format '{{.HostConfig.NetworkMode}}') == none ]] \

@@ -2,16 +2,16 @@
 # Run by the operator on the laptop against infra-dev.kdbx created with KeePassXC 2.8
 # (phase 0 done criterion), with -e infra_site=<installation>. Never prints the value,
 # only its length.
-- name: Kdbx lookup reads <infra_site>/test_dummy from infra-dev.kdbx
+- name: Kdbx lookup reads <infra_site>/test-dummy from infra-dev.kdbx
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
     - name: Read the fictitious test secret
       ansible.builtin.set_fact:
-        kdbx_selftest_value: "{{ lookup('kdbx', 'test_dummy') }}"
+        kdbx_selftest_value: "{{ lookup('kdbx', 'test-dummy') }}"
       no_log: true
 
     - name: Report the result without the value
       ansible.builtin.debug:
-        msg: "OK: read {{ infra_site }}/test_dummy ({{ kdbx_selftest_value | length }} characters)"
+        msg: "OK: read {{ infra_site }}/test-dummy ({{ kdbx_selftest_value | length }} characters)"

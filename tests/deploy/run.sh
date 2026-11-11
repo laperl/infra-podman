@@ -132,7 +132,7 @@ if tail -1 "$log" | cut -f6 | grep -q '^data@[0-9a-f]*$'; then pass "the log rec
 expect ok "dev apply runs without --check" apply check --env dev --limit example-vm
 called_with "dev apply passes --diff, --ask-become-pass and --limit, not --check" \
   "^navigator run playbooks/check.yml -i $data/inventory/dev/hosts.yml -- --diff --ask-become-pass --limit example-vm\$"
-# --- --confirm-drop and --retire: only apply postgres (docs/POSTGRES.md, section 7) -----
+# --- --confirm-drop (apply postgres) and --retire (apply postgres or firefly) -----------
 expect ok "apply postgres --confirm-drop passes the confirmation" apply postgres --env dev --confirm-drop main
 called_with "--confirm-drop becomes -e postgres_confirm_drop" \
   "^navigator run playbooks/postgres.yml -i $data/inventory/dev/hosts.yml -- --diff --ask-become-pass -e postgres_confirm_drop=main\$"
@@ -141,6 +141,10 @@ expect ok "apply postgres --retire passes the instance" apply postgres --env dev
 called_with "--retire becomes -e postgres_retire" \
   "^navigator run playbooks/postgres.yml -i $data/inventory/dev/hosts.yml -- --diff --ask-become-pass --limit example-vm -e postgres_retire=main\$"
 expect refused "--confirm-drop is refused with plan" plan postgres --env dev --confirm-drop main
+expect ok "apply firefly --retire passes the instance" apply firefly --env dev --limit example-vm --retire laptop
+called_with "--retire becomes -e firefly_retire" \
+  "^navigator run playbooks/firefly.yml -i $data/inventory/dev/hosts.yml -- --diff --ask-become-pass --limit example-vm -e firefly_retire=laptop\$"
+expect refused "--confirm-drop is refused with apply firefly" apply firefly --env dev --confirm-drop main
 expect refused "--retire is refused with another playbook" apply check --env dev --retire main
 expect refused "--confirm-drop and --retire do not go together" apply postgres --env dev --confirm-drop main --retire main
 expect refused "an invalid instance name is refused" apply postgres --env dev --retire 'main;x'
@@ -259,7 +263,7 @@ python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' 
 
 : >"$calls"
 fake_become="fake-sudo-password-$RANDOM"  # fictitious, test only
-if printf '%s\n%s\n' "$fake_password" "$fake_become" | "$repo/deploy.sh" secrets --env dev --limit example-vm --rotate test_dummy >"$work/out" 2>&1; then
+if printf '%s\n%s\n' "$fake_password" "$fake_become" | "$repo/deploy.sh" secrets --env dev --limit example-vm --rotate test-dummy >"$work/out" 2>&1; then
   pass "dev secrets runs"
 else
   fail "dev secrets runs"; sed 's/^/    /' "$work/out"
@@ -269,7 +273,7 @@ called_with "the sudo password follows it on stdin" "^${fake_become}\$"
 if grep '^podman ' "$calls" | grep -qF -e "$fake_password" -e "$fake_become"; then fail "the passwords are not in podman's arguments"; else pass "the passwords are not in podman's arguments"; fi
 if grep -qF -e "$fake_password" -e "$fake_become" "$log" "$work/out"; then fail "the passwords are not in the log or output"; else pass "the passwords are not in the log or output"; fi
 called_with "secrets uses the pinned image, the host network, the dev inventory, --limit and --rotate" \
-  '^podman run --rm -i --user root --security-opt label=disable --network=host .* ghcr\.io/[^ ]+@sha256:[0-9a-f]{64} bash -c .* secrets playbooks/secrets.yml -i /inventory/hosts.yml --limit example-vm,localhost -e secrets_rotate=test_dummy$'
+  '^podman run --rm -i --user root --security-opt label=disable --network=host .* ghcr\.io/[^ ]+@sha256:[0-9a-f]{64} bash -c .* secrets playbooks/secrets.yml -i /inventory/hosts.yml --limit example-vm,localhost -e secrets_rotate=test-dummy$'
 called_with "secrets mounts the inventory of the data repository read-only" "-v $data/inventory/dev:/inventory:ro "
 called_with "secrets mounts the database read-only" "-v $work/dev.kdbx:/kdbx/database.kdbx:ro"
 called_with "secrets mounts the SSH agent at the same path, like ansible-navigator" "-v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK -e SSH_AUTH_SOCK=$SSH_AUTH_SOCK "

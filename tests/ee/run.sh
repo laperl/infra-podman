@@ -23,8 +23,8 @@ db="$work/test.kdbx"
 echo "== keepassxc-cli accepts the master password on stdin, without a terminal"
 printf '%s\n%s\n' "$master" "$master" | keepassxc-cli db-create -q -p "$db"
 printf '%s\n' "$master" | keepassxc-cli mkdir -q "$db" example
-printf '%s\n%s\n' "$master" "$value" | keepassxc-cli add -q -p "$db" example/test_dummy
-read_back=$(printf '%s\n' "$master" | keepassxc-cli show -q -s -a password "$db" example/test_dummy)
+printf '%s\n%s\n' "$master" "$value" | keepassxc-cli add -q -p "$db" example/test-dummy
+read_back=$(printf '%s\n' "$master" | keepassxc-cli show -q -s -a password "$db" example/test-dummy)
 [[ $read_back == "$value" ]] || { echo "FAIL: read back a different value"; exit 1; }
 echo "ok"
 
@@ -68,7 +68,7 @@ else
   echo "FAIL: a subgroup was read as an entry"; exit 1
 fi
 if out=$(KDBX_DATABASE=$db KDBX_PASSWORD=$master ansible-playbook -e infra_site=other \
-  -e kdbx_test_entry=test_dummy tests/ee/lookup_entry.yml 2>&1); then
+  -e kdbx_test_entry=test-dummy tests/ee/lookup_entry.yml 2>&1); then
   echo "FAIL: read from a group that does not exist"; exit 1
 fi
 grep -q "group named exactly 'other'" <<<"$out" || { echo "FAIL: missing group refused for another reason:"; echo "$out"; exit 1; }
@@ -77,7 +77,7 @@ echo "ok: the group of another installation is not read"
 echo "== playbooks/secrets.yml with the password on stdin, exactly as deploy.sh secrets runs it"
 printf '%s\n' "$master" | KDBX_DATABASE=$db \
   bash -c 'IFS= read -r KDBX_PASSWORD; export KDBX_PASSWORD; exec ansible-playbook "$@"' secrets \
-  playbooks/secrets.yml -i inventory.example/dev/hosts.yml --limit localhost -e secrets_rotate=test_dummy
+  playbooks/secrets.yml -i inventory.example/dev/hosts.yml --limit localhost -e secrets_rotate=test-dummy
 if printf '%s\n' "$master" | KDBX_DATABASE=$db \
   bash -c 'IFS= read -r KDBX_PASSWORD; export KDBX_PASSWORD; exec ansible-playbook "$@"' secrets \
   playbooks/secrets.yml -i inventory.example/dev/hosts.yml --limit localhost -e secrets_rotate=undeclared >/dev/null 2>&1; then

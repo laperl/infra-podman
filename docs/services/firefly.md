@@ -1,10 +1,12 @@
-# Firefly III: requisitos (fase 2)
+# Firefly III (`ff`): requisitos (fase 2)
+
+**`ff` es Firefly III:** su nombre corto en todo lo que se crea en la máquina. La instancia `laptop` es `prod-ff-laptop`, con su base `ff_laptop`. En el código y el inventario se llama `firefly` (`roles/firefly`, `firefly_instances`). Instalarla, paso a paso: [`INSTALL.md`](INSTALL.md).
 
 Qué tiene que cumplir Firefly III antes de escribir su código. Es una propuesta: lo que esté aquí y no en SPEC, sección 3, se aprueba con este PR. Lo marcado 🔍 se verifica en DEV durante la fase y el PR que lo verifique lo deja escrito.
 
 Ahí van tus finanzas. Por eso el principio es: **Firefly no puede enviar nada fuera del portátil**, y eso lo garantiza la red, no un ajuste de la aplicación.
 
-**Usa la Postgres de la plataforma:** la instancia `main` del portátil (`prod-pg-main`). Sin base propia dentro del contenedor, sin SQLite y sin otra instancia de Postgres.
+**Usa la Postgres de la plataforma:** una instancia de Postgres del portátil (`pg_instance`, por ejemplo `prod-pg-laptop`). Sin base dentro del contenedor ni SQLite.
 
 Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, backups, red, Postgres) está en SPEC y en [`POSTGRES.md`](../POSTGRES.md), y aquí solo se enlaza.
 
@@ -23,7 +25,7 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
 
 ## 2. Red: sin salida a internet
 
-- **Cada instancia está en su red de Podman interna**, sin salida, cuyo único otro miembro es su Postgres: `prod-firefly<instancia>-pg-main-net` ([SPEC](../SPEC.md) 4.4, 4.12). Ni internet, ni la red de casa, ni otros contenedores.
+- **Cada instancia está en su red de Podman interna**, sin salida, cuyo único otro miembro es su Postgres: `prod-ff-<instancia>-pg-main-net` ([SPEC](../SPEC.md) 4.4, 4.12). Ni internet, ni la red de casa, ni otros contenedores.
 - **Se llega a él solo desde el portátil**, por un puerto en `127.0.0.1`, publicado desde esa misma red interna. Elegido por el operador el 2026-11-07 frente a un proxy delante o una segunda red. Sin root funciona y el contenedor sigue sin salida (comprobado con Podman 4.9.3, [`COMPATIBILITY.md`](../COMPATIBILITY.md)); con root no funcionaría. Probado en `lifecycle` con Podman 4.9; 🔍 falta probarlo en el portátil, con Podman 5 y SELinux.
 - **Siempre en marcha**, como servicio de `svc_runner`, y se abre desde el menú de Sway con su lanzador (R47).
 - **Se prueba en `lifecycle`**, que comprueba que desde el contenedor de Firefly:
@@ -50,17 +52,17 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
   - doble factor (TOTP) obligatorio, con KeePassXC;
   - sesiones con caducidad.
 - **Secretos** en KeePassXC, grupo de la instalación, pasados como secretos de Podman. Firefly lee del fichero las variables terminadas en `_FILE`:
-  - `firefly-<instancia>-app-key`: `APP_KEY`, exactamente 32 caracteres. Si se pierde, se pierden las sesiones y las claves de la API; va en KeePassXC como cualquier otro secreto;
-  - `pg-main-firefly_<instancia>-password`: la contraseña de su usuario de Postgres (`firefly_<instancia>`).
+  - `ff-<instancia>-app-key`: `APP_KEY`, exactamente 32 caracteres. Si se pierde, se pierden las sesiones y las claves de la API; va en KeePassXC como cualquier otro secreto;
+  - `ff-<instancia>-db-password`: la contraseña de su usuario de Postgres (`ff_<instancia>`).
 - **Contenedor endurecido**, como el resto:
   - sin root (`www-data`) y sin capacidades extra;
   - con límites de memoria, CPU y procesos como variables (R46): 512 MB, 1 CPU y 200 procesos, que se cambian por instancia en el inventario (`memory`, `cpus`, `pids_limit`). Medido en DEV el 2026-11-11, en uso: 70 MB, 3 % de CPU y 12 procesos; los valores por defecto dejan holgura de sobra; y healthcheck en `/health`, que solo responde `OK` si Firefly lee su base;
   - imagen por digest, que existe para `linux/amd64` y `linux/arm64` (comprobado por el operador el 2026-11-08).
 - **Logs sin datos financieros:** `APP_DEBUG=false`, nivel `notice` y al journal de `svc_runner` (`LOG_CHANNEL=stdout`). El registro de auditoría, **apagado** (`AUDIT_LOG_LEVEL=emergency`, el valor por defecto): según Firefly, «puede contener información financiera sensible». Decidido por el operador el 2026-11-08.
 - **Postgres** (según [`POSTGRES.md`](../POSTGRES.md)):
-  - **una base por instancia**, nunca compartida: `firefly_<instancia>`, con su esquema del mismo nombre y sus grupos `firefly_<instancia>_owner`, `_writer` y `_reader` (R35, R36, R48);
-  - Firefly migra sola, así que cada instancia usa un único usuario, `firefly_<instancia>`, en su `_owner` (`POSTGRES.md`, tabla de usuarios), con `consumer: firefly<instancia>`;
-  - sus tablas, en el esquema de su base (`PGSQL_SCHEMA=firefly_<instancia>`) y de su `_owner`: la base no tiene esquema `public` (probado en `lifecycle`);
+  - **una base por instancia**, nunca compartida: `ff_<instancia>`, con su esquema del mismo nombre y sus grupos `ff_<instancia>_owner`, `_writer` y `_reader` (R35, R36, R48);
+  - Firefly migra sola, así que cada instancia usa un único usuario, `ff_<instancia>`, en su `_owner` (`POSTGRES.md`, tabla de usuarios), con `consumer: ff-<instancia>`;
+  - sus tablas, en el esquema de su base (`PGSQL_SCHEMA=ff_<instancia>`) y de su `_owner`: la base no tiene esquema `public` (probado en `lifecycle`);
   - `pg_hba` generado: cada usuario, solo en su base y solo desde la red de Firefly, cuya subred elige Podman (R45).
 
 ## 4. Actualizaciones
@@ -78,7 +80,7 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
 
 ## 5. Copias y restauración
 
-- **La base de cada instancia** (`firefly_<instancia>`) entra sola en el backup diario: se vuelcan todas las bases, cada una en sus propias copias.
+- **La base de cada instancia** (`ff_<instancia>`) entra sola en el backup diario: se vuelcan todas las bases, cada una en sus propias copias.
 - **El volumen de justificantes** entra en el backup y en la copia al GX10. Es el pendiente «Copia de los volúmenes de las aplicaciones» del ROADMAP.
 - **Restaurar**, probado en `lifecycle` y escrito en [`OPERATIONS.md`](../OPERATIONS.md): la base y los justificantes, desde la copia local y desde la del GX10. Con los permisos de la base repuestos por Ansible (pendiente «Restaurar bases de aplicaciones»).
 - **Conservación:** 7 diarias, 12 mensuales y 5 anuales. Hacienda puede revisar 4 años, así que da para los justificantes de la declaración.
@@ -91,9 +93,9 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
 
 ## 7. La IA local, más adelante (fases 4 y 5)
 
-En la fase 2 solo se deja listo el grupo `firefly_<instancia>_reader` y se prueba que no puede escribir ni entrar en la base de otra instancia. El resto se diseña en su fase. Requisitos desde ya:
+En la fase 2 solo se deja listo el grupo `ff_<instancia>_reader` y se prueba que no puede escribir ni entrar en la base de otra instancia. El resto se diseña en su fase. Requisitos desde ya:
 
-- **Solo lectura, garantizada por la base y no por la IA.** Entra con un usuario propio del grupo `firefly_<instancia>_reader`, nunca con el usuario `firefly_<instancia>` ni con un token de su API, que da acceso a todo 🔍.
+- **Solo lectura, garantizada por la base y no por la IA.** Entra con un usuario propio del grupo `ff_<instancia>_reader`, nunca con el usuario `ff_<instancia>` ni con un token de su API, que da acceso a todo 🔍.
 - **Que vea solo lo necesario:** unas vistas preparadas (movimientos, categorías, saldos), no toda la base, que tiene usuarios, tokens y sesiones.
 - **Nunca un modelo externo.** LiteLLM, en el GX10, apunta también a IAs de fuera. Lo que lea datos de Firefly solo puede llegar a vLLM local:
   - con su propia ruta o clave, limitada a los modelos locales 🔍;

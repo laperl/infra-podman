@@ -17,10 +17,14 @@ postgres_superuser: ""
 #     name:     ^[a-z][a-z0-9_]{0,62}$; once per database, but it may be in several
 #               databases (one role, one password)
 #     group:    owner | writer | reader
-#     consumer: the application that connects with it, ^[a-z][a-z0-9]{0,20}$; it gets the
-#               network <env>-<consumer>-pg-<instance>-net (D9) and pg_hba.conf admits
-#               the user only from there, only to its database.
-# Its password: the Podman secret <env>-pg-<instance>-<user>-password (SPEC 4.5).
+#     consumer: the application instance that connects with it, by its identifier
+#               <app>-<instance> (for example ff-laptop; docs/services/README.md, 3): lower
+#               case letters, digits and single hyphens. It gets the network
+#               <env>-<consumer>-pg-<instance>-net (D9) and pg_hba.conf admits the user only
+#               from there, only to its database.
+# Its password: the KeePassXC entry and Podman secret named after the user, with - for _:
+# <user>-db-password, for example ff_laptop -> <env>-ff-laptop-db-password (SPEC 4.5). A
+# user name is unique on its machine, across instances (playbooks/postgres.yml).
 # What is removed from the list is removed from PostgreSQL (docs/POSTGRES.md, section 7).
 postgres_databases: []
 

@@ -117,7 +117,7 @@ Esta sección debe copiarse a `docs/COMPATIBILITY.md`.
 
 ### 4.4 Redes y Postgres
 
-- Una red por consumidor de Postgres, `<entorno>-<consumidor>-pg-<instancia>-net` (por ejemplo `prod-fireflycasa-pg-main-net`), **interna** (`Internal=true`: sin salida a internet, a la red de casa ni al host; y `DNS=127.0.0.1`, para que tampoco salgan consultas de DNS) y con `Options=isolate=true`. **Sin subred fija:** la elige Podman, sin solaparse con sus otras redes, y Ansible la lee para `pg_hba.conf` (R45). Los consumidores llegan a Postgres por su nombre de contenedor.
+- Una red por consumidor de Postgres, `<entorno>-<consumidor>-pg-<instancia>-net` (por ejemplo `prod-ff-casa-pg-main-net`), **interna** (`Internal=true`: sin salida a internet, a la red de casa ni al host; y `DNS=127.0.0.1`, para que tampoco salgan consultas de DNS) y con `Options=isolate=true`. **Sin subred fija:** la elige Podman, sin solaparse con sus otras redes, y Ansible la lee para `pg_hba.conf` (R45). Los consumidores llegan a Postgres por su nombre de contenedor.
 - El contenedor de Postgres se une a todas esas redes. Los consumidores no se ven entre sí.
 - Con varias instancias en la misma máquina, cada red de consumidor se une solo a la instancia que usa ese consumidor. No hay una red común para todos los Postgres.
 - En Postgres, el modelo de [`POSTGRES.md`](POSTGRES.md): una base y tres grupos por aplicación y usuarios a demanda. En `pg_hba.conf`, generado desde el inventario, cada usuario solo se admite en su base y desde la subred de su red. El superusuario y `backup` nunca entran por TCP, salvo el superusuario desde la red de pgAdmin (R37).
@@ -164,7 +164,7 @@ Para OpenClaw, SearXNG y el servicio de audio: `NoNewPrivileges=true`, `DropCapa
 - `deploy.sh plan <playbook> [--env dev|prod] [--limit]`: ejecuta `--check --diff` y muestra el plan.
 - `deploy.sh apply <playbook> [--env dev|prod] [--limit]`: aplica. Lo lanza solo el operador, también en DEV.
 - `deploy.sh secrets [--env dev|prod] [--rotate nombre]`: pide la contraseña de KeePassXC y crea o rota secretos. Con `dev` usa `infra-dev.kdbx`.
-- Solo con `apply postgres`: `--confirm-drop <instancia>` confirma que se borran todas sus bases, y `--retire <instancia>` la retira conservando sus datos ([`POSTGRES.md`](POSTGRES.md), sección 7). Quedan en el registro, junto al playbook.
+- `--confirm-drop <instancia>`, solo con `apply postgres`, confirma que se borran todas sus bases. `--retire <instancia>`, con `apply postgres` o `apply firefly`, retira esa instancia conservando sus datos ([`services/INSTALL.md`](services/INSTALL.md), apartados 10 y 11; [`POSTGRES.md`](POSTGRES.md), sección 7). Quedan en el registro, junto al playbook.
 - `--env` vale `prod` por defecto. Con `prod`, antes de `plan` o `apply` comprueba que el checkout es un **tag firmado** válido (`git verify-tag`). Con `dev` se despliega desde la rama del PR, sin tag.
 - `secrets --env prod` también exige el tag firmado: el playbook que se ejecuta recibe la contraseña maestra.
 - `apply --env prod` pide además escribir `prod` en un terminal interactivo. Sin terminal, se rechaza.
@@ -192,27 +192,21 @@ Sin réplica entre máquinas: una réplica copia también los errores, como un b
 
 Para saber de un vistazo de quién es cada contenedor, red o volumen, para qué sirve y de qué entorno es, sin herramientas nuevas (R22).
 
-**Nombres:** en minúsculas, con guiones, y siempre empiezan por el entorno (`prod` o `dev`, variable `infra_env`).
-
-| Objeto | Patrón | Ejemplos |
-| --- | --- | --- |
-| Contenedor y su servicio systemd | `<entorno>-<app>[-<pieza>]` | `prod-pg-main`, `prod-firefly-casa`, `prod-backup` |
-| Red | `<entorno>-<consumidor>-<proveedor>-net` | `prod-fireflycasa-pg-main-net`: la instancia `casa` de Firefly habla con el Postgres `main` |
-| Volumen | `<entorno>-<app>-<contenido>` | `prod-pg-main-data`, `prod-firefly-casa-uploads`, `prod-backup-repo` |
-| Secreto de Podman | `<entorno>-<nombre en KeePassXC>` | `prod-pg-main-firefly_casa-password` ↔ `<instalación>/pg-main-firefly_casa-password` (la misma ruta en dev y prod) |
-
-- **Postgres:** cada instancia se llama `pg-<instancia>`, por ejemplo `pg-main` o `pg-test`.
-- **Toda aplicación va por instancias (R48):** cada una lleva su nombre detrás de la app, `<entorno>-<app>-<instancia>[-<pieza>]`, por ejemplo `prod-firefly-casa` y `prod-firefly-casa-uploads`. Cada instancia tiene su propia base de datos, red, puerto, secretos y volumen. Las reglas comunes, en [`services/README.md`](services/README.md).
-- **Ficheros Quadlet:** se llaman como el objeto (`prod-firefly-casa.container` crea el servicio `prod-firefly-casa.service`).
-- **Nombres explícitos:** siempre se fijan `ContainerName=`, `NetworkName=` y `VolumeName=`. Sin ellas, Podman antepone `systemd-` al nombre (comprobado con el generador de 4.9).
+**Nombres:** la norma completa, de obligado cumplimiento, está en [`NAMING.md`](NAMING.md) (R48, R49, R50). En resumen:
+- **Toda aplicación va por instancias** (R48), cada una con su base, red, puerto, secretos y volumen ([`services/README.md`](services/README.md)).
+- **Un identificador por instancia,** `<corto>-<instancia>`: `ff-laptop`, `pg-laptop`.
+- **En las máquinas, el entorno va delante:** `prod-ff-laptop`, `prod-pg-laptop-data`, `prod-ff-laptop-pg-laptop-net`.
+- **Dentro de Postgres, `_` en lugar de `-`:** `ff_laptop`.
+- **Secretos:** KeePassXC sin entorno (`ff-laptop-db-password`); Podman, con el entorno delante (`prod-ff-laptop-db-password`).
+- **Ficheros Quadlet:** se llaman como el objeto (`prod-ff-laptop.container` crea `prod-ff-laptop.service`). Siempre se fijan `ContainerName=`, `NetworkName=` y `VolumeName=`.
 
 **Etiquetas:** todo contenedor, red y volumen lleva:
 - `infra.env` (`prod`, `dev`);
-- `infra.app` (`pg-main`, `firefly`…);
+- `infra.app` (`pg-main`, `ff-laptop`…);
 - `infra.component` (`db`, `app`, `backup`…);
 - `infra.managed-by=infra-podman`.
 
-Sirven para filtrar, por ejemplo `podman ps --filter label=infra.app=firefly` o `podman volume ls --filter label=infra.env=prod`. Es la misma idea que las etiquetas recomendadas de Kubernetes (`app.kubernetes.io/name`, `component`, `managed-by`), sin Kubernetes.
+Sirven para filtrar, por ejemplo `podman ps --filter label=infra.app=ff-laptop` o `podman volume ls --filter label=infra.env=prod`. Es la misma idea que las etiquetas recomendadas de Kubernetes (`app.kubernetes.io/name`, `component`, `managed-by`), sin Kubernetes.
 
 **CI:** a partir de la fase 1, la política de Quadlet del CI rechaza los objetos sin nombre explícito, sin prefijo de entorno o sin estas etiquetas.
 
@@ -306,7 +300,7 @@ Son supuestos razonables pero no comprobados. Si alguno falla, detente y propón
 | Fase | Qué verificar |
 | --- | --- |
 | 0 | Cómo instalar ansible-navigator en Fedora Atomic 44 y que la imagen de Ansible funcione con el Podman del portátil (5 en Fedora 44; 6 al pasar a Fedora 45) y el reenvío del agente SSH. Instalación: **comprobada** (`docs/SETUP.md`). Agente SSH: **comprobado** el 2026-11-02 con `deploy.sh plan check --env dev` y `--security-opt=label=disable` (R16) |
-| 0 | Que `keepassxc-cli` dentro de la imagen de Ansible abre un `.kdbx` guardado con KeePassXC 2.8, cómo se instala en esa imagen y qué versión trae. Se instala con el paquete `keepassxc` de Fedora 44 y trae la **2.8.0**. **Comprobado** el 2026-11-02 por el operador: el lookup lee `Infra_Podman/test_dummy` (hoy `<instalación>/test_dummy`, R42) de `infra-dev.kdbx` creado con KeePassXC 2.8 de escritorio (`docs/SETUP.md`, paso 4) |
+| 0 | Que `keepassxc-cli` dentro de la imagen de Ansible abre un `.kdbx` guardado con KeePassXC 2.8, cómo se instala en esa imagen y qué versión trae. Se instala con el paquete `keepassxc` de Fedora 44 y trae la **2.8.0**. **Comprobado** el 2026-11-02 por el operador: el lookup lee `Infra_Podman/test-dummy` (hoy `<instalación>/test-dummy`, R42) de `infra-dev.kdbx` creado con KeePassXC 2.8 de escritorio (`docs/SETUP.md`, paso 4) |
 | 0 | Que `keepassxc-cli` acepta la contraseña maestra por la entrada estándar sin terminal. La documentación oficial describe `-q` (silencia la petición de contraseña) y `-s`/`-a`, pero no detalla este comportamiento. **Comprobado** con 2.7.6 en local y con 2.8.0, la que trae la imagen de Ansible, en CI (`tests/ee/run.sh`) |
 | 0 | Que Ansible no evalúa el lookup de KeePassXC en una tarea saltada (`when:` falso) cuando el secreto ya existe. **Comprobado**, salvo en `loop:` (ver 4.5) |
 | 1 | Que el runner `ubuntu-24.04` permite usar Podman 4.9 rootless con systemd de usuario para `lifecycle` (y `ubuntu-24.04-arm` cuando haya servicios del GX10 con datos). **Comprobado** el 2026-11-03 (jobs `base` y `postgres`): usuario de servicio con linger, Podman 4.9.3 rootless, Quadlet, healthcheck y reinicio. Salvedad del runner, no de los servidores: su `/etc/environment` fija `XDG_*` para su propio usuario y el workflow lo quita (`docs/COMPATIBILITY.md`) |

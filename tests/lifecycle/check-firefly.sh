@@ -6,7 +6,7 @@
 #   running    healthy, published only on 127.0.0.1:<its port>, /health and the login page answer
 #   standard   hardening, limits, its one network, secrets as files, its settings
 #   schema     its tables in the schema of its database, owned by its _owner group
-#   reader     firefly_ro (firefly_casa_reader) reads casa's tables and cannot change them
+#   reader     ff_ro (ff_casa_reader) reads casa's tables and cannot change them
 #   isolation  no way out: not to the internet, the host, demo's network or the other instance
 #   user       the first user, through the registration page, as the operator does it
 #   cron       the scheduled tasks run inside the container, from their service
@@ -24,13 +24,13 @@ case $instance in
   canary) port=18101 other=casa ;;
   *) echo "unknown instance $instance" >&2; exit 2 ;;
 esac
-name=dev-firefly-$instance
-db=firefly_$instance
+name=dev-ff-$instance
+db=ff_$instance
 pg=dev-pg-main
 su=ci_admin  # fictitious superuser of tests/lifecycle/inventory.yml
-net=dev-firefly$instance-pg-main-net
-other_name=dev-firefly-$other
-other_net=dev-firefly$other-pg-main-net
+net=dev-ff-$instance-pg-main-net
+other_name=dev-ff-$other
+other_net=dev-ff-$other-pg-main-net
 demo_net=dev-demo-pg-main-net
 ai_net=dev-ai-pg-main-net
 launcher=$HOME/.local/share/applications/infra-podman-$name.desktop
@@ -108,21 +108,21 @@ case $step in
     [[ $(sql "SELECT to_regclass('$db.users') IS NOT NULL") == t ]] || fail "no table $db.users"
     ;;
   reader)
-    client() { # client <query>: as firefly_ro over TCP, from the network of ai
+    client() { # client <query>: as ff_ro over TCP, from the network of ai
       "$as" podman --log-level=error run --rm --network "$ai_net" \
-        --secret dev-pg-main-firefly_ro-password,type=env,target=PGPASSWORD --entrypoint psql "$(pg_image)" \
-        -X -h "$pg" -U firefly_ro -d firefly_casa -v ON_ERROR_STOP=1 -tAq -c "$1" </dev/null
+        --secret dev-ff-ro-db-password,type=env,target=PGPASSWORD --entrypoint psql "$(pg_image)" \
+        -X -h "$pg" -U ff_ro -d ff_casa -v ON_ERROR_STOP=1 -tAq -c "$1" </dev/null
     }
-    out=$(client "SELECT count(*) FROM users" 2>&1) || fail "firefly_ro cannot read users: $out"
-    if out=$(client "DELETE FROM migrations" 2>&1); then fail "firefly_ro deleted rows"; fi
+    out=$(client "SELECT count(*) FROM users" 2>&1) || fail "ff_ro cannot read users: $out"
+    if out=$(client "DELETE FROM migrations" 2>&1); then fail "ff_ro deleted rows"; fi
     grep -q 'permission denied' <<<"$out" || fail "the delete failed for another reason: $out"
-    if out=$(client "CREATE TABLE lifecycle_t (n int)" 2>&1); then fail "firefly_ro created a table"; fi
+    if out=$(client "CREATE TABLE lifecycle_t (n int)" 2>&1); then fail "ff_ro created a table"; fi
     grep -q 'permission denied' <<<"$out" || fail "the create failed for another reason: $out"
     # Nor into the database of the other instance (pg_hba.conf and CONNECT, R48).
     if out=$("$as" podman --log-level=error run --rm --network "$ai_net" \
-         --secret dev-pg-main-firefly_ro-password,type=env,target=PGPASSWORD --entrypoint psql "$(pg_image)" \
-         -X -h "$pg" -U firefly_ro -d firefly_canary -tAq -c "SELECT 1" </dev/null 2>&1); then
-      fail "firefly_ro connected to the database of canary"
+         --secret dev-ff-ro-db-password,type=env,target=PGPASSWORD --entrypoint psql "$(pg_image)" \
+         -X -h "$pg" -U ff_ro -d ff_canary -tAq -c "SELECT 1" </dev/null 2>&1); then
+      fail "ff_ro connected to the database of canary"
     fi
     ;;
   isolation)
@@ -215,7 +215,7 @@ case $step in
     fi
     took=$(($(date +%s) - start))
     "$as" podman unpause "$pg" >/dev/null
-    # systemctl says: Job for dev-firefly.service failed because a timeout was exceeded.
+    # systemctl says: Job for dev-ff-casa.service failed because a timeout was exceeded.
     grep -q 'timeout' <<<"$out" || fail "Firefly failed to start for another reason: $out"
     ((took >= 55 && took <= 100)) || fail "Firefly gave up after $took s, expected its TimeoutStartSec (60 s)"
     # Restart=on-failure: once PostgreSQL is healthy again, it starts by itself.
