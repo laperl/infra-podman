@@ -15,6 +15,8 @@ El día a día: qué hay en marcha, cómo van las copias, cómo lanzar algo a ma
 | Contenedor | Máquina | Cómo corre | Quién lo lanza |
 | --- | --- | --- | --- |
 | `prod-pg-main` (Postgres) | Portátil | **Siempre** | systemd, al encender |
+| `prod-firefly-<instancia>` (Firefly III, uno por instancia) | Portátil | **Siempre** | systemd, al encender, cuando Postgres está sano |
+| `prod-firefly-<instancia>-cron` (tareas de esa instancia) | Portátil | No es un contenedor: lanza una orden dentro de su Firefly | `prod-firefly-<instancia>-cron.timer`, cada día a las 05:30 |
 | `prod-backup` (copia diaria) | Portátil | **Duerme** y despierta un rato | `prod-backup.timer`, cada día a las 13:00 |
 | `prod-backup-copy` (envío al GX10) | Portátil | **Duerme** y despierta un rato | `prod-backup-copy.timer`, cada hora a y media |
 | `prod-backup-server` (recibe las copias) | GX10 | **Siempre** | systemd, al encender |
@@ -31,6 +33,17 @@ sudo ls ~svc_runner/.config/containers/systemd/ ~svc_runner/.config/systemd/user
 ```
 
 En el GX10, la primera orden muestra `prod-backup-server`.
+
+Firefly, en el portátil. Cada instancia (por ejemplo `casa` o `canary`, [`services/README.md`](services/README.md)) tiene su contenedor, su temporizador y su puerto; cambia `<instancia>` por la suya:
+
+<!-- test: deployed-firefly -->
+```bash
+svc podman ps --filter label=infra.component=app      # todas las aplicaciones, cada instancia con (healthy)
+svc systemctl --user list-timers 'prod-firefly-*'      # las tareas de cada instancia: cuándo tocan (NEXT) y la última vez (LAST)
+svc podman port prod-firefly-<instancia>               # su puerto: 8080/tcp -> 127.0.0.1:<puerto>
+```
+
+Cada instancia se abre desde su lanzador del menú («Firefly III (<instancia>)») o en el navegador, en `http://127.0.0.1:<puerto>`.
 
 ## 2. Estado de los backups
 
@@ -111,6 +124,25 @@ grep -h '^result=' /var/lib/infra-podman/backup-status/prod-backup*.status
 | `healthcheck` | `sano` |
 | `podman port` | Nada: Postgres no publica ningún puerto |
 | `grep` | Dos líneas `result=ok`. `result=unreachable` en la segunda solo si el GX10 está apagado o fuera de Tailscale |
+
+**Firefly, en el portátil:**
+
+Por cada instancia, con su nombre y su puerto:
+
+<!-- test: healthy-firefly -->
+```bash
+svc systemctl --user is-active prod-firefly-<instancia>.service prod-firefly-<instancia>-cron.timer
+svc podman healthcheck run prod-firefly-<instancia> && echo sano
+svc podman port prod-firefly-<instancia>
+curl -s http://127.0.0.1:<puerto>/health; echo
+```
+
+| Orden | Lo que tiene que salir |
+| --- | --- |
+| `is-active` | Dos líneas `active`: esa instancia en marcha y su temporizador esperando su hora |
+| `healthcheck` | `sano`: responde y lee su base |
+| `podman port` | Una sola línea, `8080/tcp -> 127.0.0.1:<puerto>`: solo se llega desde el portátil |
+| `curl` | `OK` |
 
 Y el aviso de escritorio, en tu usuario: `systemctl --user is-active infra-podman-backup-notify.timer` → `active`.
 

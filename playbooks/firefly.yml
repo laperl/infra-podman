@@ -1,0 +1,78 @@
+---
+# Phase 2: Firefly III on each machine of firefly_hosts (docs/services/firefly.md), one
+# deployment per item of firefly_instances (R48, docs/services/README.md). Each instance
+# needs the base playbook, postgres with its database and user (firefly_<name>, consumer
+# firefly<name>; docs/POSTGRES.md, section 6) and its two secrets.
+#   ./deploy.sh plan firefly --env dev --limit <vm>
+# An instance removed from the inventory is never stopped by removing it: it is only
+# reported. Retiring one, keeping its data: -e firefly_retire=<name>, while it is still
+# declared (not through deploy.sh yet). CI removes every instance with -e firefly_state=absent.
+- name: Firefly III instances
+  hosts: firefly_hosts
+  gather_facts: false
+  tasks:
+    - name: Check the instances of this machine
+      ansible.builtin.assert:
+        that:
+          - firefly_instances is sequence and firefly_instances is not string
+          - firefly_instances | rejectattr('name', 'defined') | list | length == 0
+          - firefly_instances | rejectattr('port', 'defined') | list | length == 0
+          - firefly_instances | map(attribute='name') | unique | list | length == firefly_instances | length
+          - firefly_instances | map(attribute='port') | map('int') | unique | list | length == firefly_instances | length
+          - firefly_retire | default('') | length == 0 or firefly_retire in firefly_instances | map(attribute='name')
+        fail_msg: >-
+          firefly_instances of {{ inventory_hostname }} (group_vars/firefly_hosts.yml of the data
+          repository): each instance with a name and a port, neither repeated on the same machine
+          (docs/services/README.md). --retire only for an instance that is still declared.
+        quiet: true
+
+    - name: Deploy each instance
+      ansible.builtin.include_role:
+        name: firefly
+      loop: "{{ firefly_instances }}"
+      loop_control:
+        loop_var: firefly_item
+        label: firefly-{{ firefly_item.name }}
+      vars:
+        # firefly_retire <name>: only that one is removed (its data kept); -e firefly_state,
+        # as an extra variable, still wins over this for every instance.
+        firefly_state: "{{ 'absent' if firefly_item.name == firefly_retire | default('') else 'present' }}"
+
+    # An instance removed from the inventory is never stopped or removed by removing it:
+    # only reported, on every run (as PostgreSQL's, docs/POSTGRES.md, section 7).
+    - name: Read the service user
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ service_user }}"
+
+    - name: Read the Firefly instances running on this machine
+      ansible.builtin.command:
+        argv:
+          - podman
+          - ps
+          - --all
+          - --filter
+          - label=infra.component=app
+          - --filter
+          - label=infra.managed-by=infra-podman
+          - --format
+          - '{% raw %}{{ index .Labels "infra.app" }}{% endraw %}'
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+      become: true
+      become_user: "{{ service_user }}"
+      register: firefly_found
+      changed_when: false
+      check_mode: false
+
+    - name: Report instances that are not in the inventory (left as they are)
+      ansible.builtin.debug:
+        msg: >-
+          Not in the inventory of {{ inventory_hostname }}, left running as they are:
+          {{ firefly_undeclared | join(', ') }}. To retire one keeping its data, declare it again
+          and run with -e firefly_retire=<name> (docs/services/README.md).
+      when: firefly_undeclared | length > 0
+      vars:
+        firefly_undeclared: >-
+          {{ firefly_found.stdout_lines | select('match', '^firefly-') | reject('in', firefly_instances
+             | map(attribute='name') | map('regex_replace', '^', 'firefly-') | list) | list }}

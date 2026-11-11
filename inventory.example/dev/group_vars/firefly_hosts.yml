@@ -1,0 +1,20 @@
+---
+# EXAMPLE (SPEC 4.13). The real file is inventory/dev/group_vars/firefly_hosts.yml in the
+# data repository. Firefly III on each machine of firefly_hosts, as instances
+# (docs/services/README.md): each one with its own database, network, port, secrets and
+# volume. What an instance does not say comes from roles/firefly/defaults/main.yml.
+firefly_instances:
+  - name: casa                   # ^[a-z0-9]{1,14}$
+    port: 18100                  # on 127.0.0.1 only; from 18100 up, one per instance
+    language: es_ES
+    timezone: Europe/Madrid
+    # memory: 512m               # resource limits (R46)
+    # cpus: "1"
+    # pids_limit: 200
+    # cron_time: "05:30"         # its daily scheduled tasks
+    # launcher_command: [flatpak, run, org.mozilla.firefox, --new-window]   # default [xdg-open]
+  # A canary, to try a new image before casa: its own database firefly_canary, consumer
+  # fireflycanary and secrets firefly-canary-app-key and pg-main-firefly_canary-password.
+  # - name: canary
+  #   port: 18101
+  #   image: firefly_canary_image   # a variable of playbooks/group_vars/all/images.yml

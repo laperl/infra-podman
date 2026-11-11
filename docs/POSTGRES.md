@@ -130,7 +130,7 @@ postgres_instances:
         users:
           - name: app1          # ^[a-z][a-z0-9_]{0,62}$
             group: owner        # owner | writer | reader: entra en app1_owner
-            consumer: app1      # la aplicación que entra con él: su red, y solo desde ella
+            consumer: app1      # la aplicación que entra con él: su red, y solo desde ella; ^[a-z][a-z0-9]{0,20}$, sin guiones
           - name: app1_ia
             group: reader       # entra en app1_reader
             consumer: ia
@@ -138,6 +138,7 @@ postgres_instances:
 
 - **`group:`** es siempre `owner`, `writer` o `reader`. El grupo real es `<base>_<grupo>`, y lo que puede hacer cada uno está en la sección 2.
 - **`users:`** es opcional. Sin usuarios, la base existe pero nadie entra salvo el administrador.
+- **Una base por instancia de aplicación** (R48): dos Firefly son dos bases (`firefly_casa`, `firefly_canary`), cada una con su usuario y su consumidor (`fireflycasa`, `fireflycanary`). Nunca dos instancias en la misma base. Detalle en [`services/README.md`](services/README.md).
 - **Una instancia en otra máquina** va en `host_vars/<máquina>.yml` del repo de datos, con su propio nombre (por ejemplo `gx10`). Cada aplicación tiene que estar en la misma máquina que su Postgres: las redes de Podman no salen de la máquina.
 
 ## 7. Altas, cambios y bajas

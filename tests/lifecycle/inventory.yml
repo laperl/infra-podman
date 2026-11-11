@@ -32,3 +32,21 @@ all:
         postgres_instances:
           - name: main
             superuser: ci_admin  # fictitious
+    # Firefly III (playbook firefly): two instances, as independent as two applications
+    # (R48). Their databases and users come from firefly-vars.yml.
+    firefly_hosts:
+      hosts:
+        localhost: {}
+      vars:
+        # A second image variable, as a canary would have in images.yml: here the same image.
+        firefly_ci_image: "{{ firefly_image }}"
+        firefly_instances:
+          - name: casa
+            port: 18100
+            timezone: Europe/Madrid   # any valid zone; not UTC, to see it applied
+            start_timeout: 60         # the wait test takes this long; the default is 300
+          - name: canary
+            port: 18101
+            image: firefly_ci_image
+            memory: 768m
+            launcher_command: [flatpak, run, org.mozilla.firefox, --new-window]

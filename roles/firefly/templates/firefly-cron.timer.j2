@@ -1,0 +1,12 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Starts {{ firefly_cron_name }}.service once a day. Persistent: if the machine was off at
+# that time, it runs when it starts again.
+[Unit]
+Description=Firefly III {{ firefly_instance }} scheduled tasks, daily ({{ infra_env }})
+
+[Timer]
+OnCalendar=*-*-* {{ firefly_cron_time }}:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

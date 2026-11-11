@@ -7,6 +7,7 @@
 #   status          2    both status files say result=ok; the list of snapshots
 #   run-now         3    a backup and a copy, both result=ok
 #   healthy         4    the laptop and the GX10 look healthy
+#   firefly         1, 4 Firefly III, its instance casa: deployed and healthy (firefly job)
 #   restore-local   5.1  a broken database restored under another name, checked, swapped
 #   restore-gx10    5.2  a database restored from the GX10's volume, with only the restic key
 #   data-repo       5.3  the data repository from the local copy
@@ -45,6 +46,8 @@ substitute() {
     -e 's/\bprod-/dev-/g' \
     -e "s|<base>|$db|g" \
     -e 's|<superusuario>|ci_admin|g' \
+    -e 's|<instancia>|casa|g' \
+    -e 's|<puerto>|18100|g' \
     -e "s|<imagen_de_restic>|$restic_image|g" \
     -e 's|<instalación>/dev-laptop|ci-site/dev-localhost|g' \
     -e "s|~/infra-podman-datos-restaurados|$work/data-restored|g" \
@@ -124,6 +127,15 @@ case $step in
     run healthy-gx10
     expect healthy-gx10 '^active$'
     expect healthy-gx10 '^401$'
+    ;;
+  firefly)
+    run deployed-firefly
+    expect deployed-firefly 'dev-firefly-casa-cron\.timer'
+    run healthy-firefly
+    count_is healthy-firefly 'active' 2
+    expect healthy-firefly '^sano$'
+    count_is healthy-firefly '8080/tcp -> 127.0.0.1:18100' 1
+    expect healthy-firefly '^OK$'
     ;;
   restore-local)
     # Break the database after the last backup; restore it under another name; swap.

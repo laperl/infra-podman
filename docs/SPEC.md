@@ -117,12 +117,12 @@ Esta sección debe copiarse a `docs/COMPATIBILITY.md`.
 
 ### 4.4 Redes y Postgres
 
-- Una red por consumidor de Postgres, `<entorno>-<consumidor>-pg-<instancia>-net` (por ejemplo `prod-firefly-pg-main-net`), **interna** (`Internal=true`: sin salida a internet, a la red de casa ni al host; y `DNS=127.0.0.1`, para que tampoco salgan consultas de DNS) y con `Options=isolate=true`. **Sin subred fija:** la elige Podman, sin solaparse con sus otras redes, y Ansible la lee para `pg_hba.conf` (R45). Los consumidores llegan a Postgres por su nombre de contenedor.
+- Una red por consumidor de Postgres, `<entorno>-<consumidor>-pg-<instancia>-net` (por ejemplo `prod-fireflycasa-pg-main-net`), **interna** (`Internal=true`: sin salida a internet, a la red de casa ni al host; y `DNS=127.0.0.1`, para que tampoco salgan consultas de DNS) y con `Options=isolate=true`. **Sin subred fija:** la elige Podman, sin solaparse con sus otras redes, y Ansible la lee para `pg_hba.conf` (R45). Los consumidores llegan a Postgres por su nombre de contenedor.
 - El contenedor de Postgres se une a todas esas redes. Los consumidores no se ven entre sí.
 - Con varias instancias en la misma máquina, cada red de consumidor se une solo a la instancia que usa ese consumidor. No hay una red común para todos los Postgres.
 - En Postgres, el modelo de [`POSTGRES.md`](POSTGRES.md): una base y tres grupos por aplicación y usuarios a demanda. En `pg_hba.conf`, generado desde el inventario, cada usuario solo se admite en su base y desde la subred de su red. El superusuario y `backup` nunca entran por TCP, salvo el superusuario desde la red de pgAdmin (R37).
 - Postgres **no publica puertos** en el host.
-- **Exposición (R25):** los contenedores publican solo en `127.0.0.1`. Si hay que alcanzar un servicio desde otra máquina, se expone por Tailscale con `tailscale serve --bg --tcp=<puerto> tcp://localhost:<puerto>`, que aplica Ansible. No se publica en la IP de Tailscale: un servicio de usuario no puede esperar limpiamente a que esa interfaz tenga dirección.
+- **Exposición (R25):** los contenedores publican solo en `127.0.0.1`. Las aplicaciones, en los puertos que elige el operador en el inventario, desde el 18100 ([`services/README.md`](services/README.md), apartado 4). Si hay que alcanzar un servicio desde otra máquina, se expone por Tailscale con `tailscale serve --bg --tcp=<puerto> tcp://localhost:<puerto>`, que aplica Ansible. No se publica en la IP de Tailscale: un servicio de usuario no puede esperar limpiamente a que esa interfaz tenga dirección.
 
 ### 4.5 Secretos
 
@@ -196,13 +196,14 @@ Para saber de un vistazo de quién es cada contenedor, red o volumen, para qué 
 
 | Objeto | Patrón | Ejemplos |
 | --- | --- | --- |
-| Contenedor y su servicio systemd | `<entorno>-<app>[-<pieza>]` | `prod-pg-main`, `prod-firefly`, `prod-backup` |
-| Red | `<entorno>-<consumidor>-<proveedor>-net` | `prod-firefly-pg-main-net`: Firefly habla con el Postgres `main` |
-| Volumen | `<entorno>-<app>-<contenido>` | `prod-pg-main-data`, `prod-firefly-uploads`, `prod-backup-repo` |
-| Secreto de Podman | `<entorno>-<nombre en KeePassXC>` | `prod-pg-main-firefly-password` ↔ `<instalación>/pg-main-firefly-password` (la misma ruta en dev y prod) |
+| Contenedor y su servicio systemd | `<entorno>-<app>[-<pieza>]` | `prod-pg-main`, `prod-firefly-casa`, `prod-backup` |
+| Red | `<entorno>-<consumidor>-<proveedor>-net` | `prod-fireflycasa-pg-main-net`: la instancia `casa` de Firefly habla con el Postgres `main` |
+| Volumen | `<entorno>-<app>-<contenido>` | `prod-pg-main-data`, `prod-firefly-casa-uploads`, `prod-backup-repo` |
+| Secreto de Podman | `<entorno>-<nombre en KeePassXC>` | `prod-pg-main-firefly_casa-password` ↔ `<instalación>/pg-main-firefly_casa-password` (la misma ruta en dev y prod) |
 
 - **Postgres:** cada instancia se llama `pg-<instancia>`, por ejemplo `pg-main` o `pg-test`.
-- **Ficheros Quadlet:** se llaman como el objeto (`prod-firefly.container` crea el servicio `prod-firefly.service`).
+- **Toda aplicación va por instancias (R48):** cada una lleva su nombre detrás de la app, `<entorno>-<app>-<instancia>[-<pieza>]`, por ejemplo `prod-firefly-casa` y `prod-firefly-casa-uploads`. Cada instancia tiene su propia base de datos, red, puerto, secretos y volumen. Las reglas comunes, en [`services/README.md`](services/README.md).
+- **Ficheros Quadlet:** se llaman como el objeto (`prod-firefly-casa.container` crea el servicio `prod-firefly-casa.service`).
 - **Nombres explícitos:** siempre se fijan `ContainerName=`, `NetworkName=` y `VolumeName=`. Sin ellas, Podman antepone `systemd-` al nombre (comprobado con el generador de 4.9).
 
 **Etiquetas:** todo contenedor, red y volumen lleva:

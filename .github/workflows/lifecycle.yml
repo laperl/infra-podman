@@ -331,6 +331,187 @@ jobs:
         if: failure()
         run: tests/lifecycle/diagnose.sh
 
+  firefly:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      INV: tests/lifecycle/inventory.yml
+      PG: -e @tests/lifecycle/firefly-vars.yml
+      CHECK: tests/lifecycle/check-firefly.sh
+      AS: tests/lifecycle/as-svc.sh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same reason as in the base job.
+      - name: Make the runner look like a normal server
+        run: sudo sed -i '/^XDG_/d' /etc/environment
+
+      # desktop-file-utils: desktop-file-validate, the freedesktop.org checker of the
+      # launcher (R47). Only on the runner.
+      - name: Install Podman 4.9 from Ubuntu 24.04, and desktop-file-utils
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq podman desktop-file-utils
+          podman --version | grep -Eq ' 4\.9\.' || { echo "Expected Podman 4.9"; exit 1; }
+
+      - name: Install pinned ansible-core
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --requirement scripts/requirements-lint.txt
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      # Random, thrown away with the runner. Never KeePassXC (SPEC 5.4).
+      - name: Service user, and PostgreSQL with one database per Firefly instance
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/base.yml > base.log
+          for s in superuser firefly_casa firefly_canary firefly_ro demo_app; do
+            v=$(openssl rand -hex 24)
+            echo "::add-mask::$v"
+            echo "$v" >> "$RUNNER_TEMP/pw"
+            name=dev-pg-main-$s-password
+            [[ $s == superuser ]] && name=dev-pg-main-superuser-password
+            printf '%s' "$v" | $AS podman secret create "$name" -
+          done
+          tests/lifecycle/playbook.sh -i "$INV" $PG playbooks/postgres.yml 2>&1 | tee -a all.log
+
+      - name: Repeated names or ports are refused
+        run: |
+          printf 'firefly_instances: [{name: a, port: 18100}, {name: b, port: 18100}]\n' > dup.yml
+          if ansible-playbook -i "$INV" -e @dup.yml playbooks/firefly.yml --check > refusal.log 2>&1; then
+            echo "::error::two instances with the same port were accepted"; exit 1
+          fi
+          grep -q 'neither repeated on the same machine' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+
+      - name: A launcher command that would need quoting is refused
+        run: |
+          printf 'firefly_instances: [{name: a, port: 18100, launcher_command: ["firefox; rm"]}]\n' > bad.yml
+          if ansible-playbook -i "$INV" -e @bad.yml playbooks/firefly.yml --check > refusal.log 2>&1; then
+            echo "::error::a launcher command with a space and ; was accepted"; exit 1
+          fi
+          grep -q 'launcher_command a list of words' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+
+      - name: Plan before the application keys exist, expecting a clear refusal
+        run: |
+          if ansible-playbook -i "$INV" playbooks/firefly.yml --check > refusal.log 2>&1; then
+            echo "::error::firefly ran without its application key"; exit 1
+          fi
+          grep -q 'Missing Podman secrets on localhost: dev-firefly-casa-app-key' refusal.log \
+            || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+
+      - name: An application key that is not 32 characters is refused
+        run: |
+          printf '%s' "$(openssl rand -hex 8)" | $AS podman secret create dev-firefly-casa-app-key -
+          if ansible-playbook -i "$INV" playbooks/firefly.yml --check > refusal.log 2>&1; then
+            echo "::error::firefly accepted a key of 16 characters"; exit 1
+          fi
+          grep -q 'has 16 characters' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+          $AS podman secret rm dev-firefly-casa-app-key >/dev/null
+
+      - name: Create the application keys with random values
+        run: |
+          for i in casa canary; do
+            v=$(openssl rand -hex 16)
+            echo "::add-mask::$v"
+            echo "$v" >> "$RUNNER_TEMP/pw"
+            printf '%s' "$v" | $AS podman secret create "dev-firefly-$i-app-key" -
+          done
+
+      - name: Plan, apply, apply again (zero changes), plan again (zero changes)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/firefly.yml --check --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/firefly.yml --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/firefly.yml 2>&1 | tee second.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply changed something"; exit 1; }
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/firefly.yml --check 2>&1 | tee plan.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' plan.log || { echo "::error::the plan after apply shows changes"; exit 1; }
+
+      - name: Both running, healthy, each only on its port of 127.0.0.1
+        run: |
+          $CHECK running casa
+          $CHECK running canary
+
+      - name: Hardened, each with its limits, its one network, its database and its secrets as files
+        run: |
+          $CHECK standard casa
+          $CHECK standard canary
+
+      - name: Each one's tables in the schema of its own database, owned by its _owner
+        run: |
+          $CHECK schema casa
+          $CHECK schema canary
+
+      - name: firefly_casa_reader reads and cannot change anything, nor reach canary (phases 4 and 5)
+        run: $CHECK reader
+
+      - name: No way out (internet, host, another application, the other instance)
+        run: |
+          $CHECK isolation casa
+          $CHECK isolation canary
+
+      # Firefly's cron refuses to run without an owner: the first user, as the operator creates it.
+      - name: The first user, through the registration page, without internet
+        run: $CHECK user casa
+
+      - name: The scheduled tasks run
+        run: $CHECK cron casa
+
+      - name: One launcher per instance in the operator's menu (R47), each with its browser
+        run: |
+          $CHECK launcher casa
+          $CHECK launcher canary
+
+      - name: "Manual: deployed and healthy (docs/OPERATIONS.md, 1 and 4)"
+        run: tests/lifecycle/check-operations.sh firefly
+
+      - name: Only starts with PostgreSQL healthy, within its timeout (SPEC 4.3)
+        run: |
+          $CHECK marker casa write
+          $CHECK wait casa
+          $CHECK running casa
+          $CHECK running canary
+
+      - name: An instance removed from the inventory is only reported, never stopped
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" -e @tests/lifecycle/firefly-only-casa.yml playbooks/firefly.yml 2>&1 \
+            | tee undeclared.log | tee -a all.log
+          grep 'left running as they are' undeclared.log | grep -q 'firefly-canary' || { echo "::error::canary not reported"; exit 1; }
+          $CHECK running canary
+
+      - name: Retire one instance; the other keeps running (R48)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" -e firefly_retire=canary playbooks/firefly.yml 2>&1 | tee -a all.log
+          $CHECK destroyed canary
+          $CHECK running casa
+          $CHECK marker casa read
+
+      - name: Remove all, keeping the databases and the attachments (SPEC 4.2)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" -e firefly_state=absent playbooks/firefly.yml 2>&1 | tee -a all.log
+          $CHECK destroyed casa
+          $CHECK destroyed canary
+
+      - name: Deploy again on the kept data
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/firefly.yml 2>&1 | tee -a all.log
+          $CHECK running casa
+          $CHECK running canary
+          $CHECK marker casa read
+
+      - name: The secrets never appear in the output or the journal (SPEC 4.5)
+        run: |
+          if grep -qF -f "$RUNNER_TEMP/pw" all.log; then echo "::error::a secret appears in the Ansible output"; exit 1; fi
+          if sudo journalctl --no-pager | grep -qF -f "$RUNNER_TEMP/pw"; then echo "::error::a secret appears in the journal"; exit 1; fi
+          echo "ok"
+
+      - name: Diagnose
+        if: failure()
+        run: |
+          tests/lifecycle/diagnose.sh
+          for i in casa canary; do tests/lifecycle/as-svc.sh podman logs --tail 30 "dev-firefly-$i" 2>&1 | sed "s/^/firefly-$i: /" || true; done
+
   backup:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
