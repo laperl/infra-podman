@@ -138,7 +138,7 @@ postgres_instances:
 
 - **`group:`** es siempre `owner`, `writer` o `reader`. El grupo real es `<base>_<grupo>`, y lo que puede hacer cada uno está en la sección 2.
 - **`users:`** es opcional. Sin usuarios, la base existe pero nadie entra salvo el administrador.
-- **Una base por instancia de aplicación** (R48): dos Firefly son dos bases (`firefly_casa`, `firefly_canary`), cada una con su usuario y su consumidor (`fireflycasa`, `fireflycanary`). Nunca dos instancias en la misma base. Detalle en [`services/README.md`](services/README.md).
+- **Una base por instancia de aplicación** (R48): dos Firefly son dos bases (`ff_casa`, `ff_canary`), cada una con su usuario y su consumidor (`ffcasa`, `ffcanary`). Nunca dos instancias en la misma base. Detalle en [`services/README.md`](services/README.md).
 - **Una instancia en otra máquina** va en `host_vars/<máquina>.yml` del repo de datos, con su propio nombre (por ejemplo `gx10`). Cada aplicación tiene que estar en la misma máquina que su Postgres: las redes de Podman no salen de la máquina.
 
 ## 7. Altas, cambios y bajas
@@ -220,4 +220,49 @@ Quitar una instancia del fichero **no la borra ni la para**: cada `apply` avisa 
 ```
 ./deploy.sh apply postgres --limit <máquina> --retire <instancia>
 ```
-Para ese contenedor y quita su servicio, pero **conserva el volumen con los datos** (SPEC, sección 8). Las demás instancias de la máquina siguen igual. Después la quitas del fichero; si no, el siguiente `apply` la vuelve a arrancar con los mismos datos. Borrar también los datos es un paso aparte, a mano.
+Para ese contenedor y quita su servicio, pero **conserva el volumen con los datos** (SPEC, sección 8). Las demás instancias de la máquina siguen igual. Después la quitas del fichero; si no, el siguiente `apply` la vuelve a arrancar con los mismos datos. Borrar también los datos es un paso aparte, a mano (abajo).
+
+**Después de retirarla, en el mismo momento:** quítala del fichero y aplica el backup:
+```
+./deploy.sh apply backup --limit <máquina>
+```
+La copia diaria vuelca todas las instancias declaradas. Hasta este `apply`, sigue intentando volcar la retirada y falla con `prod-pg-<instancia> no está en marcha`.
+
+#### Borrar del todo una instancia retirada
+
+Solo cuando estés seguro: **no tiene vuelta atrás**, salvo restaurar una copia (OPERATIONS, apartado 5). Ejemplo con la instancia `main` en el portátil; cambia `main` por la tuya.
+
+1. **En el repo de datos:** quita su línea `pg-main-superuser-password` de `infra_secrets` (`group_vars/all.yml`). Si no, `deploy.sh secrets` vuelve a crear su secreto. Haz un commit firmado.
+2. **En KeePassXC:** borra la entrada `<instalación>/pg-main-superuser-password`.
+3. **En la máquina**, como `svc_runner` (la función `svc` de [`SETUP.md`](SETUP.md), paso 12). Cada orden borra una cosa:
+   ```bash
+   sudo rm ~svc_runner/.config/containers/systemd/prod-pg-main-data.volume   # la unidad del volumen
+   sudo rm -f ~svc_runner/.config/containers/systemd/*-pg-main-net.network    # las redes de sus aplicaciones, si quedó alguna
+   svc systemctl --user daemon-reload
+   svc podman volume rm prod-pg-main-data                                     # LOS DATOS
+   sudo rm -r ~svc_runner/.config/infra-podman/prod-pg-main                   # su pg_hba.conf
+   svc podman secret rm prod-pg-main-superuser-password                       # el secreto de su administrador
+   ```
+   Si ya no existe alguna de estas cosas, la orden lo dice y no pasa nada.
+4. **Sus copias, si también las quieres borrar** (opcional). Son las que llevan la etiqueta `app=pg-main`. Se quedan para siempre: la limpieza diaria siempre guarda las últimas de cada cosa. Primero, en el portátil, mira qué se borraría (`--dry-run` no borra nada):
+   ```bash
+   img=$(sudo sed -n 's/^Image=//p' ~svc_runner/.config/containers/systemd/prod-backup.container)
+   svc podman run --rm --network=none --security-opt label=disable -v prod-backup-repo:/repo \
+     --secret prod-backup-restic-password,type=env,target=RESTIC_PASSWORD -e RESTIC_REPOSITORY=/repo \
+     "$img" forget --tag app=pg-main --unsafe-allow-remove-all --prune --dry-run
+   ```
+   - Si la lista es la que esperas, repite la orden sin `--dry-run`.
+   - `--tag app=pg-main` limita el borrado a las copias de esa instancia; sin ese filtro, restic no permite `--unsafe-allow-remove-all` (restic 0.17 o más nuevo).
+   - `--prune` libera el espacio.
+   - Esta orden escribe en el repositorio: hazlo cuando no esté corriendo el backup (`svc systemctl --user is-active prod-backup.service` dice `inactive`).
+
+   **En el GX10**, la copia externa no se puede borrar desde el portátil: su servidor solo deja añadir (R44). Se borra en el GX10, directamente sobre su volumen, con la clave de restic, que se pega cuando la pide. Es el mismo acceso que para restaurar desde el GX10 (OPERATIONS, apartado 5.2); `<imagen_de_restic>` e `<instalación>` son los de ese apartado:
+   ```bash
+   img=<imagen_de_restic>
+   read -rs -p 'Clave de restic: ' key; echo
+   printf '%s' "$key" | svc podman run --rm -i --network=none -v prod-backup-server-data:/data \
+     -e RESTIC_REPOSITORY=/data/<instalación>/prod-laptop -e RESTIC_PASSWORD_FILE=/dev/stdin \
+     "$img" forget --tag app=pg-main --unsafe-allow-remove-all --prune --dry-run
+   unset key
+   ```
+   Igual: primero con `--dry-run` y, si es lo esperado, sin él. Mejor cuando no esté llegando ninguna copia (por ejemplo, justo después de que el portátil haya enviado la suya).

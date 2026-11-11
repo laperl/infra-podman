@@ -1,8 +1,9 @@
 ---
 # Phase 2: Firefly III on each machine of firefly_hosts (docs/services/firefly.md), one
 # deployment per item of firefly_instances (R48, docs/services/README.md). Each instance
-# needs the base playbook, postgres with its database and user (firefly_<name>, consumer
-# firefly<name>; docs/POSTGRES.md, section 6) and its two secrets.
+# needs the base playbook, postgres with its database and user (ff_<name>, consumer
+# ff<name>; docs/POSTGRES.md, section 6) and its two secrets. ff = Firefly III: the instance
+# laptop is prod-ff-laptop.
 #   ./deploy.sh plan firefly --env dev --limit <vm>
 # An instance removed from the inventory is never stopped by removing it: it is only
 # reported. Retiring one, keeping its data: -e firefly_retire=<name>, while it is still
@@ -32,7 +33,7 @@
       loop: "{{ firefly_instances }}"
       loop_control:
         loop_var: firefly_item
-        label: firefly-{{ firefly_item.name }}
+        label: ff-{{ firefly_item.name }}
       vars:
         # firefly_retire <name>: only that one is removed (its data kept); -e firefly_state,
         # as an extra variable, still wins over this for every instance.
@@ -74,5 +75,5 @@
       when: firefly_undeclared | length > 0
       vars:
         firefly_undeclared: >-
-          {{ firefly_found.stdout_lines | select('match', '^firefly-') | reject('in', firefly_instances
-             | map(attribute='name') | map('regex_replace', '^', 'firefly-') | list) | list }}
+          {{ firefly_found.stdout_lines | select('match', '^ff-') | reject('in', firefly_instances
+             | map(attribute='name') | map('regex_replace', '^', 'ff-') | list) | list }}

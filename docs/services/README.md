@@ -1,6 +1,6 @@
 # Aplicaciones: lo común a todas
 
-Cómo es **cualquier** aplicación de la plataforma (Firefly III, pgAdmin y las que lleguen). Lo propio de cada una está en su página de esta carpeta, por ejemplo [`firefly.md`](firefly.md); aquí solo lo que todas comparten. La regla sale de R48 ([`DECISIONS.md`](../DECISIONS.md)) y los nombres, de SPEC 4.12.
+Cómo es **cualquier** aplicación de la plataforma (Firefly III, pgAdmin y las que lleguen). Para instalar una, el paso a paso está en [`INSTALL.md`](INSTALL.md). Lo propio de cada una está en su página de esta carpeta, por ejemplo [`firefly.md`](firefly.md); aquí solo lo que todas comparten. La regla sale de R48 ([`DECISIONS.md`](../DECISIONS.md)) y los nombres, de SPEC 4.12.
 
 ## 1. Instancias
 
@@ -10,16 +10,16 @@ Cómo es **cualquier** aplicación de la plataforma (Firefly III, pgAdmin y las 
 
 | Pieza | De cada instancia | Ejemplo, Firefly `casa` |
 | --- | --- | --- |
-| Contenedor y servicio | El suyo | `prod-firefly-casa` |
+| Contenedor y servicio | El suyo | `prod-ff-casa` |
 | Puerto, solo en `127.0.0.1` | El suyo, si la aplicación lo necesita | `127.0.0.1:18100` |
-| Red e IPs | Su red interna, con su propia subred | `prod-fireflycasa-pg-main-net` |
-| Postgres | **Su propia base de datos**, con un único esquema del mismo nombre, y su usuario | base, esquema y usuario `firefly_casa` |
+| Red e IPs | Su red interna, con su propia subred | `prod-ffcasa-pg-main-net` |
+| Postgres | **Su propia base de datos**, con un único esquema del mismo nombre, y su usuario | base, esquema y usuario `ff_casa` |
 | Imagen | La que elijas de `images.yml` | `firefly_image` |
-| Volumen | El suyo | `prod-firefly-casa-uploads` |
-| Secretos | Los suyos | `firefly-casa-app-key`, `pg-main-firefly_casa-password` |
-| Tareas programadas | Las suyas | `prod-firefly-casa-cron.timer` |
+| Volumen | El suyo | `prod-ff-casa-uploads` |
+| Secretos | Los suyos | `ff-casa-app-key`, `pg-main-ff_casa-password` |
+| Tareas programadas | Las suyas | `prod-ff-casa-cron.timer` |
 | Lanzador del menú | El suyo, con su navegador | «Firefly III (casa)» |
-| Copias | Su base, en sus propias copias (`pgdump/firefly_casa`) | — |
+| Copias | Su base, en sus propias copias (`pgdump/ff_casa`) | — |
 
 ## 2. Postgres: una base por instancia, nunca un esquema compartido
 
@@ -33,18 +33,31 @@ Cómo es **cualquier** aplicación de la plataforma (Firefly III, pgAdmin y las 
 
 ## 3. Nombres
 
-Con `<instancia>` en minúsculas y cifras (`^[a-z0-9]{1,14}$`):
+Cada aplicación tiene **dos nombres**:
 
-| Qué | Patrón | Firefly `casa` |
+| Aplicación | En el código y el inventario (`<app>`) | Corto, en lo que se crea (`<corto>`) |
 | --- | --- | --- |
-| Contenedor | `<entorno>-<app>-<instancia>` | `prod-firefly-casa` |
-| Volumen | `<entorno>-<app>-<instancia>-<contenido>` | `prod-firefly-casa-uploads` |
-| Base, esquema y usuario | `<app>_<instancia>` | `firefly_casa` |
-| Consumidor de Postgres y su red | `<app><instancia>`, sin guion | `fireflycasa`, red `prod-fireflycasa-pg-main-net` |
-| Secretos (KeePassXC) | `<app>-<instancia>-<clave>` y `pg-<postgres>-<usuario>-password` | `firefly-casa-app-key` |
-| Etiqueta `infra.app` | `<app>-<instancia>` | `firefly-casa` |
+| Firefly III | `firefly`: el rol `roles/firefly`, el playbook `firefly`, el grupo `firefly_hosts`, la lista `firefly_instances` y las imágenes `firefly_image`… | **`ff`** |
 
-El consumidor va sin guion porque así lo exige la red de Postgres (`POSTGRES.md`, apartado 6).
+- El de código dice qué aplicación es cuando lees el repo.
+- El corto va en todo lo que existe en la máquina: contenedores, bases, redes, secretos.
+
+**`ff` es siempre Firefly III.**
+
+**Tú solo escribes la instancia** (`name: laptop`), en minúsculas y cifras (`^[a-z0-9]{1,14}$`), y el rol pone el resto. Nunca escribas un nombre entero: `name: prod-ff-laptop` se rechaza (lleva guiones), así que no puede salir `prod-ff-prod-ff-laptop`.
+
+| Qué | Patrón | Firefly `laptop`, en prod |
+| --- | --- | --- |
+| Contenedor y servicio | `<entorno>-<corto>-<instancia>` | `prod-ff-laptop` |
+| Volumen | `<entorno>-<corto>-<instancia>-<contenido>` | `prod-ff-laptop-uploads` |
+| Tareas programadas | `<entorno>-<corto>-<instancia>-cron` | `prod-ff-laptop-cron.timer` |
+| Base, esquema y usuario de Postgres | `<corto>_<instancia>` | `ff_laptop` |
+| Consumidor de Postgres y su red | `<corto><instancia>`, sin guion | `fflaptop`, red `prod-fflaptop-pg-<postgres>-net` |
+| Secretos (KeePassXC) | `<corto>-<instancia>-<clave>` y `pg-<postgres>-<usuario>-password` | `ff-laptop-app-key`, `pg-laptop-ff_laptop-password` |
+| Etiqueta `infra.app` | `<corto>-<instancia>` | `ff-laptop` |
+| Lanzador | `infra-podman-<entorno>-<corto>-<instancia>.desktop` | «Firefly III (laptop)» en el menú |
+
+El consumidor va sin guion porque así lo exige la red de Postgres (`POSTGRES.md`, apartado 6). En el código, el nombre corto es `firefly_short` en `roles/firefly/defaults/main.yml`. No es un ajuste del inventario.
 
 ## 4. Puertos
 
@@ -54,7 +67,7 @@ El consumidor va sin guion porque así lo exige la red de Postgres (`POSTGRES.md
 
 ## 5. Cómo se declara
 
-En tu repo de datos, en el grupo de la aplicación (por ejemplo `group_vars/firefly_hosts.yml`), una lista `<app>_instances`:
+En tu repo de datos, en el grupo de la aplicación (por ejemplo `group_vars/firefly_hosts.yml`), una lista `<app>_instances` (con el nombre de código):
 
 ```yaml
 firefly_instances:

@@ -9,7 +9,8 @@ infra-podman/                      # tu repo de datos (solo en el portátil, com
       hosts.yml                    # máquinas y grupos
       group_vars/
         all.yml                    # variables de todas las máquinas del entorno
-        postgres_hosts.yml         # instancias de Postgres (y, en la fase 2, bases y usuarios)
+        postgres_hosts.yml         # instancias de Postgres, con las bases y los usuarios de las aplicaciones
+        firefly_hosts.yml          # instancias de Firefly III (fase 2)
       host_vars/                   # variables de una sola máquina: <alias>.yml
     prod/                          # --env prod, igual
       ...
@@ -24,9 +25,10 @@ infra-podman/                      # tu repo de datos (solo en el portátil, com
 | `hosts.yml` | Las máquinas, por su alias de `~/.ssh/config`, y a qué grupo pertenecen. La dirección y el usuario de SSH **no** van aquí | [`prod/hosts.yml`](prod/hosts.yml) |
 | `group_vars/all.yml` | Entorno (`infra_env`), usuario de servicio, **nombres** de los secretos que hay en KeePassXC (`infra_secrets`), tope del servidor de copias y opciones de SSH | [`prod/group_vars/all.yml`](prod/group_vars/all.yml) |
 | `group_vars/postgres_hosts.yml` | Las instancias de Postgres de cada máquina del grupo. Desde la fase 2, también las bases y los usuarios de cada aplicación ([`POSTGRES.md`](../docs/POSTGRES.md), sección 6) | [`prod/group_vars/postgres_hosts.yml`](prod/group_vars/postgres_hosts.yml) |
+| `group_vars/firefly_hosts.yml` | Las instancias de Firefly III de cada máquina del grupo: nombre, puerto, idioma, navegador del lanzador… Paso a paso en [`docs/services/INSTALL.md`](../docs/services/INSTALL.md) | [`prod/group_vars/firefly_hosts.yml`](prod/group_vars/firefly_hosts.yml) |
 | `host_vars/<alias>.yml` | Lo que cambie solo en una máquina. Hoy, en el portátil: que su backup copie también el repo de datos, el aviso de escritorio y adónde va la copia externa (`backup_remote_url`). En la VM DEV, que no tiene Tailscale: servidor de copias sin exponer y copia en la misma VM | [`prod/host_vars/example-laptop.yml`](prod/host_vars/example-laptop.yml), [`dev/host_vars/example-vm.yml`](dev/host_vars/example-vm.yml) |
 
-Lo que llegue en fases siguientes (aplicaciones como Firefly o pgAdmin, qué guarda cada una en los backups) también son datos: cada PR dice qué añadir y dónde, y actualiza este ejemplo.
+Lo que llegue en fases siguientes (pgAdmin, qué guarda cada aplicación en los backups) también son datos: cada PR dice qué añadir y dónde, y actualiza este ejemplo.
 
 ## Qué nunca va en el repo de datos
 

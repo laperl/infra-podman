@@ -13,6 +13,6 @@ postgres_databases:
     users:
       - {name: demo_app, group: owner, consumer: demo}
       - {name: demo_ai, group: reader, consumer: ai}
-  - name: firefly_ci
+  - name: ff_ci
     users:
-      - {name: firefly_ci, group: owner, consumer: fireflyci}
+      - {name: ff_ci, group: owner, consumer: ffci}

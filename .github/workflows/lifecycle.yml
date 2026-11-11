@@ -367,7 +367,7 @@ jobs:
       - name: Service user, and PostgreSQL with one database per Firefly instance
         run: |
           tests/lifecycle/playbook.sh -i "$INV" playbooks/base.yml > base.log
-          for s in superuser firefly_casa firefly_canary firefly_ro demo_app; do
+          for s in superuser ff_casa ff_canary ff_ro demo_app; do
             v=$(openssl rand -hex 24)
             echo "::add-mask::$v"
             echo "$v" >> "$RUNNER_TEMP/pw"
@@ -393,22 +393,31 @@ jobs:
           fi
           grep -q 'launcher_command a list of words' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
 
+      # Only the instance is written: a whole name would end up as dev-ff-dev-ff-casa (R49).
+      - name: A whole name instead of the instance is refused
+        run: |
+          printf 'firefly_instances: [{name: dev-ff-casa, port: 18100}]\n' > whole.yml
+          if ansible-playbook -i "$INV" -e @whole.yml playbooks/firefly.yml --check > refusal.log 2>&1; then
+            echo "::error::a name with hyphens was accepted"; exit 1
+          fi
+          grep -q 'name ^\[a-z0-9\]{1,14}\$' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+
       - name: Plan before the application keys exist, expecting a clear refusal
         run: |
           if ansible-playbook -i "$INV" playbooks/firefly.yml --check > refusal.log 2>&1; then
             echo "::error::firefly ran without its application key"; exit 1
           fi
-          grep -q 'Missing Podman secrets on localhost: dev-firefly-casa-app-key' refusal.log \
+          grep -q 'Missing Podman secrets on localhost: dev-ff-casa-app-key' refusal.log \
             || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
 
       - name: An application key that is not 32 characters is refused
         run: |
-          printf '%s' "$(openssl rand -hex 8)" | $AS podman secret create dev-firefly-casa-app-key -
+          printf '%s' "$(openssl rand -hex 8)" | $AS podman secret create dev-ff-casa-app-key -
           if ansible-playbook -i "$INV" playbooks/firefly.yml --check > refusal.log 2>&1; then
             echo "::error::firefly accepted a key of 16 characters"; exit 1
           fi
           grep -q 'has 16 characters' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
-          $AS podman secret rm dev-firefly-casa-app-key >/dev/null
+          $AS podman secret rm dev-ff-casa-app-key >/dev/null
 
       - name: Create the application keys with random values
         run: |
@@ -416,7 +425,7 @@ jobs:
             v=$(openssl rand -hex 16)
             echo "::add-mask::$v"
             echo "$v" >> "$RUNNER_TEMP/pw"
-            printf '%s' "$v" | $AS podman secret create "dev-firefly-$i-app-key" -
+            printf '%s' "$v" | $AS podman secret create "dev-ff-$i-app-key" -
           done
 
       - name: Plan, apply, apply again (zero changes), plan again (zero changes)
@@ -443,7 +452,7 @@ jobs:
           $CHECK schema casa
           $CHECK schema canary
 
-      - name: firefly_casa_reader reads and cannot change anything, nor reach canary (phases 4 and 5)
+      - name: ff_casa_reader reads and cannot change anything, nor reach canary (phases 4 and 5)
         run: $CHECK reader
 
       - name: No way out (internet, host, another application, the other instance)
@@ -477,7 +486,7 @@ jobs:
         run: |
           tests/lifecycle/playbook.sh -i "$INV" -e @tests/lifecycle/firefly-only-casa.yml playbooks/firefly.yml 2>&1 \
             | tee undeclared.log | tee -a all.log
-          grep 'left running as they are' undeclared.log | grep -q 'firefly-canary' || { echo "::error::canary not reported"; exit 1; }
+          grep 'left running as they are' undeclared.log | grep -q 'ff-canary' || { echo "::error::canary not reported"; exit 1; }
           $CHECK running canary
 
       - name: Retire one instance; the other keeps running (R48)
@@ -510,7 +519,7 @@ jobs:
         if: failure()
         run: |
           tests/lifecycle/diagnose.sh
-          for i in casa canary; do tests/lifecycle/as-svc.sh podman logs --tail 30 "dev-firefly-$i" 2>&1 | sed "s/^/firefly-$i: /" || true; done
+          for i in casa canary; do tests/lifecycle/as-svc.sh podman logs --tail 30 "dev-ff-$i" 2>&1 | sed "s/^/firefly-$i: /" || true; done
 
   backup:
     runs-on: ubuntu-24.04

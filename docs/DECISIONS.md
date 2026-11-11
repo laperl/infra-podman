@@ -440,3 +440,10 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Motivo:** lo pide el operador como regla general, para tener instancias de uso, canary y test. Es el patrón de `postgres_instances` y el de los roles de sistema de Podman (`linux-system-roles.podman`, lista `podman_quadlet_specs`). La base por instancia, y no el esquema compartido, la eligió el operador: aísla más y cada instancia se copia y restaura sola.
 - **Aprobada por:** el operador, el 2026-11-08. Firefly es la primera aplicación que la cumple (PR 3 de la fase 2).
 - **SPEC:** 4.12.
+
+### R49. Cada aplicación tiene un nombre corto en lo que se crea
+
+- **Decisión:** lo que una aplicación crea en la máquina (contenedores, volúmenes, bases, usuarios, redes, secretos, etiquetas) lleva su **nombre corto**, no el entero. Firefly III es **`ff`**: la instancia `laptop` es `prod-ff-laptop`, su base `ff_laptop`, su red `prod-fflaptop-pg-<postgres>-net` y su clave `ff-laptop-app-key`. En el código y el inventario la aplicación conserva su nombre entero (`roles/firefly`, `firefly_hosts`, `firefly_instances`, `firefly_image`), para que se sepa qué es. El nombre corto vive en una sola variable del rol (`firefly_short`), no en el inventario. El operador solo escribe la instancia, y el código rechaza guiones en ella: un nombre entero no puede acabar duplicado (`prod-ff-prod-ff-laptop`).
+- **Motivo:** lo pide el operador (nombres como `prod-ff-laptop`). La tabla de nombres cortos está en [`services/README.md`](services/README.md), apartado 3.
+- **Aprobada por:** el operador, el 2026-11-11.
+- **SPEC:** 4.12.

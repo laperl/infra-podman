@@ -10,8 +10,9 @@ Firefly III en contenedores Quadlet sin root, sobre la Postgres de la plataforma
 
 ## Qué no se toca
 
+- **El nombre corto `ff`** (`firefly_short`, R49): todo lo que se crea en la máquina es `<entorno>-ff-<instancia>`, `ff_<instancia>`… En el código y el inventario, `firefly`. No es un ajuste del inventario.
 - **Nada compartido entre instancias**: cada nombre lleva la instancia (`defaults/main.yml`, «Names»). Una base de datos por instancia, nunca un esquema dentro de la base de otra.
-- **La red.** Solo la suya, `<entorno>-firefly<instancia>-pg-<postgres>-net`, interna. Ni una segunda red ni `Network=host`: es lo que impide que tus finanzas salgan del portátil.
+- **La red.** Solo la suya, `<entorno>-ff<instancia>-pg-<postgres>-net`, interna. Ni una segunda red ni `Network=host`: es lo que impide que tus finanzas salgan del portátil.
 - **El puerto, solo en `127.0.0.1`** (R25); el número lo elige el operador, desde el 18100. El comando del navegador del lanzador, como lista de palabras comprobadas: nada que entrecomillar.
 - **El esquema y el usuario de Postgres**: los declara el operador en el repo de datos y los crea el rol `postgres`. Este rol solo comprueba que existen.
 - **Los secretos, como ficheros** (`*_FILE`), nunca en `Environment=`.

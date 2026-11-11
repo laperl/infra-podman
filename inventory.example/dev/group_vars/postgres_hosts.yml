@@ -33,9 +33,9 @@ postgres_instances:
 #             group: reader
 #             consumer: ai
 #       # Firefly III: one database per instance, never shared (docs/services/README.md).
-#       # The instance casa: its user in firefly_casa_owner, from its own network.
-#       - name: firefly_casa
+#       # The instance casa: its user in ff_casa_owner, from its own network.
+#       - name: ff_casa
 #         users:
-#           - name: firefly_casa
+#           - name: ff_casa
 #             group: owner
-#             consumer: fireflycasa
+#             consumer: ffcasa

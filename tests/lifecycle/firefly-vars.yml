@@ -6,13 +6,13 @@ postgres_instances:
   - name: main
     superuser: ci_admin
     databases:
-      - name: firefly_casa
+      - name: ff_casa
         users:
-          - {name: firefly_casa, group: owner, consumer: fireflycasa}
-          - {name: firefly_ro, group: reader, consumer: ai}
-      - name: firefly_canary
+          - {name: ff_casa, group: owner, consumer: ffcasa}
+          - {name: ff_ro, group: reader, consumer: ai}
+      - name: ff_canary
         users:
-          - {name: firefly_canary, group: owner, consumer: fireflycanary}
+          - {name: ff_canary, group: owner, consumer: ffcanary}
       - name: demo
         users:
           - {name: demo_app, group: owner, consumer: demo}

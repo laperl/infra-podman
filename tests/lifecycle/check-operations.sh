@@ -130,7 +130,7 @@ case $step in
     ;;
   firefly)
     run deployed-firefly
-    expect deployed-firefly 'dev-firefly-casa-cron\.timer'
+    expect deployed-firefly 'dev-ff-casa-cron\.timer'
     run healthy-firefly
     count_is healthy-firefly 'active' 2
     expect healthy-firefly '^sano$'
