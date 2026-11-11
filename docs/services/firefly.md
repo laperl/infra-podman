@@ -54,7 +54,7 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
   - `pg-main-firefly_<instancia>-password`: la contraseña de su usuario de Postgres (`firefly_<instancia>`).
 - **Contenedor endurecido**, como el resto:
   - sin root (`www-data`) y sin capacidades extra;
-  - con límites de memoria, CPU y procesos como variables (R46): 512 MB, 1 CPU y 200 procesos, 🔍 a confirmar midiendo en DEV; y healthcheck en `/health`, que solo responde `OK` si Firefly lee su base;
+  - con límites de memoria, CPU y procesos como variables (R46): 512 MB, 1 CPU y 200 procesos, que se cambian por instancia en el inventario (`memory`, `cpus`, `pids_limit`). Medido en DEV el 2026-11-11, en uso: 70 MB, 3 % de CPU y 12 procesos; los valores por defecto dejan holgura de sobra; y healthcheck en `/health`, que solo responde `OK` si Firefly lee su base;
   - imagen por digest, que existe para `linux/amd64` y `linux/arm64` (comprobado por el operador el 2026-11-08).
 - **Logs sin datos financieros:** `APP_DEBUG=false`, nivel `notice` y al journal de `svc_runner` (`LOG_CHANNEL=stdout`). El registro de auditoría, **apagado** (`AUDIT_LOG_LEVEL=emergency`, el valor por defecto): según Firefly, «puede contener información financiera sensible». Decidido por el operador el 2026-11-08.
 - **Postgres** (según [`POSTGRES.md`](../POSTGRES.md)):
