@@ -103,3 +103,10 @@ postgres_quadlet_units: >-
       {'template': 'pg-data.volume.j2', 'name': postgres_volume ~ '.volume'}]
      + (postgres_networks | map('regex_replace', '^(.*)$', '{"template": "pg-consumer.network.j2", "name": "\1.network"}')
         | map('from_json') | list) }}
+
+# Who got a new password (tasks/apps.yml, from files/pg_passwords.py). Over SSH, script runs
+# on a terminal: its output may come with \r\n and with escape sequences of the remote shell
+# around it (seen on a DEV VM: OSC 3008). Only the line with the JSON counts.
+postgres_passwords_changed: >-
+  {{ (postgres_passwords.stdout_lines | default([]) | map('trim') | select('match', '^[{].*[}]$')
+      | list | last | default('{}', true) | from_json).changed | default([]) }}
