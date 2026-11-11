@@ -97,7 +97,7 @@ No hay red compartida entre consumidores: cada consumidor tiene su red, `<entorn
 
 ## 4. Contraseñas
 
-- **KeePassXC** es la copia maestra: `<instalación>/<usuario>-db-password`, con `-` en lugar de `_` en el nombre del usuario: el usuario `ff_laptop` es `ff-laptop-db-password` ([`services/README.md`](services/README.md), apartado 3; SETUP, paso 16). Un nombre de usuario no se repite en dos instancias de la misma máquina: su secreto sería el mismo, y el `apply` se para. El superusuario es `pg-<instancia>-superuser-password`. `backup` no tiene.
+- **KeePassXC** es la copia maestra: `<instalación>/<usuario>-db-password`, con `-` en lugar de `_` en el nombre del usuario: el usuario `ff_laptop` es `ff-laptop-db-password` ([`NAMING.md`](NAMING.md), apartado 5; SETUP, paso 16). Un nombre de usuario no se repite en dos instancias de la misma máquina: su secreto sería el mismo, y el `apply` se para. El superusuario es `pg-<instancia>-superuser-password`. `backup` no tiene.
 - **Secretos de Podman** (`podman secret`): `<entorno>-<usuario>-db-password` (por ejemplo `prod-ff-laptop-db-password`). Así llega cada contraseña a su aplicación, como fichero (SPEC 4.5). Se declaran en `infra_secrets` (grupo `postgres_hosts`) y se crean con `deploy.sh secrets`. Sin ellos, `apply postgres` se para y dice cuáles faltan.
 - **En la base, desde el secreto:** en cada `apply`, Ansible compara la contraseña guardada con la del secreto y, si no coincide, la cambia. Envía el SCRAM ya calculado, nunca la contraseña en claro, que podría acabar en el log de PostgreSQL (R45). Solo letras, números y símbolos ASCII: es lo que genera KeePassXC por defecto.
 - **No hay `.pgpass` ni ficheros de contraseñas.**

@@ -192,20 +192,13 @@ Sin réplica entre máquinas: una réplica copia también los errores, como un b
 
 Para saber de un vistazo de quién es cada contenedor, red o volumen, para qué sirve y de qué entorno es, sin herramientas nuevas (R22).
 
-**Nombres:** en minúsculas, con guiones, y siempre empiezan por el entorno (`prod` o `dev`, variable `infra_env`).
-
-| Objeto | Patrón | Ejemplos |
-| --- | --- | --- |
-| Contenedor y su servicio systemd | `<entorno>-<app>[-<pieza>]` | `prod-pg-main`, `prod-ff-casa`, `prod-backup` |
-| Red | `<entorno>-<consumidor>-<proveedor>-net` | `prod-ff-casa-pg-main-net`: la instancia `casa` de Firefly habla con el Postgres `main` |
-| Volumen | `<entorno>-<app>-<contenido>` | `prod-pg-main-data`, `prod-ff-casa-uploads`, `prod-backup-repo` |
-| Secreto de Podman | `<entorno>-<nombre en KeePassXC>` | `prod-ff-casa-db-password` ↔ `<instalación>/ff-casa-db-password` (la misma ruta en dev y prod) |
-
-- **Postgres:** cada instancia se llama `pg-<instancia>`, por ejemplo `pg-main` o `pg-test`.
-- **Toda aplicación va por instancias (R48):** cada una lleva el **nombre corto** de la aplicación y su instancia, `<entorno>-<corto>-<instancia>[-<pieza>]`. Firefly III es **`ff`**: la instancia `laptop` es `prod-ff-laptop`, con su volumen `prod-ff-laptop-uploads` y su base `ff_laptop`. En el código y el inventario la aplicación se llama por su nombre entero (`roles/firefly`, `firefly_instances`). Cada instancia tiene su propia base de datos, red, puerto, secretos y volumen. Las reglas comunes y la tabla de nombres cortos, en [`services/README.md`](services/README.md).
-- **Una sola regla de nombres (R50):** cada instancia tiene un identificador `<corto>-<instancia>` y todo lo suyo cuelga de él con `-` (contenedor, red, secretos). Solo dentro de Postgres el `-` pasa a `_` (`ff_laptop`). La contraseña de un usuario de base es `<usuario>-db-password`. El entorno va delante en las máquinas (`prod-…`) y nunca en KeePassXC.
-- **Ficheros Quadlet:** se llaman como el objeto (`prod-ff-casa.container` crea el servicio `prod-ff-casa.service`).
-- **Nombres explícitos:** siempre se fijan `ContainerName=`, `NetworkName=` y `VolumeName=`. Sin ellas, Podman antepone `systemd-` al nombre (comprobado con el generador de 4.9).
+**Nombres:** la norma completa, de obligado cumplimiento, está en [`NAMING.md`](NAMING.md) (R48, R49, R50). En resumen:
+- **Toda aplicación va por instancias** (R48), cada una con su base, red, puerto, secretos y volumen ([`services/README.md`](services/README.md)).
+- **Un identificador por instancia,** `<corto>-<instancia>`: `ff-laptop`, `pg-laptop`.
+- **En las máquinas, el entorno va delante:** `prod-ff-laptop`, `prod-pg-laptop-data`, `prod-ff-laptop-pg-laptop-net`.
+- **Dentro de Postgres, `_` en lugar de `-`:** `ff_laptop`.
+- **Secretos:** KeePassXC sin entorno (`ff-laptop-db-password`); Podman, con el entorno delante (`prod-ff-laptop-db-password`).
+- **Ficheros Quadlet:** se llaman como el objeto (`prod-ff-laptop.container` crea `prod-ff-laptop.service`). Siempre se fijan `ContainerName=`, `NetworkName=` y `VolumeName=`.
 
 **Etiquetas:** todo contenedor, red y volumen lleva:
 - `infra.env` (`prod`, `dev`);

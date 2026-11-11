@@ -142,7 +142,7 @@ postgres_instances:
             consumer: ff-laptop     # el identificador de esa instancia de Firefly: solo desde su red
 ```
 
-`ff-laptop` es el identificador de la instancia de Firefly, y `ff_laptop` lo mismo con `_`, porque Postgres no admite `-` ([`README.md`](README.md), apartado 3). Otra aplicación sería otro bloque `- name:` dentro de `databases:`.
+`ff-laptop` es el identificador de la instancia de Firefly, y `ff_laptop` lo mismo con `_`, porque Postgres no admite `-` ([`NAMING.md`](../NAMING.md)). Otra aplicación sería otro bloque `- name:` dentro de `databases:`.
 
 ### `group_vars/firefly_hosts.yml`
 

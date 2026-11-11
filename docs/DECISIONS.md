@@ -444,7 +444,7 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 ### R49. Cada aplicación tiene un nombre corto en lo que se crea
 
 - **Decisión:** lo que una aplicación crea en la máquina (contenedores, volúmenes, bases, usuarios, redes, secretos, etiquetas) lleva su **nombre corto**, no el entero. Firefly III es **`ff`**: la instancia `laptop` es `prod-ff-laptop`, su base `ff_laptop`, su red `prod-ff-laptop-pg-<postgres>-net` y su clave `ff-laptop-app-key`. En el código y el inventario la aplicación conserva su nombre entero (`roles/firefly`, `firefly_hosts`, `firefly_instances`, `firefly_image`), para que se sepa qué es. El nombre corto vive en una sola variable del rol (`firefly_short`), no en el inventario. El operador solo escribe la instancia, y el código rechaza guiones en ella: un nombre entero no puede acabar duplicado (`prod-ff-prod-ff-laptop`).
-- **Motivo:** lo pide el operador (nombres como `prod-ff-laptop`). La tabla de nombres cortos está en [`services/README.md`](services/README.md), apartado 3.
+- **Motivo:** lo pide el operador (nombres como `prod-ff-laptop`). La tabla de nombres cortos está en [`NAMING.md`](NAMING.md), apartado 2.
 - **Aprobada por:** el operador, el 2026-11-11.
 - **SPEC:** 4.12.
 

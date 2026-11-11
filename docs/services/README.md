@@ -33,37 +33,9 @@ Cómo es **cualquier** aplicación de la plataforma (Firefly III, pgAdmin y las 
 
 ## 3. Nombres
 
-Cada aplicación tiene **dos nombres**:
-
-| Aplicación | En el código y el inventario (`<app>`) | Corto, en lo que se crea (`<corto>`) |
-| --- | --- | --- |
-| Firefly III | `firefly`: el rol `roles/firefly`, el playbook `firefly`, el grupo `firefly_hosts`, la lista `firefly_instances` y las imágenes `firefly_image`… | **`ff`** |
-
-- El de código dice qué aplicación es cuando lees el repo.
-- El corto va en todo lo que existe en la máquina: contenedores, bases, redes, secretos.
-
-**`ff` es siempre Firefly III.**
-
-**Tú solo escribes la instancia** (`name: laptop`), en minúsculas y cifras (`^[a-z0-9]{1,14}$`), y el rol pone el resto. Nunca escribas un nombre entero: `name: prod-ff-laptop` se rechaza (lleva guiones), así que no puede salir `prod-ff-prod-ff-laptop`.
-
-| Qué | Patrón | Firefly `laptop`, en prod |
-| --- | --- | --- |
-| Contenedor y servicio | `<entorno>-<corto>-<instancia>` | `prod-ff-laptop` |
-| Volumen | `<entorno>-<corto>-<instancia>-<contenido>` | `prod-ff-laptop-uploads` |
-| Tareas programadas | `<entorno>-<corto>-<instancia>-cron` | `prod-ff-laptop-cron.timer` |
-| Base, esquema y usuario de Postgres | `<corto>_<instancia>` | `ff_laptop` |
-| Identificador de la instancia: `consumer:` en Postgres, y su red | `<corto>-<instancia>` | `ff-laptop`, red `prod-ff-laptop-pg-<postgres>-net` |
-| Secretos (KeePassXC) | `<corto>-<instancia>-<qué>` | `ff-laptop-app-key`, `ff-laptop-db-password` |
-| Etiqueta `infra.app` | `<corto>-<instancia>` | `ff-laptop` |
-| Lanzador | `infra-podman-<entorno>-<corto>-<instancia>.desktop` | «Firefly III (laptop)» en el menú |
-
-**La regla, en una línea:** todo es `<corto>-<instancia>` y lo que cuelga de él (`-uploads`, `-cron`, `-app-key`, `-db-password`), con `-`. **Solo dentro de Postgres** el `-` pasa a `_` (`ff_laptop`), porque Postgres no admite `-` en un nombre sin comillas. Fuera de Postgres, todo sigue la regla de los nombres DNS (RFC 1123): minúsculas, cifras y `-`, como en Kubernetes y Podman.
-
-- **Los secretos van con su dueño.** Los de una instancia empiezan por su identificador: `ff-laptop-app-key`, `ff-laptop-db-password`. Los de Postgres, por el suyo: `pg-laptop-superuser-password`. Los de los backups, por `backup-`.
-- **La contraseña de cualquier usuario de base** es `<usuario>-db-password`, con `-` en lugar de `_`. El usuario `ff_laptop` es `ff-laptop-db-password`; un lector `ai_reader` sería `ai-reader-db-password`. Por eso un nombre de usuario no se repite en dos instancias de Postgres de la misma máquina: el `apply` se para.
-- **En KeePassXC no hay entorno** en ningún nombre: dev y prod son dos ficheros (`infra-dev.kdbx` e `infra-pro.kdbx`) con los mismos títulos. **En las máquinas sí:** todo lleva delante `dev-` o `prod-` (`prod-ff-laptop`, `prod-ff-laptop-db-password`), para que nunca haya duda de qué es cada cosa.
-
-En el código, el nombre corto es `firefly_short` en `roles/firefly/defaults/main.yml`. No es un ajuste del inventario.
+La norma completa está en [`NAMING.md`](../NAMING.md); incluye la tabla de nombres cortos (`ff` es Firefly III). Para una aplicación, en resumen:
+- **Tú solo escribes la instancia** (`name: laptop`). El rol compone el identificador `ff-laptop` y, de él, todo lo demás: `prod-ff-laptop`, `prod-ff-laptop-uploads`, `ff-laptop-app-key`, `ff-laptop-db-password`, la red `prod-ff-laptop-pg-<postgres>-net`, y `ff_laptop` dentro de Postgres.
+- **En el código y el inventario,** la aplicación se llama por su nombre entero: `roles/firefly`, `firefly_instances`.
 
 ## 4. Puertos
 
