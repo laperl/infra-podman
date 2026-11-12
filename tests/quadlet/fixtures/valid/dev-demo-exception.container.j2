@@ -1,0 +1,20 @@
+# Fixture: a unit that skips one hardening rule with an approved exception (R51). The
+# decision cited must exist in docs/DECISIONS.md; here it is R51 itself.
+# policy-exception: drop-capability (R51)
+[Unit]
+Description=Demo container with a policy exception (CI fixture)
+
+[Container]
+ContainerName={{ infra_env }}-demo-exception
+Image={{ demo_image }}
+Label=infra.env={{ infra_env }}
+Label=infra.app=demo
+Label=infra.component=app
+Label=infra.managed-by=infra-podman
+Network=none
+NoNewPrivileges=true
+PodmanArgs=--memory=512m --cpus=1
+PidsLimit=200
+
+[Service]
+TimeoutStartSec=120
