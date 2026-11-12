@@ -78,7 +78,7 @@
     fail_msg: >-
       The Podman secret {{ postgres_secret }} does not exist on {{ inventory_hostname }}.
       Create it first: ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
-      (KeePassXC entry {{ infra_site | default('<infra_site>') }}/{{ postgres_secret_key }}).
+      (KeePassXC entry {{ infra_site | default('<infra_site>') }}/{{ postgres_secret_entry }}).
     quiet: true
   when: postgres_state == 'present'
 

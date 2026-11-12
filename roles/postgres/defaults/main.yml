@@ -85,10 +85,11 @@ postgres_service_home: /home/svc_runner
 # Names (SPEC 4.12). Derived; do not override.
 postgres_name: "{{ infra_env }}-pg-{{ postgres_instance }}"
 postgres_volume: "{{ postgres_name }}-data"
-# KeePassXC entry <infra_site>/pg-<instance>-superuser-password; Podman secret with the
-# environment in front.
-postgres_secret_key: pg-{{ postgres_instance }}-superuser-password
-postgres_secret: "{{ infra_env }}-{{ postgres_secret_key }}"
+# postgres_secret_entry is the title of the KeePassXC entry (<infra_site>/<entry>) and its
+# name in infra_secrets; postgres_secret is the Podman secret on the machine, the same
+# with the environment in front.
+postgres_secret_entry: pg-{{ postgres_instance }}-superuser-password
+postgres_secret: "{{ infra_env }}-{{ postgres_secret_entry }}"
 # pg_hba.conf, generated from the inventory and mounted read-only (docs/POSTGRES.md, 3).
 postgres_config_dir: "{{ postgres_service_home }}/.config/infra-podman/{{ postgres_name }}"
 postgres_hba_file: "{{ postgres_config_dir }}/pg_hba.conf"
