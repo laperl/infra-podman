@@ -163,7 +163,8 @@ Los errores salen en GitHub, en el PR: pestaña **Checks**, en el job en rojo, c
 
 | Lo que ves | Por qué | Qué hacer |
 | --- | --- | --- |
-| `POLICY: …` (job `lint`) | Una plantilla incumple una regla del repo: `Notify=healthy`, imagen sin digest, falta un nombre o una etiqueta… | Lo corrige Claude en el mismo PR |
+| `POLICY: …` (job `lint`) | Una plantilla incumple una regla del repo: `Notify=healthy`, imagen sin digest, falta un nombre o una etiqueta, un puerto publicado fuera de `127.0.0.1` (R25), falta un límite de memoria, procesador o procesos (R46)… | Lo corrige Claude en el mismo PR |
+| `FAIL: the rendered units differ from tests/quadlet/golden` (job `lint` o `quadlet-forward`) | Lo que los roles instalarían ya no es igual a la copia guardada en `tests/quadlet/golden`: ha cambiado una plantilla o un valor por defecto. El `diff` de encima dice qué líneas | Si el cambio es el que se quería: `tests/quadlet/run.sh --update-golden` y commit; el PR enseña entonces el cambio exacto de cada unidad. Si no se quería (un refactor), el fallo es el aviso: se corrige el código, no la copia |
 | `GENERATOR: … rejected the units:` (job `lint` o `quadlet-forward`) | El generador de Podman no acepta una plantilla. En `quadlet-forward` (Podman más nuevo) avisa de lo que fallará al actualizar el GX10 | Lo corrige Claude en el mismo PR |
 | `the second apply changed something` (job `lifecycle`) | Un segundo `apply` sin cambios cambió algo: no es idempotente (SPEC 4.2) | Lo corrige Claude en el mismo PR |
 | `… appears in the logs` o `the password appears in the Ansible output` | Una contraseña de prueba ha salido en los logs | No mergees. Lo corrige Claude |
