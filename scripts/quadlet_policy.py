@@ -61,6 +61,14 @@ PUBLISH_RE = re.compile(r"^127\.0\.0\.1:\d{1,5}:\d{1,5}(?:/(?:tcp|udp))?$")
 # --flag=value (docs/COMPATIBILITY.md).
 REQUIRED_PODMAN_ARGS = ("--memory", "--cpus")
 
+# R51, SPEC 4.14: hardening of every container. A unit may skip one of these rules only
+# with a decision approved by the operator, written in the unit as a comment:
+#   # policy-exception: <rule> (R<number>)
+# <rule> is one of the names below and R<number> must exist in docs/DECISIONS.md.
+HARDENING_RULES = ("no-new-privileges", "drop-capability", "host-network")
+EXCEPTION_RE = re.compile(r"^[#;]\s*policy-exception:\s*(\S+)\s+\(R(\d+)\)\s*$")
+DECISIONS = Path(__file__).resolve().parent.parent / "docs" / "DECISIONS.md"
+
 
 def labels_from(value: str) -> dict[str, str]:
     """Parse one Label= value: one or more key=value pairs, optionally quoted."""
@@ -122,6 +130,54 @@ def check_exposure_and_limits(path: Path, values: dict[str, list[str]]) -> list[
     return errors
 
 
+def policy_exceptions(path: Path, text: str) -> tuple[set[str], list[str]]:
+    """Return the hardening rules this unit is allowed to skip, and the errors found.
+
+    An exception names a known rule and a decision that exists in docs/DECISIONS.md.
+    """
+    allowed: set[str] = set()
+    errors: list[str] = []
+    decisions = DECISIONS.read_text(encoding="utf-8") if DECISIONS.is_file() else ""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if "policy-exception" not in line or line[:1] not in ("#", ";"):
+            continue
+        match = EXCEPTION_RE.match(line)
+        if not match:
+            errors.append(f"{path}: malformed exception '{line}': write "
+                          f"'# policy-exception: <rule> (R<number>)' (R51)")
+            continue
+        rule, number = match.groups()
+        if rule not in HARDENING_RULES:
+            errors.append(f"{path}: unknown rule '{rule}' in a policy-exception; "
+                          f"known: {', '.join(HARDENING_RULES)} (R51)")
+        elif not re.search(rf"^### R{number}\.", decisions, re.MULTILINE):
+            errors.append(f"{path}: policy-exception for {rule} cites R{number}, "
+                          f"which is not in docs/DECISIONS.md (R51)")
+        else:
+            allowed.add(rule)
+    return allowed, errors
+
+
+def check_hardening(path: Path, values: dict[str, list[str]], allowed: set[str]) -> list[str]:
+    """Check the hardening every container needs unless an approved exception skips it."""
+    errors: list[str] = []
+    hint = "or an approved '# policy-exception: {rule} (R<number>)' (R51, SPEC 4.14)"
+    if "no-new-privileges" not in allowed and \
+            [v.lower() for v in values.get("NoNewPrivileges", [])] != ["true"]:
+        errors.append(f"{path}: NoNewPrivileges=true is required, "
+                      + hint.format(rule="no-new-privileges"))
+    if "drop-capability" not in allowed and \
+            not any(v.lower() == "all" for v in values.get("DropCapability", [])):
+        errors.append(f"{path}: DropCapability=all is required, "
+                      + hint.format(rule="drop-capability"))
+    if "host-network" not in allowed and \
+            any(v.lower() == "host" or v.lower().startswith("host:") for v in values.get("Network", [])):
+        errors.append(f"{path}: Network=host is forbidden: use a .network unit, Network=none, "
+                      + hint.format(rule="host-network"))
+    return errors
+
+
 def logical_lines(text: str):
     """Yield (line_number, line) joining backslash continuations, skipping comments."""
     buffer, start = "", 0
@@ -150,7 +206,8 @@ def check_file(path: Path) -> list[str]:
     # Every value of each key: PublishPort=, PodmanArgs= and others can be repeated.
     values: dict[str, list[str]] = {}
     labels: dict[str, str] = {}
-    for number, line in logical_lines(path.read_text(encoding="utf-8")):
+    text = path.read_text(encoding="utf-8")
+    for number, line in logical_lines(text):
         where = f"{path}:{number}"
         for pattern, message in FORBIDDEN_PATTERNS:
             if pattern.search(line):
@@ -171,6 +228,8 @@ def check_file(path: Path) -> list[str]:
             errors.append(f"{where}: image '{value}' must be pinned by digest @sha256:<64 hex> (D6)")
     if path.suffix == ".container":
         errors += check_exposure_and_limits(path, values)
+        allowed, exception_errors = policy_exceptions(path, text)
+        errors += exception_errors + check_hardening(path, values, allowed)
     return errors + check_names_and_labels(path, keys, labels)
 
 
