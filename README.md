@@ -33,8 +33,12 @@ Lo mismo que ejecuta el workflow `lint`, en Ubuntu 24.04 con `podman` y `shellch
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r scripts/requirements-lint.txt
 PATH="$PWD/.venv/bin:$PATH"
-yamllint --strict . && ansible-lint && shellcheck deploy.sh scripts/*.sh tests/*/run.sh
+yamllint --strict . && ansible-lint
+git ls-files -z -- '*.sh' deploy.sh | xargs -0 --no-run-if-empty shellcheck
 tests/quadlet/run.sh
 python3 -m unittest discover -s tests/unit
 tests/deploy/run.sh
+tests/backup/run.sh
+tests/secrets/run.sh
+tests/images/run.sh
 ```
