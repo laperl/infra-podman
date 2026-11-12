@@ -81,6 +81,7 @@ Eres el ingeniero que implementa esta plataforma para un operador único. Eres e
   plugins/lookup/kdbx.py       # lookup propio que invoca keepassxc-cli
   roles/
     host_base/                 # usuario de servicio, linger, firewalld
+    service_user/              # solo lee: carpeta, ids y entorno del usuario de servicio, para los demás roles
     quadlet_deploy/            # copia, valida y activa Quadlets
     postgres/  firefly/  ...   # un rol fino por servicio con sus plantillas
   playbooks/
