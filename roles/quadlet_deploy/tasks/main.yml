@@ -17,28 +17,16 @@
     fail_msg: "quadlet_deploy needs quadlet_deploy_units (template, name), only .container, .network and .volume; purge only with state absent"
     quiet: true
 
+# Its home and environment, read in one place (roles/service_user), which also stops
+# with a clear message when the user does not exist yet.
 - name: Read the service user
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ service_user }}"
-    fail_key: false
+  ansible.builtin.include_role:
+    name: service_user
 
-- name: Require the service user (playbook base)
-  ansible.builtin.assert:
-    that: ansible_facts['getent_passwd'][service_user] is not none
-    fail_msg: "{{ service_user }} does not exist on {{ inventory_hostname }}. Apply the base playbook first (docs/WORKFLOW.md)."
-    quiet: true
-
-# What sudo keeps from the caller's environment depends on the sudoers policy; Podman and
-# systemctl --user need these, all explicit (same as host_base).
 - name: Set the paths and environment of the service user
   ansible.builtin.set_fact:
-    quadlet_deploy_dir: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.config/containers/systemd"
-    quadlet_deploy_env:
-      HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
-      XDG_CONFIG_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.config"
-      XDG_DATA_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.local/share"
-      XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+    quadlet_deploy_dir: "{{ service_user_home }}/.config/containers/systemd"
+    quadlet_deploy_env: "{{ service_user_env }}"
     quadlet_deploy_containers: "{{ quadlet_deploy_units | map(attribute='name') | select('match', '.*\\.container$') | list }}"
     quadlet_deploy_changed_services: []
 
