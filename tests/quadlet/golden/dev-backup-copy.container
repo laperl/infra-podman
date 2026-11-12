@@ -1,0 +1,52 @@
+# Ansible managed
+# Copy of the local backups to the backup server (SPEC 4.11, R44). Started only by
+# dev-backup-copy.timer, every hour; never at boot and never by an apply.
+#   - It sees only the local repository (encrypted, read-only), its scripts, a folder
+#     for its result and the two passwords. Not PostgreSQL, not the operator's files.
+#   - If the server does not answer, it ends at once with code 75 (not a failure).
+#   - ExecStopPost, on the host, writes the status for the notifier.
+# SecurityLabelDisable: the local repository is marked private for SELinux by
+# dev-backup (:Z); relabelling it from here would lock that container out. Without
+# a label of its own this container can read it (docs/COMPATIBILITY.md). Still rootless,
+# read-only, with no capabilities.
+[Unit]
+Description=Copy of the backups to the backup server (dev)
+
+[Container]
+ContainerName=dev-backup-copy
+Image=docker.io/restic/restic@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
+Label=infra.env=dev
+Label=infra.app=backup
+Label=infra.component=backup-copy
+Label=infra.managed-by=infra-podman
+
+Volume=dev-backup-repo.volume:/repo:ro
+Volume=/home/svc_runner/.local/share/infra-podman/backup:/scripts:ro
+Volume=/home/svc_runner/.local/state/infra-podman/backup-copy:/state
+SecurityLabelDisable=true
+
+Secret=dev-backup-restic-password,type=mount,target=/run/secrets/restic-password,mode=0400
+Secret=dev-backup-server-password,type=mount,target=/run/secrets/server-password,mode=0400
+Environment=RESTIC_PASSWORD_FILE=/run/secrets/restic-password
+Environment=RESTIC_CACHE_DIR=/tmp/restic-cache
+Environment=BACKUP_SITE=ci-site
+Environment=BACKUP_REMOTE_URL=http://unset.invalid
+Environment=BACKUP_REMOTE_PATH=ci-site/dev-localhost
+Environment=BACKUP_REMOTE_MAX_BYTES=32212254720
+Environment=BACKUP_REMOTE_WARN_PERCENT=80
+
+# Entrypoint= does not exist in Quadlet 4.9 (docs/COMPATIBILITY.md).
+PodmanArgs=--entrypoint=/bin/sh --memory=1g
+Exec=/scripts/backup-copy.sh
+
+ReadOnly=true
+Tmpfs=/tmp
+DropCapability=all
+NoNewPrivileges=true
+
+[Service]
+Type=oneshot
+# 75: the server did not answer. Not a failure: it tries again in an hour.
+SuccessExitStatus=75
+ExecStopPost=/home/svc_runner/.local/share/infra-podman/backup/backup-copy-status.sh dev-backup-copy 168
+TimeoutStartSec=2h

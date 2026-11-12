@@ -1,0 +1,50 @@
+# Ansible managed
+# Daily backup (SPEC 4.11). Started only by dev-backup.timer, never at boot and
+# never by an apply: no [Install] section.
+#   1. ExecStartPre, on the host: dump every database and copy the files to back up
+#      into the staging directory (backup-prepare.sh).
+#   2. The container: one restic snapshot per item, retention and check (backup-run.sh).
+#      No network: it only sees the staging directory, its scripts and the repository.
+#   3. ExecStopPost, on the host: write the status for the notifier and delete the
+#      staging directory, so no plain dump stays on disk (backup-status.sh).
+[Unit]
+Description=Backup (dev)
+
+[Container]
+ContainerName=dev-backup
+Image=docker.io/restic/restic@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
+Label=infra.env=dev
+Label=infra.app=backup
+Label=infra.component=backup
+Label=infra.managed-by=infra-podman
+
+Volume=dev-backup-repo.volume:/repo:Z
+Volume=/home/svc_runner/.local/state/infra-podman/backup/staging:/backup:ro,Z
+Volume=/home/svc_runner/.local/share/infra-podman/backup:/scripts:ro,Z
+
+Secret=dev-backup-restic-password,type=mount,target=/run/secrets/restic-password,mode=0400
+Environment=RESTIC_REPOSITORY=/repo
+Environment=RESTIC_PASSWORD_FILE=/run/secrets/restic-password
+Environment=RESTIC_CACHE_DIR=/tmp/restic-cache
+Environment=BACKUP_SITE=ci-site
+Environment=BACKUP_ENV=dev
+Environment=BACKUP_HOST=localhost
+Environment=BACKUP_KEEP_DAILY=7
+Environment=BACKUP_KEEP_MONTHLY=12
+Environment=BACKUP_KEEP_YEARLY=5
+
+# Entrypoint= does not exist in Quadlet 4.9 (docs/COMPATIBILITY.md).
+PodmanArgs=--entrypoint=/bin/sh --memory=1g
+Exec=/scripts/backup-run.sh
+
+Network=none
+ReadOnly=true
+Tmpfs=/tmp
+DropCapability=all
+NoNewPrivileges=true
+
+[Service]
+Type=oneshot
+ExecStartPre=/home/svc_runner/.local/share/infra-podman/backup/backup-prepare.sh
+ExecStopPost=/home/svc_runner/.local/share/infra-podman/backup/backup-status.sh dev-backup
+TimeoutStartSec=2h

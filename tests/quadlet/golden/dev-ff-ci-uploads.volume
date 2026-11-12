@@ -1,0 +1,8 @@
+# Ansible managed
+# Attachments of dev-ff-ci. Never removed when the service is destroyed (SPEC 4.2).
+[Volume]
+VolumeName=dev-ff-ci-uploads
+Label=infra.env=dev
+Label=infra.app=ff-ci
+Label=infra.component=data
+Label=infra.managed-by=infra-podman

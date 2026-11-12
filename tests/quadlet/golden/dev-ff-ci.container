@@ -1,0 +1,83 @@
+# Ansible managed
+[Unit]
+Description=Firefly III ci (dev)
+# SPEC 4.3: it needs its PostgreSQL. Requires/After order the start; ExecStartPre (below)
+# waits until PostgreSQL is healthy, because Notify=healthy does not exist in Podman 4.9.
+Requires=dev-pg-main.service
+After=dev-pg-main.service
+
+[Container]
+ContainerName=dev-ff-ci
+Image=docker.io/fireflyiii/core@sha256:d51ab6a3a7b91a5c892441578e0da7f2935f84f36bd1151fc3833acc6e060871
+Label=infra.env=dev
+Label=infra.app=ff-ci
+Label=infra.component=app
+Label=infra.managed-by=infra-podman
+
+# Attachments: the volume the official image declares (docs/services/firefly.md, 5).
+Volume=dev-ff-ci-uploads.volume:/var/www/html/storage/upload:Z
+
+# Only its own network to PostgreSQL: internal, no way out, and no other instance in it
+# (SPEC 4.4, R45, R48). The port is published on 127.0.0.1 of the machine only (R25): the
+# address is not a setting.
+Network=dev-ff-ci-pg-main-net.network
+PublishPort=127.0.0.1:18100:8080
+
+# Secrets as files (SPEC 4.5), read by the image through the *_FILE variables. The
+# image runs as www-data (uid 33), which must be able to read them.
+Secret=dev-ff-ci-app-key,type=mount,target=/run/secrets/app-key,uid=33,gid=33,mode=0400
+Secret=dev-ff-ci-db-password,type=mount,target=/run/secrets/db-password,uid=33,gid=33,mode=0400
+Environment=APP_KEY_FILE=/run/secrets/app-key
+Environment=DB_PASSWORD_FILE=/run/secrets/db-password
+
+# The image's variables, as documented in Firefly's .env.example (v6.7.9).
+Environment=APP_ENV=production
+Environment=APP_DEBUG=false
+Environment=APP_URL=http://127.0.0.1:18100
+Environment=DEFAULT_LANGUAGE=en_US
+Environment=DEFAULT_LOCALE=equal
+Environment=TZ=UTC
+Environment=LOG_CHANNEL=stdout
+Environment=APP_LOG_LEVEL=notice
+Environment=AUDIT_LOG_LEVEL=emergency
+Environment=DB_CONNECTION=pgsql
+Environment=DB_HOST=dev-pg-main
+Environment=DB_PORT=5432
+Environment=DB_DATABASE=ff_ci
+Environment=DB_USERNAME=ff_ci
+# The database has no public schema: Firefly's tables go in the schema of its database
+# (docs/POSTGRES.md, section 2).
+Environment=PGSQL_SCHEMA=ff_ci
+Environment=DKR_CHECK_SQLITE=false
+# Nothing leaves the machine (docs/services/firefly.md, 2): no mail, no error reports by
+# mail, and the defaults of what would go to the internet, off. The network blocks it anyway.
+Environment=MAIL_MAILER=log
+Environment=SEND_ERROR_MESSAGE=false
+Environment=ENABLE_EXTERNAL_MAP=false
+Environment=ENABLE_EXTERNAL_RATES=false
+Environment=ALLOW_WEBHOOKS=false
+
+# GET /health answers OK only when Firefly reads its database. The first start creates
+# the tables, hence the long start period. Podman runs it with sh -c.
+HealthCmd=curl -fsS -o /dev/null http://127.0.0.1:8080/health
+HealthInterval=30s
+HealthStartPeriod=180s
+HealthRetries=3
+HealthTimeout=10s
+
+# Hardening: the image already runs as www-data; no capabilities, no new privileges.
+DropCapability=all
+NoNewPrivileges=true
+# Resource limits (R46), the only place they are written (docs/COMPATIBILITY.md). StopSignal=
+# does not exist in Quadlet 4.9: SIGINT, as in Firefly's official docker-compose.yml.
+PodmanArgs=--memory=512m --cpus=1 --stop-signal=SIGINT
+PidsLimit=200
+
+[Service]
+# SPEC 4.3: wait, at most TimeoutStartSec, until PostgreSQL passes its healthcheck.
+ExecStartPre=/bin/sh -c 'until podman healthcheck run dev-pg-main >/dev/null 2>&1; do sleep 3; done'
+TimeoutStartSec=300
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
