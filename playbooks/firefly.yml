@@ -2,7 +2,7 @@
 # Phase 2: Firefly III on each machine of firefly_hosts (docs/services/firefly.md), one
 # deployment per item of firefly_instances (R48, docs/services/README.md). Each instance
 # needs the base playbook, postgres with its database and user (ff_<name>, consumer
-# ff<name>; docs/POSTGRES.md, section 6) and its two secrets. ff = Firefly III: the instance
+# ff-<name>; docs/POSTGRES.md, section 6) and its two secrets. ff = Firefly III: the instance
 # laptop is prod-ff-laptop.
 #   ./deploy.sh plan firefly --env dev --limit <vm>
 # An instance removed from the inventory is never stopped by removing it: it is only

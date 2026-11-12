@@ -42,7 +42,7 @@ action="" target="" env_name="prod" limit="" rotate="" ref="-" confirm_drop="" r
 data_dir="" data_ref="-"
 
 usage() {
-  sed -n '3,7p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
+  sed -n '4,8p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 

@@ -101,7 +101,7 @@ Busca el mensaje en [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md): están todos los
 
 ## Cambiar datos
 
-Los datos (máquinas, instancias y, más adelante, bases, usuarios y aplicaciones) viven en tu **repo de datos**, `~/Documents/SECURE_vc/ansible/infra-podman` (SPEC 4.13, [`SETUP.md`](SETUP.md), paso 14). No pasan por GitHub ni por PR: los cambias tú y los apruebas con tu firma. Qué va en cada fichero: [`inventory.example/`](../inventory.example/README.md).
+Los datos (máquinas, instancias, bases, usuarios y aplicaciones) viven en tu **repo de datos**, `~/Documents/SECURE_vc/ansible/infra-podman` (SPEC 4.13, [`SETUP.md`](SETUP.md), paso 14). No pasan por GitHub ni por PR: los cambias tú y los apruebas con tu firma. Qué va en cada fichero: [`inventory.example/`](../inventory.example/README.md).
 
 Cuando un PR de código diga «añade esto al repo de datos», hazlo así, con el volumen `SECURE_vc` montado y KeePassXC desbloqueado:
 
@@ -139,6 +139,7 @@ Y después, desde tu copia del código, `plan` y `apply` como siempre (paso 6).
 | `base` | Usuario de servicio `svc_runner` con linger (fase 1) | `laptop`, `gx10` (DEV: `vmiadev`) |
 | `secrets` | Solo con `./deploy.sh secrets`: crea en cada máquina los secretos que le faltan, leyéndolos de KeePassXC. Pide la contraseña maestra y la de sudo | Una cada vez, con `--limit` |
 | `postgres` | Las instancias de Postgres (`pg-main`). Necesita antes `base` y `secrets`. Si cambia la imagen, hace antes un backup y se para si falla | `laptop` (DEV: `vmiadev`) |
+| `firefly` | Las instancias de Firefly III (`ff-<instancia>`). Necesita antes `base`, `secrets` y `postgres`, con su base y su usuario. Si cambia la imagen, hace antes un backup y se para si falla ([`services/INSTALL.md`](services/INSTALL.md)) | `laptop` (DEV: `vmiadev`) |
 | `backup` | Backup diario local, a las 13:00, y el aviso de escritorio en el portátil. Con `backup_remote_url`, también la copia al GX10 cada hora. Necesita antes `base` y `secrets` ([`SETUP.md`](SETUP.md), pasos 17 y 18) | `laptop` (DEV: `vmiadev`) |
 | `backup-server` | El servidor que guarda la copia de los backups, solo para añadir, y su puerto en Tailscale. Necesita antes `base` y `secrets` ([`SETUP.md`](SETUP.md), paso 18) | `gx10` (DEV: `vmiadev`) |
 
