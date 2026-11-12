@@ -459,3 +459,26 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Motivo:** el operador veía los nombres incoherentes: `ffdevlaptop`, `ff_devlaptop` y `ff-devlaptop` para lo mismo, y secretos de una aplicación repartidos. El entorno se mantiene en las máquinas para que un error entre dev y prod se vea.
 - **Aprobada por:** el operador, el 2026-11-11. Corrige R49 en el consumidor y en el nombre de las contraseñas.
 - **SPEC:** 4.5, 4.12.
+
+## 2026-11-12
+
+### R51. Endurecimiento en todo contenedor, con excepción aprobada
+
+- **Decisión:** todo contenedor lleva `NoNewPrivileges=true` y `DropCapability=all` (más las capacidades imprescindibles con `AddCapability=`), y ninguno usa la red del host (`Network=host`). Es la regla general, no solo la de los agentes (SPEC 4.9). Una plantilla puede saltarse una de las tres solo por un motivo de peso y **preguntando antes al operador**: la excepción se escribe en la propia plantilla, como comentario `# policy-exception: <regla> (R<número>)`, con la decisión de este fichero que la aprueba. Las reglas se llaman `no-new-privileges`, `drop-capability` y `host-network`. El job `lint` rechaza la plantilla que incumple una regla sin esa línea, o que cita una decisión que no existe (`scripts/quadlet_policy.py`).
+- **Motivo:** lo pide el operador. Los cinco contenedores ya cumplían las tres; al ser regla del CI, una aplicación nueva no puede olvidarlas. La excepción queda a la vista en la plantilla y en la copia de `tests/quadlet/golden`, y no depende de la memoria de nadie.
+- **Aprobada por:** el operador, el 2026-11-12.
+- **SPEC:** 4.14, 8.
+
+### R52. El nombre corto de una aplicación, de 2 a 8 letras
+
+- **Decisión:** el nombre corto de una aplicación nueva tiene de 2 a 8 letras (antes, de 2 a 6), y es su nombre real cuando cabe: `rotki`, `litellm`, `openclaw`. `pg` y `ff` no cambian.
+- **Motivo:** con 6 letras, `litellm` y `openclaw` obligaban a inventar una abreviatura, lo contrario de un nombre intuitivo y descriptivo. Corrige R49 solo en la longitud.
+- **Aprobada por:** el operador, el 2026-11-12.
+- **SPEC:** 4.12 ([`NAMING.md`](NAMING.md), apartado 2).
+
+### R53. Subfase 2b: contrato de aplicaciones
+
+- **Decisión:** entre Firefly y pgAdmin se añade la subfase 2b. Reúne lo común para añadir aplicaciones sin copiar código de otra: guardarraíles en el CI, piezas comunes de los roles, perfiles de base de datos y de red, lista de puertos, copias por aplicación, retirar y purgar, y una skill que guía el alta. No cambia nada de lo ya desplegado. pgAdmin pasa a ser una aplicación más, que se añade después con esa skill.
+- **Motivo:** el operador quiere instalar más aplicaciones, distintas entre sí (con y sin Postgres, con y sin red), y que operar la plataforma siga siendo sencillo. Firefly era el único molde. `CLAUDE.md` obliga a trabajar por fases de la SPEC, y este trabajo no estaba en ninguna.
+- **Aprobada por:** el operador, el 2026-11-12.
+- **SPEC:** 6.

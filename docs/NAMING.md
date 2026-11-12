@@ -22,7 +22,7 @@ Cada aplicación tiene un nombre **de código**, que se usa en el repositorio y 
 | Firefly III | `firefly` | **`ff`** | `firefly_short` |
 | Backup local y servidor de copias | `backup`, `backup_server` | `backup`, `backup-server` | fijos en sus roles (no van por instancias) |
 
-**Una aplicación nueva** escoge su nombre corto con dos condiciones: que no esté ya en esta tabla y que sea de 2 a 6 letras. Se añade aquí **en el mismo PR** que la aplicación.
+**Una aplicación nueva** escoge su nombre corto con dos condiciones: que no esté ya en esta tabla y que sea de 2 a 8 letras, su nombre real si cabe (`rotki`, `litellm`; R52). Se añade aquí **en el mismo PR** que la aplicación.
 
 ## 3. Lo que eliges tú
 

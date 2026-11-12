@@ -30,6 +30,19 @@ infra-podman/                      # tu repo de datos (solo en el portátil, com
 
 Lo que llegue en fases siguientes (pgAdmin, qué guarda cada aplicación en los backups) también son datos: cada PR dice qué añadir y dónde, y actualiza este ejemplo.
 
+## Límites de recursos
+
+Todo contenedor tiene tope de memoria, de procesador y de procesos (R46). Cada uno trae un valor por defecto; para cambiarlo, escribe la variable en el fichero indicado y haz `plan` y `apply` del playbook.
+
+| Contenedor | Variables y valor por defecto | Dónde se cambian |
+| --- | --- | --- |
+| Postgres (todas las instancias de la máquina) | `postgres_memory` (`1g`), `postgres_cpus` (`"2"`), `postgres_pids_limit` (`500`) | `group_vars/postgres_hosts.yml` |
+| Firefly III (cada instancia) | `memory` (`512m`), `cpus` (`"1"`), `pids_limit` (`200`), dentro de la instancia | `group_vars/firefly_hosts.yml` |
+| Backup local y copia al servidor (`<entorno>-backup`, `<entorno>-backup-copy`) | `backup_memory` (`1g`), `backup_cpus` (`"2"`), `backup_pids_limit` (`500`) | `host_vars/<alias>.yml` de la máquina que hace copias |
+| Servidor de copias (`<entorno>-backup-server`) | `backup_server_memory` (`512m`), `backup_server_cpus` (`"1"`), `backup_server_pids_limit` (`200`) | `host_vars/<alias>.yml` de la máquina que las guarda |
+
+Los procesadores van entre comillas, para que YAML no los cambie (`"0.5"`). Si un contenedor se queda sin memoria, Podman lo anota: `podman inspect --format '{{.State.OOMKilled}}' <contenedor>`.
+
 ## Qué nunca va en el repo de datos
 
 - **Contraseñas ni claves**: viven en KeePassXC (SPEC 4.5). En el inventario solo sus nombres.
