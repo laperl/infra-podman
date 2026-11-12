@@ -1,0 +1,17 @@
+# Ansible managed
+# Network of one consumer of dev-pg-main (D9, SPEC 4.4): only that consumer and this
+# instance. Internal: no way out to the internet, the LAN or the host, not even by DNS.
+# Isolated from every other isolated network. No Subnet=: Podman chooses a free one, and
+# the role reads it for pg_hba.conf (docs/POSTGRES.md, section 3).
+[Network]
+NetworkName=dev-ai-pg-main-net
+Internal=true
+Options=isolate=true
+# Podman's DNS of the network resolves the names of its containers and sends any other
+# question to the host's servers, even on an internal network (aardvark-dns 1.4, Podman
+# 4.9): a way out for data. Sent here instead, where nothing answers (R45).
+DNS=127.0.0.1
+Label=infra.env=dev
+Label=infra.app=pg-main
+Label=infra.component=net
+Label=infra.managed-by=infra-podman

@@ -81,9 +81,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Podman and Python from Fedora
+      # diffutils: tests/quadlet/run.sh compares the rendered units with the golden
+      # copy using diff, which the minimal Fedora image does not include.
+      - name: Install Podman, Python and diffutils from Fedora
         run: |
-          dnf install -y -q --setopt=install_weak_deps=False podman python3
+          dnf install -y -q --setopt=install_weak_deps=False podman python3 diffutils
           podman --version
 
       - name: Install pinned Python toolchain

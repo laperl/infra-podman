@@ -10,7 +10,9 @@ name: lifecycle
     paths:
       - roles/**
       - playbooks/**
+      - plugins/**
       - ansible.cfg
+      - scripts/requirements-lint.txt
       - tests/lifecycle/**
       - docs/OPERATIONS.md
       - .github/workflows/lifecycle.yml

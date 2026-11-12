@@ -1,0 +1,39 @@
+# Ansible managed
+# Server for the copy of the backups (SPEC 4.11, R44): restic's rest-server.
+#   --append-only    clients can add backups, never delete or change them
+#   --private-repos  each user only reaches its own folder: user <installation>,
+#                    repositories <installation>/<env>-<machine> (at most two levels)
+#   --max-size       limit of everything it stores, in bytes
+# Only on 127.0.0.1; other machines reach it through `tailscale serve` (R25).
+# The image's entrypoint passes OPTIONS and PASSWORD_FILE to rest-server.
+[Unit]
+Description=Backup server, restic rest-server (dev)
+
+[Container]
+ContainerName=dev-backup-server
+Image=docker.io/restic/rest-server@sha256:d2aff06f47eb38637dff580c3e6bce4af98f386c396a25d32eb6727ec96214a5
+Label=infra.env=dev
+Label=infra.app=backup
+Label=infra.component=backup-server
+Label=infra.managed-by=infra-podman
+
+Volume=dev-backup-server-data.volume:/data:Z
+Volume=/home/svc_runner/.config/infra-podman/dev-backup-server:/auth:ro,Z
+Environment=PASSWORD_FILE=/auth/htpasswd
+Environment="OPTIONS=--append-only --private-repos --max-size 32212254720"
+PublishPort=127.0.0.1:18000:8000
+
+# Resource limits (R46): the only place they are written.
+PodmanArgs=--memory=512m --cpus=1
+PidsLimit=200
+ReadOnly=true
+Tmpfs=/tmp
+DropCapability=all
+NoNewPrivileges=true
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,9 @@
+# Ansible managed
+# Local restic repository of dev-backup, encrypted by restic. Never removed when
+# the service is destroyed (SPEC 4.2).
+[Volume]
+VolumeName=dev-backup-repo
+Label=infra.env=dev
+Label=infra.app=backup
+Label=infra.component=data
+Label=infra.managed-by=infra-podman

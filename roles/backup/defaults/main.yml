@@ -42,8 +42,12 @@ backup_remote_max_age_hours: 168
 # Minute of every hour when the copy runs: away from the local backup at backup_time.
 backup_copy_minute: 30
 
-# Limit for the restic container (docs/COMPATIBILITY.md: no Memory= key in 4.9).
+# Resource limits of the two restic containers, backup and backup-copy (R46). Memory and
+# CPU go through PodmanArgs= (docs/COMPATIBILITY.md: no Memory= key in 4.9); the number of
+# processes, through PidsLimit=.
 backup_memory: 1g
+backup_cpus: "2"
+backup_pids_limit: 500
 backup_timeout: 2h
 
 # Paths shared with deploy.sh and the operator's notifier. Do not override.

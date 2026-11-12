@@ -3,8 +3,21 @@
 #   - fixtures/valid           must pass
 #   - fixtures/invalid/<case>  must fail, with the message in <case>/expected.txt
 #   - every unit each role declares (<role>_quadlet_units) must pass, rendered under its real name
+#   - those rendered units must be identical to the copy kept in tests/quadlet/golden
 # Requires ansible-playbook, python3 and the Podman generator in PATH/default location.
+#
+# The golden copy is what the roles install with the values of ci_vars.yml. It makes every
+# change to a unit visible in the pull request, and proves that a refactor changes none.
+# After changing a template or a default on purpose, refresh it and commit the result:
+#   tests/quadlet/run.sh --update-golden
 set -euo pipefail
+
+update_golden=false
+case ${1:-} in
+  '') ;;
+  --update-golden) update_golden=true ;;
+  *) echo "usage: $0 [--update-golden]" >&2; exit 2 ;;
+esac
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 here="$repo/tests/quadlet"
@@ -47,6 +60,19 @@ echo "== role templates"
 render roles "$repo/roles" "$work/roles"
 ls "$work/roles"
 "$repo/scripts/validate-quadlets.sh" "$work/roles" || failures=$((failures + 1))
+
+echo "== role templates against the golden copy"
+if $update_golden; then
+  rm -rf "$here/golden"
+  cp -r "$work/roles" "$here/golden"
+  echo "tests/quadlet/golden refreshed: review it with git diff and commit it"
+elif diff -ru "$here/golden" "$work/roles"; then
+  echo "ok: identical to tests/quadlet/golden"
+else
+  echo "FAIL: the rendered units differ from tests/quadlet/golden (diff above)."
+  echo "If the change is intended, run: tests/quadlet/run.sh --update-golden"
+  failures=$((failures + 1))
+fi
 
 if [[ $failures -gt 0 ]]; then
   echo "$failures check(s) failed"

@@ -1,0 +1,8 @@
+# Ansible managed
+# Data of dev-pg-main. Never removed when the service is destroyed (SPEC 4.2).
+[Volume]
+VolumeName=dev-pg-main-data
+Label=infra.env=dev
+Label=infra.app=pg-main
+Label=infra.component=data
+Label=infra.managed-by=infra-podman
