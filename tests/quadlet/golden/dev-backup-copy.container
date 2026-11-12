@@ -35,8 +35,10 @@ Environment=BACKUP_REMOTE_PATH=ci-site/dev-localhost
 Environment=BACKUP_REMOTE_MAX_BYTES=32212254720
 Environment=BACKUP_REMOTE_WARN_PERCENT=80
 
-# Entrypoint= does not exist in Quadlet 4.9 (docs/COMPATIBILITY.md).
-PodmanArgs=--entrypoint=/bin/sh --memory=1g
+# Entrypoint= does not exist in Quadlet 4.9 (docs/COMPATIBILITY.md). Resource limits
+# (R46): the only place they are written.
+PodmanArgs=--entrypoint=/bin/sh --memory=1g --cpus=2
+PidsLimit=500
 Exec=/scripts/backup-copy.sh
 
 ReadOnly=true

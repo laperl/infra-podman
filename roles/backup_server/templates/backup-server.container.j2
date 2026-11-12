@@ -23,7 +23,9 @@ Environment=PASSWORD_FILE=/auth/htpasswd
 Environment="OPTIONS=--append-only --private-repos --max-size {{ ((backup_server_max_size_gb | float) * 1073741824) | int }}"
 PublishPort=127.0.0.1:{{ backup_server_port }}:8000
 
-PodmanArgs=--memory={{ backup_server_memory }}
+# Resource limits (R46): the only place they are written.
+PodmanArgs=--memory={{ backup_server_memory }} --cpus={{ backup_server_cpus }}
+PidsLimit={{ backup_server_pids_limit }}
 ReadOnly=true
 Tmpfs=/tmp
 DropCapability=all

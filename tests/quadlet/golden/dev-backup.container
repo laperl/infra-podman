@@ -33,8 +33,10 @@ Environment=BACKUP_KEEP_DAILY=7
 Environment=BACKUP_KEEP_MONTHLY=12
 Environment=BACKUP_KEEP_YEARLY=5
 
-# Entrypoint= does not exist in Quadlet 4.9 (docs/COMPATIBILITY.md).
-PodmanArgs=--entrypoint=/bin/sh --memory=1g
+# Entrypoint= does not exist in Quadlet 4.9 (docs/COMPATIBILITY.md). Resource limits
+# (R46): the only place they are written.
+PodmanArgs=--entrypoint=/bin/sh --memory=1g --cpus=2
+PidsLimit=500
 Exec=/scripts/backup-run.sh
 
 Network=none

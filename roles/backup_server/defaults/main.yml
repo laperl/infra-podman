@@ -20,8 +20,11 @@ backup_server_max_size_gb: 30
 # no Tailscale (the DEV VM, CI): there the client shares the server's network instead.
 backup_server_tailscale: true
 
-# Limit of the container (docs/COMPATIBILITY.md: no Memory= key in 4.9).
+# Resource limits of the container (R46). Memory and CPU go through PodmanArgs=
+# (docs/COMPATIBILITY.md: no Memory= key in 4.9); the number of processes, through PidsLimit=.
 backup_server_memory: 512m
+backup_server_cpus: "1"
+backup_server_pids_limit: 200
 
 # Home of the service user. Overwritten by the role with the real one (getent); this value
 # only serves to render the templates in CI.

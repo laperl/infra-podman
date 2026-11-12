@@ -35,8 +35,10 @@ Environment=BACKUP_REMOTE_PATH={{ infra_site }}/{{ infra_env }}-{{ inventory_hos
 Environment=BACKUP_REMOTE_MAX_BYTES={{ ((backup_remote_max_size_gb | float) * 1073741824) | int }}
 Environment=BACKUP_REMOTE_WARN_PERCENT={{ backup_remote_warn_percent }}
 
-# Entrypoint= does not exist in Quadlet 4.9 (docs/COMPATIBILITY.md).
-PodmanArgs=--entrypoint=/bin/sh --memory={{ backup_memory }}
+# Entrypoint= does not exist in Quadlet 4.9 (docs/COMPATIBILITY.md). Resource limits
+# (R46): the only place they are written.
+PodmanArgs=--entrypoint=/bin/sh --memory={{ backup_memory }} --cpus={{ backup_cpus }}
+PidsLimit={{ backup_pids_limit }}
 Exec=/scripts/backup-copy.sh
 {% if backup_remote_network %}
 Network={{ backup_remote_network }}

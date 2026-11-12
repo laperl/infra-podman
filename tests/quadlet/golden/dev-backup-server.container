@@ -23,7 +23,9 @@ Environment=PASSWORD_FILE=/auth/htpasswd
 Environment="OPTIONS=--append-only --private-repos --max-size 32212254720"
 PublishPort=127.0.0.1:18000:8000
 
-PodmanArgs=--memory=512m
+# Resource limits (R46): the only place they are written.
+PodmanArgs=--memory=512m --cpus=1
+PidsLimit=200
 ReadOnly=true
 Tmpfs=/tmp
 DropCapability=all
