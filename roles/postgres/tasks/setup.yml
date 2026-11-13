@@ -200,7 +200,8 @@
       ansible.builtin.debug:
         msg: >-
           {{ item.name }}: groups {{ item.name }}_owner, {{ item.name }}_writer, {{ item.name }}_reader;
-          users {% for u in item.users or [] %}{{ u.name }} ({{ u.group }}, from {{ u.consumer }}){{ ', ' if not loop.last }}{% else %}none{% endfor %}
+          users {% for u in item.users | default([], true) -%}
+          {{ u.name }} ({{ u.group }}, from {{ u.consumer }}){{ ', ' if not loop.last }}{% else %}none{% endfor %}
       loop: "{{ postgres_databases }}"
       loop_control:
         label: "{{ item.name }}"

@@ -11,7 +11,7 @@
 {% set wanted = {} %}
 {% set user_dbs = {} %}
 {% for db in postgres_databases %}
-{% for user in db.users or [] %}
+{% for user in db.users | default([], true) %}
 {% set _ = wanted.update({user.name: (wanted[user.name] | default([])) + [db.name ~ '_' ~ user.group]}) %}
 {% set _ = user_dbs.update({user.name: (user_dbs[user.name] | default([])) + [db.name]}) %}
 {% endfor %}

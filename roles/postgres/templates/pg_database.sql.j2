@@ -41,7 +41,7 @@ REVOKE CONNECT, TEMPORARY ON DATABASE "{{ db }}" FROM PUBLIC;
 GRANT CONNECT ON DATABASE "{{ db }}" TO "{{ db }}_owner", "{{ db }}_writer", "{{ db }}_reader", backup;
 
 -- Each user works in the schema of its application; those of _owner, as _owner (R35).
-{% for user in postgres_db.users or [] %}
+{% for user in postgres_db.users | default([], true) %}
 ALTER ROLE "{{ user.name }}" IN DATABASE "{{ db }}" SET search_path = "{{ db }}";
 {% if user.group == 'owner' %}
 ALTER ROLE "{{ user.name }}" IN DATABASE "{{ db }}" SET role = "{{ db }}_owner";
