@@ -1,0 +1,47 @@
+---
+# One place to install or remove a systemd timer of the service user (the daily backup,
+# the copy to the backup server, the scheduled tasks of an application). See
+# defaults/main.yml for the interface.
+#
+# Use it like this, from a role with templates/myapp-cron.service.j2 and .timer.j2:
+#   - name: Install the scheduled tasks
+#     ansible.builtin.include_role:
+#       name: user_units
+#     vars:
+#       user_units_files:
+#         - {template: myapp-cron.service.j2, name: "{{ myapp_name }}-cron.service"}
+#         - {template: myapp-cron.timer.j2, name: "{{ myapp_name }}-cron.timer"}
+#       user_units_timer: "{{ myapp_name }}-cron.timer"
+# To remove them: the same, with user_units_state: absent (template is not needed).
+- name: Check the interface
+  ansible.builtin.assert:
+    that:
+      - service_user is defined
+      - user_units_state in ['present', 'absent']
+      - user_units_files | length > 0
+      - user_units_files | selectattr('name', 'undefined') | list | length == 0
+      - user_units_files | map(attribute='name') | map('regex_search', '\.(timer|service)$') | select('none') | list | length == 0
+      - user_units_state == 'absent' or user_units_files | selectattr('template', 'undefined') | list | length == 0
+      - user_units_timer is match('.*\.timer$')
+      - user_units_timer in user_units_files | map(attribute='name')
+    fail_msg: >-
+      user_units needs user_units_files (name and, to install, template), only .timer and
+      .service, and user_units_timer, one of those names
+    quiet: true
+
+# Its home and environment, read in one place (roles/service_user).
+- name: Read the service user
+  ansible.builtin.include_role:
+    name: service_user
+
+- name: Set the systemd directory of the service user
+  ansible.builtin.set_fact:
+    user_units_dir: "{{ service_user_home }}/.config/systemd/user"
+
+- name: Install the units
+  ansible.builtin.include_tasks: install.yml
+  when: user_units_state == 'present'
+
+- name: Remove the units
+  ansible.builtin.include_tasks: remove.yml
+  when: user_units_state == 'absent'

@@ -2,43 +2,23 @@
 # Stop the daily backups and the copy to the backup server. The repository volume and its
 # unit stay (SPEC 4.2, 8), and so do the copies on the server. The
 # operator's notifier stays too: remove it by hand (docs/SETUP.md, step 17).
-- name: Stop and disable the timers
-  ansible.builtin.systemd_service:
-    name: "{{ item }}"
-    enabled: false
-    state: stopped
-    scope: user
+- name: Stop and remove the timers
+  ansible.builtin.include_role:
+    name: user_units
+  vars:
+    user_units_state: absent
+    user_units_files:
+      - name: "{{ backup_timer_item }}"
+    user_units_timer: "{{ backup_timer_item }}"
   loop:
     - "{{ backup_name }}.timer"
     - "{{ backup_copy_name }}.timer"
-  environment: "{{ backup_env }}"
-  become: true
-  become_user: "{{ service_user }}"
-  failed_when: false
-
-- name: Remove the timers
-  ansible.builtin.file:
-    path: "{{ backup_home }}/.config/systemd/user/{{ item }}"
-    state: absent
-  loop:
-    - "{{ backup_name }}.timer"
-    - "{{ backup_copy_name }}.timer"
-  become: true
-  become_user: "{{ service_user }}"
-
-- name: Resolve the templates
-  ansible.builtin.set_fact:
-    backup_units_resolved: >-
-      {{ ([] if ansible_loop.first else backup_units_resolved)
-         + [{'name': item.name, 'template': role_path ~ '/templates/' ~ item.template}] }}
-  loop: "{{ backup_quadlet_units }}"
   loop_control:
-    extended: true
-    label: "{{ item.name }}"
+    loop_var: backup_timer_item
 
 - name: Remove the container unit with quadlet_deploy
   ansible.builtin.include_role:
     name: quadlet_deploy
   vars:
-    quadlet_deploy_units: "{{ backup_units_resolved }}"
+    quadlet_deploy_units: "{{ backup_quadlet_units }}"
     quadlet_deploy_state: absent

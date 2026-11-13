@@ -2,10 +2,14 @@
 # Interface of quadlet_deploy (SPEC 4.2). The calling role sets these with include_role.
 #
 # Units to install. Each item:
-#   template: absolute path of the .j2 file (resolve it in the caller with set_fact:
-#             a role_path passed lazily would point at this role instead)
+#   template: the .j2 file, by its name inside quadlet_deploy_templates
 #   name:     file name, the same as the object it creates (SPEC 4.12), e.g. prod-pg-main.container
 quadlet_deploy_units: []
+
+# Folder with those templates: the templates/ of the role that includes this one. Ansible
+# gives the path of that role in ansible_parent_role_paths, the nearest first; role_path
+# would be this role's own. Only set it to use another folder.
+quadlet_deploy_templates: "{{ ansible_parent_role_paths[0] }}/templates"
 
 # Images the units use, pulled before starting so the first start does not run into
 # TimeoutStartSec while downloading.

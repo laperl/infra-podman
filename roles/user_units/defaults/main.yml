@@ -1,0 +1,23 @@
+---
+# Interface of user_units: plain systemd units of the service user (a timer and, when it
+# is not a Quadlet container, the service it starts), in ~/.config/systemd/user. Quadlet
+# units (.container, .volume, .network) are not for this role: roles/quadlet_deploy.
+# The calling role sets these with include_role.
+#
+# The unit files. Each item:
+#   template: the .j2 file, by its name inside user_units_templates (not needed to remove)
+#   name:     file name of the unit, e.g. prod-backup.timer
+user_units_files: []
+
+# The timer to enable and start (to stop and disable, with state absent): one of the names
+# above.
+user_units_timer: ""
+
+# present: install the files, reload systemd when one changed, enable and start the timer.
+# absent: stop and disable the timer and remove the files. No data is touched.
+user_units_state: present
+
+# Folder with those templates: the templates/ of the role that includes this one. Ansible
+# gives the path of that role in ansible_parent_role_paths, the nearest first; role_path
+# would be this role's own. Only set it to use another folder.
+user_units_templates: "{{ ansible_parent_role_paths[0] }}/templates"

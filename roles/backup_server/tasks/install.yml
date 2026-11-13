@@ -111,21 +111,11 @@
   changed_when: true
   when: backup_server_hash_check.rc != 0
 
-- name: Resolve the templates
-  ansible.builtin.set_fact:
-    backup_server_units_resolved: >-
-      {{ ([] if ansible_loop.first else backup_server_units_resolved)
-         + [{'name': item.name, 'template': role_path ~ '/templates/' ~ item.template}] }}
-  loop: "{{ backup_server_quadlet_units }}"
-  loop_control:
-    extended: true
-    label: "{{ item.name }}"
-
 - name: Deploy with quadlet_deploy
   ansible.builtin.include_role:
     name: quadlet_deploy
   vars:
-    quadlet_deploy_units: "{{ backup_server_units_resolved }}"
+    quadlet_deploy_units: "{{ backup_server_quadlet_units }}"
     quadlet_deploy_images:
       - "{{ rest_server_image }}"
     quadlet_deploy_state: present

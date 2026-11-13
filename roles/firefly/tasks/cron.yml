@@ -1,40 +1,13 @@
 ---
 # Included by main.yml: Firefly's daily scheduled tasks, a plain systemd timer of the
 # service user (not a container: it runs inside Firefly's). Same pattern as the backup timer.
-- name: Create the systemd directory of the service user
-  ansible.builtin.file:
-    path: "{{ firefly_service_home }}/.config/systemd/user"
-    state: directory
-    mode: "0700"
-  become: true
-  become_user: "{{ service_user }}"
-
-- name: Install the service and the timer
-  ansible.builtin.template:
-    src: firefly-cron.{{ item }}.j2
-    dest: "{{ firefly_service_home }}/.config/systemd/user/{{ firefly_cron_name }}.{{ item }}"
-    mode: "0644"
-  loop: [service, timer]
-  become: true
-  become_user: "{{ service_user }}"
-  register: firefly_cron_units
-
-- name: Reload the service user's systemd for them
-  ansible.builtin.systemd_service:
-    daemon_reload: true
-    scope: user
-  environment: "{{ firefly_env }}"
-  become: true
-  become_user: "{{ service_user }}"
-  when: firefly_cron_units is changed and not ansible_check_mode
-
-- name: Enable and start the daily timer
-  ansible.builtin.systemd_service:
-    name: "{{ firefly_cron_name }}.timer"
-    enabled: true
-    state: started
-    scope: user
-  environment: "{{ firefly_env }}"
-  become: true
-  become_user: "{{ service_user }}"
-  when: not (ansible_check_mode and firefly_cron_units is changed)
+- name: Install the service and the timer, enable and start the timer
+  ansible.builtin.include_role:
+    name: user_units
+  vars:
+    user_units_files:
+      - template: firefly-cron.service.j2
+        name: "{{ firefly_cron_name }}.service"
+      - template: firefly-cron.timer.j2
+        name: "{{ firefly_cron_name }}.timer"
+    user_units_timer: "{{ firefly_cron_name }}.timer"

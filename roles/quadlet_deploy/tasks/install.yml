@@ -15,7 +15,7 @@
   block:
     - name: Render the units into the temporary directory
       ansible.builtin.template:
-        src: "{{ item.template }}"
+        src: "{{ quadlet_deploy_templates }}/{{ item.template }}"
         dest: "{{ quadlet_deploy_tmp.path }}/{{ item.name }}"
         mode: "0644"
       loop: "{{ quadlet_deploy_units }}"
@@ -61,7 +61,7 @@
 
 - name: Install the units
   ansible.builtin.template:
-    src: "{{ item.template }}"
+    src: "{{ quadlet_deploy_templates }}/{{ item.template }}"
     dest: "{{ quadlet_deploy_dir }}/{{ item.name }}"
     mode: "0644"
   loop: "{{ quadlet_deploy_units }}"

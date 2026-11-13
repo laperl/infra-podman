@@ -1,42 +1,28 @@
 ---
 # No backup_remote_url: no copy to the backup server. If an earlier apply installed it,
 # stop it and remove its timer and container unit. Nothing on the server is touched.
-- name: Find an installed copy
-  ansible.builtin.stat:
-    path: "{{ backup_home }}/.config/systemd/user/{{ backup_copy_name }}.timer"
+- name: Stop and remove the copy timer
+  ansible.builtin.include_role:
+    name: user_units
+  vars:
+    user_units_state: absent
+    user_units_files:
+      - name: "{{ backup_copy_name }}.timer"
+    user_units_timer: "{{ backup_copy_name }}.timer"
+
+- name: Remove the copy container unit
+  ansible.builtin.file:
+    path: "{{ backup_home }}/.config/containers/systemd/{{ backup_copy_name }}.container"
+    state: absent
   become: true
   become_user: "{{ service_user }}"
-  register: backup_copy_installed
+  register: backup_copy_unit_removed
 
-- name: Remove the copy to the backup server
-  when: backup_copy_installed.stat.exists
-  block:
-    - name: Stop and disable the copy timer
-      ansible.builtin.systemd_service:
-        name: "{{ backup_copy_name }}.timer"
-        enabled: false
-        state: stopped
-        scope: user
-      environment: "{{ backup_env }}"
-      become: true
-      become_user: "{{ service_user }}"
-      failed_when: false
-
-    - name: Remove the copy timer and container unit
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - "{{ backup_home }}/.config/systemd/user/{{ backup_copy_name }}.timer"
-        - "{{ backup_home }}/.config/containers/systemd/{{ backup_copy_name }}.container"
-      become: true
-      become_user: "{{ service_user }}"
-
-    - name: Reload the service user's systemd
-      ansible.builtin.systemd_service:
-        daemon_reload: true
-        scope: user
-      environment: "{{ backup_env }}"
-      become: true
-      become_user: "{{ service_user }}"
-      when: not ansible_check_mode
+- name: Reload the service user's systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+    scope: user
+  environment: "{{ backup_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  when: backup_copy_unit_removed is changed and not ansible_check_mode
