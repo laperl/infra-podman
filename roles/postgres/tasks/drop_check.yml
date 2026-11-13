@@ -3,7 +3,7 @@
 # what is no longer in the inventory and may be dropped, and stops before any change if:
 #   - every database would go (databases: missing or empty) without -e postgres_confirm_drop;
 #   - someone is connected to a database or as a user that would be dropped;
-#   - a database would be dropped and the backup before it fails (backup_now.yml).
+#   - a database would be dropped and the backup before it fails (roles/backup/tasks/run_now.yml).
 # Only what carries postgres_managed_mark is ever dropped; anything else not in the inventory
 # is only reported. drop.yml, after the deploy, drops exactly what this file approved.
 
@@ -126,16 +126,18 @@
       when: postgres_connected.stdout_lines is defined and postgres_connected.stdout_lines | length > 0 and ansible_check_mode
 
     - name: Back up before dropping a database
-      ansible.builtin.include_tasks: backup_now.yml
+      ansible.builtin.include_role:
+        name: backup
+        tasks_from: run_now.yml
       when: postgres_drop_dbs | length > 0
       vars:
-        postgres_backup_reason: pre-drop
-        postgres_backup_missing_msg: >-
+        backup_now_reason: pre-drop
+        backup_now_missing_msg: >-
           {{ postgres_name }} would drop the databases {{ postgres_drop_dbs | join(', ') }}, and there
           is no backup service on {{ inventory_hostname }} to make a copy first. Nothing has been
           changed. Apply the backup playbook before.
-        postgres_backup_plan_msg: "{{ postgres_name }} drops databases: apply will run {{ infra_env }}-backup.service first."
-        postgres_backup_failed_msg: >-
+        backup_now_plan_msg: "{{ postgres_name }} drops databases: apply will run {{ infra_env }}-backup.service first."
+        backup_now_failed_msg: >-
           The backup before dropping {{ postgres_drop_dbs | join(', ') }} from {{ postgres_name }}
           failed, so nothing has been dropped.
 

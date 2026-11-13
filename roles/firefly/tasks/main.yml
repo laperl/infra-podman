@@ -53,8 +53,14 @@
 # Before Firefly starts a new image, which changes the structure of its database, a
 # backup (docs/services/firefly.md, 4; D11).
 - name: Back up before an image change
-  ansible.builtin.include_tasks: backup_before_image_change.yml
+  ansible.builtin.include_role:
+    name: backup
+    tasks_from: before_image_change.yml
   when: firefly_state == 'present'
+  vars:
+    backup_image_container: "{{ firefly_name }}"
+    backup_image_new: "{{ firefly_container_image }}"
+    backup_image_effect: would start a new image, which changes its database
 
 # Absolute paths, resolved here: role_path passed lazily to quadlet_deploy would point
 # at quadlet_deploy itself.

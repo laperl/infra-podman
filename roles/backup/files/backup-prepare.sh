@@ -6,7 +6,7 @@
 #                             role backup through the socket (docs/POSTGRES.md), and the
 #                             roles without passwords (they live in KeePassXC)
 #   file <app> <name> <path>  a copy of that file
-# The reason of the run is daily, or what the file next-reason says (the postgres role
+# The reason of the run is daily, or what the file next-reason says (tasks/run_now.yml
 # writes pre-upgrade there before an image change); restic tags the snapshots with it.
 # On failure the reason goes to prepare-error, for backup-status.sh and the notifier.
 set -euo pipefail

@@ -1,0 +1,70 @@
+---
+# For the roles of services with data, not for this one's main.yml: a copy before a
+# container restarts on a new image, so the operator can go back by hand (D11: no automatic
+# rollback). Compares the image of the running container with the one about to be deployed
+# (by image ID: the same digest is the same image). If they differ, runs the daily backup
+# service now and waits for it (run_now.yml); if it fails, the image is not changed.
+# Nothing happens when the container does not exist or is stopped: a stopped PostgreSQL
+# cannot be dumped.
+#
+# Parameters:
+#   backup_image_container  name of the container, e.g. prod-pg-main
+#   backup_image_new        the image about to be deployed, pinned by digest (D6)
+#   backup_image_effect     optional: what the new image does, for the message when the
+#                           machine has no backup service
+#
+# Use it like this, before quadlet_deploy:
+#   - name: Back up before an image change
+#     ansible.builtin.include_role:
+#       name: backup
+#       tasks_from: before_image_change.yml
+#     vars:
+#       backup_image_container: "{{ postgres_name }}"
+#       backup_image_new: "{{ postgres_image }}"
+- name: Read the service user
+  ansible.builtin.include_role:
+    name: service_user
+
+- name: Read the image of the running container
+  ansible.builtin.command:
+    argv: [podman, container, inspect, --format, "{% raw %}{{.State.Running}} {{.Image}}{% endraw %}", "{{ backup_image_container }}"]
+  environment: "{{ service_user_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: backup_image_current
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# Not present yet means it has to be pulled: a new image.
+- name: Read the ID of the image to deploy
+  ansible.builtin.command:
+    argv: [podman, image, inspect, --format, "{% raw %}{{.Id}}{% endraw %}", "{{ backup_image_new }}"]
+  environment: "{{ service_user_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: backup_image_new_id
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: backup_image_current.rc == 0 and backup_image_current.stdout is match('^true ')
+
+- name: Decide whether the image changes
+  ansible.builtin.set_fact:
+    backup_image_changes: >-
+      {{ backup_image_current.rc == 0 and backup_image_current.stdout is match('^true ')
+         and (backup_image_new_id.rc != 0 or backup_image_new_id.stdout != backup_image_current.stdout.split(' ')[1]) }}
+
+- name: Back up first
+  ansible.builtin.include_tasks: run_now.yml
+  when: backup_image_changes
+  vars:
+    backup_now_reason: pre-upgrade
+    backup_now_missing_msg: >-
+      {{ backup_image_container }} {{ backup_image_effect | default('would restart on a new image') }}, and there
+      is no backup service on {{ inventory_hostname }} to make a copy first. Apply the backup
+      playbook before (D11).
+    backup_now_plan_msg: "{{ backup_image_container }} changes image: apply will run {{ backup_name }}.service first."
+    backup_now_failed_msg: >-
+      The backup before changing the image of {{ backup_image_container }} failed, so the image has
+      NOT been changed (D11).
