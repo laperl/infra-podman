@@ -42,3 +42,9 @@ tests/backup/run.sh
 tests/secrets/run.sh
 tests/images/run.sh
 ```
+
+## Licencia
+
+Copyright (C) 2026 laperl.
+
+Este proyecto es software libre: puedes redistribuirlo y modificarlo según los términos de la GNU General Public License, versión 3 o (a tu elección) cualquier versión posterior, publicada por la Free Software Foundation. Se distribuye sin ninguna garantía. El texto completo está en [`LICENSE`](LICENSE).
