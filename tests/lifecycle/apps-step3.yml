@@ -1,6 +1,7 @@
 ---
 # postgres job, after apps-step2.yml: demo_ro leaves demo but stays in demo2, so it is not
-# dropped. Fictitious names only.
+# dropped. demo3 is a database without users yet (no users: key), as docs/POSTGRES.md,
+# section 7, lets the operator declare it. Fictitious names only.
 postgres_instances:
   - name: main
     superuser: ci_admin
@@ -12,3 +13,4 @@ postgres_instances:
       - name: demo2
         users:
           - {name: demo_ro, group: reader, consumer: demo}
+      - name: demo3

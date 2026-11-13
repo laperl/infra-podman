@@ -38,15 +38,18 @@ postgres_retire: ""
 # What the role creates carries this comment in PostgreSQL; it only removes what has it.
 postgres_managed_mark: managed by infra-podman
 
+# A database may have no users (no users: key, or an empty one): every place that reads
+# them accepts both.
+#
 # Consumers with a network of their own (D9, SPEC 4.4), derived from the users. None: the
 # container runs with Network=none, reachable only through podman exec. Do not override.
 postgres_consumers: >-
-  {{ postgres_databases | selectattr('users') | map(attribute='users') | flatten
+  {{ postgres_databases | selectattr('users', 'defined') | selectattr('users') | map(attribute='users') | flatten
      | map(attribute='consumer') | unique | sort }}
 
 # Names of the users, each once, derived. Do not override.
 postgres_user_names: >-
-  {{ postgres_databases | selectattr('users') | map(attribute='users') | flatten
+  {{ postgres_databases | selectattr('users', 'defined') | selectattr('users') | map(attribute='users') | flatten
      | map(attribute='name') | unique | sort }}
 
 # Groups of the declared databases, derived. Do not override.

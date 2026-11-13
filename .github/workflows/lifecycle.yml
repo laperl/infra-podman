@@ -273,6 +273,9 @@ jobs:
           $C role demo_ro present
           $C groups demo_ro demo2_reader
           $C secret dev-demo-ro-db-password present
+          # A database declared without users (apps-step3.yml) is created with its groups.
+          $C db demo3 present
+          $C role demo3_owner present
           tests/lifecycle/playbook.sh -i "$INV" $STEP playbooks/postgres.yml 2>&1 | tee second.log | tee -a all.log
           grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply changed something"; exit 1; }
 

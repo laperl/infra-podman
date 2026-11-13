@@ -46,9 +46,10 @@
     quiet: true
   vars:
     postgres_users: >-
-      {{ postgres_databases | selectattr('users') | map(attribute='users') | flatten }}
+      {{ postgres_databases | selectattr('users', 'defined') | selectattr('users') | map(attribute='users') | flatten }}
     postgres_per_db: >-
-      {{ postgres_databases | selectattr('users') | map(attribute='users') | map('map', attribute='name') | map('list') | list }}
+      {{ postgres_databases | selectattr('users', 'defined') | selectattr('users') | map(attribute='users')
+         | map('map', attribute='name') | map('list') | list }}
 
 # Its home, ids and environment, read in one place (roles/service_user).
 - name: Read the service user
