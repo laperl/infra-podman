@@ -1,0 +1,83 @@
+---
+# For the other roles, not for this one's main.yml: runs the daily backup service now
+# (everything backup.conf lists on this machine) and waits for it. If there is no backup
+# service, or it fails, the playbook stops before changing anything. A plan only says
+# what the apply would do.
+#
+# Parameters:
+#   backup_now_reason       pre-upgrade | pre-drop: the reason= tag of the copy
+#   backup_now_missing_msg  what to say when this machine has no backup service
+#   backup_now_plan_msg     what a plan says
+#   backup_now_failed_msg   what to say when the backup fails (the logs are added)
+#
+# Use it like this, from any role:
+#   - name: Back up before dropping a database
+#     ansible.builtin.include_role:
+#       name: backup
+#       tasks_from: run_now.yml
+#     vars:
+#       backup_now_reason: pre-drop
+#       backup_now_missing_msg: ...
+#       backup_now_plan_msg: ...
+#       backup_now_failed_msg: ...
+#
+# The caller has not run this role's main.yml, so backup_home may still be the default of
+# defaults/main.yml: the real home is read here (roles/service_user).
+- name: Read the service user
+  ansible.builtin.include_role:
+    name: service_user
+
+- name: Find the backup service of the backup playbook
+  ansible.builtin.command:
+    argv: [systemctl, --user, cat, "{{ backup_name }}.service"]
+  environment: "{{ service_user_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: backup_now_unit
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Require the backup service
+  ansible.builtin.assert:
+    that: backup_now_unit.rc == 0
+    fail_msg: >-
+      {{ backup_now_missing_msg }}
+    quiet: true
+
+- name: Say what the plan would do
+  ansible.builtin.debug:
+    msg: "{{ backup_now_plan_msg }}"
+  when: ansible_check_mode
+
+# Tagged with its reason (pre-upgrade, pre-drop): its own retention group, so a daily run
+# never removes it. files/backup-prepare.sh reads this file and deletes it.
+- name: Mark the reason of the next backup
+  ansible.builtin.copy:
+    content: "{{ backup_now_reason }}\n"
+    dest: "{{ service_user_home }}/.local/state/infra-podman/backup/next-reason"
+    mode: "0600"
+  become: true
+  become_user: "{{ service_user }}"
+  when: not ansible_check_mode
+
+# Waits until the one-shot service ends; a failed backup stops the playbook here.
+- name: Run the backup now
+  ansible.builtin.command:
+    argv: [systemctl, --user, start, "{{ backup_name }}.service"]
+  environment: "{{ service_user_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: backup_now_run
+  changed_when: true
+  failed_when: false
+  when: not ansible_check_mode
+
+- name: Stop if the backup failed (nothing is changed)
+  ansible.builtin.assert:
+    that: backup_now_run.rc == 0
+    fail_msg: >-
+      {{ backup_now_failed_msg }} Logs:
+      sudo journalctl _SYSTEMD_USER_UNIT={{ backup_name }}.service -n 100
+    quiet: true
+  when: not ansible_check_mode
