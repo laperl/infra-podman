@@ -150,23 +150,11 @@
     backup_image_container: "{{ postgres_name }}"
     backup_image_new: "{{ postgres_image }}"
 
-# Absolute paths, resolved here: role_path passed lazily to quadlet_deploy would point
-# at quadlet_deploy itself.
-- name: Resolve the templates of this instance
-  ansible.builtin.set_fact:
-    postgres_units_resolved: >-
-      {{ ([] if ansible_loop.first else postgres_units_resolved)
-         + [{'name': item.name, 'template': role_path ~ '/templates/' ~ item.template}] }}
-  loop: "{{ postgres_quadlet_units }}"
-  loop_control:
-    extended: true
-    label: "{{ item.name }}"
-
 - name: Deploy with quadlet_deploy
   ansible.builtin.include_role:
     name: quadlet_deploy
   vars:
-    quadlet_deploy_units: "{{ postgres_units_resolved }}"
+    quadlet_deploy_units: "{{ postgres_quadlet_units }}"
     quadlet_deploy_images:
       - "{{ postgres_image }}"
     quadlet_deploy_wait_healthy:

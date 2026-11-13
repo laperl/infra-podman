@@ -62,18 +62,6 @@
     backup_image_new: "{{ firefly_container_image }}"
     backup_image_effect: would start a new image, which changes its database
 
-# Absolute paths, resolved here: role_path passed lazily to quadlet_deploy would point
-# at quadlet_deploy itself.
-- name: Resolve the templates
-  ansible.builtin.set_fact:
-    firefly_units_resolved: >-
-      {{ ([] if ansible_loop.first else firefly_units_resolved)
-         + [{'name': item.name, 'template': role_path ~ '/templates/' ~ item.template}] }}
-  loop: "{{ firefly_quadlet_units }}"
-  loop_control:
-    extended: true
-    label: "{{ item.name }}"
-
 # The scheduled tasks go first when removing: their service needs Firefly's.
 - name: Remove the scheduled tasks
   ansible.builtin.include_tasks: cron_remove.yml
@@ -84,7 +72,7 @@
   ansible.builtin.include_role:
     name: quadlet_deploy
   vars:
-    quadlet_deploy_units: "{{ firefly_units_resolved }}"
+    quadlet_deploy_units: "{{ firefly_quadlet_units }}"
     quadlet_deploy_images:
       - "{{ firefly_container_image }}"
     quadlet_deploy_wait_healthy:

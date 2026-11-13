@@ -1,0 +1,40 @@
+---
+# Included by main.yml when user_units_state is absent. Nothing to do when the timer was
+# never installed.
+- name: Find the timer
+  ansible.builtin.stat:
+    path: "{{ user_units_dir }}/{{ user_units_timer }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: user_units_timer_file
+
+- name: Stop and disable the timer
+  ansible.builtin.systemd_service:
+    name: "{{ user_units_timer }}"
+    enabled: false
+    state: stopped
+    scope: user
+  environment: "{{ service_user_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  when: user_units_timer_file.stat.exists
+
+- name: Remove the unit files
+  ansible.builtin.file:
+    path: "{{ user_units_dir }}/{{ item.name }}"
+    state: absent
+  loop: "{{ user_units_files }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: user_units_removed
+
+- name: Reload the service user's systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+    scope: user
+  environment: "{{ service_user_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  when: user_units_removed is changed and not ansible_check_mode

@@ -1,38 +1,12 @@
 ---
 # Included by main.yml when firefly_state is absent: the timer and its service go; the
 # data stays (SPEC 4.2).
-- name: Find the timer
-  ansible.builtin.stat:
-    path: "{{ firefly_service_home }}/.config/systemd/user/{{ firefly_cron_name }}.timer"
-  become: true
-  become_user: "{{ service_user }}"
-  register: firefly_cron_timer
-
-- name: Stop and disable the timer
-  ansible.builtin.systemd_service:
-    name: "{{ firefly_cron_name }}.timer"
-    enabled: false
-    state: stopped
-    scope: user
-  environment: "{{ firefly_env }}"
-  become: true
-  become_user: "{{ service_user }}"
-  when: firefly_cron_timer.stat.exists
-
-- name: Remove the service and the timer
-  ansible.builtin.file:
-    path: "{{ firefly_service_home }}/.config/systemd/user/{{ firefly_cron_name }}.{{ item }}"
-    state: absent
-  loop: [service, timer]
-  become: true
-  become_user: "{{ service_user }}"
-  register: firefly_cron_removed
-
-- name: Reload the service user's systemd
-  ansible.builtin.systemd_service:
-    daemon_reload: true
-    scope: user
-  environment: "{{ firefly_env }}"
-  become: true
-  become_user: "{{ service_user }}"
-  when: firefly_cron_removed is changed and not ansible_check_mode
+- name: Stop and remove the timer and its service
+  ansible.builtin.include_role:
+    name: user_units
+  vars:
+    user_units_state: absent
+    user_units_files:
+      - name: "{{ firefly_cron_name }}.service"
+      - name: "{{ firefly_cron_name }}.timer"
+    user_units_timer: "{{ firefly_cron_name }}.timer"

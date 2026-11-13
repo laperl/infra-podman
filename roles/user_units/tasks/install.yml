@@ -1,0 +1,42 @@
+---
+# Included by main.yml when user_units_state is present.
+- name: Create the systemd directory of the service user
+  ansible.builtin.file:
+    path: "{{ user_units_dir }}"
+    state: directory
+    mode: "0700"
+  become: true
+  become_user: "{{ service_user }}"
+
+- name: Install the unit files
+  ansible.builtin.template:
+    src: "{{ user_units_templates }}/{{ item.template }}"
+    dest: "{{ user_units_dir }}/{{ item.name }}"
+    mode: "0644"
+  loop: "{{ user_units_files }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: user_units_installed
+
+- name: Reload the service user's systemd for them
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+    scope: user
+  environment: "{{ service_user_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  when: user_units_installed is changed and not ansible_check_mode
+
+# In a plan nothing is reloaded, so a new or changed unit does not exist for systemd yet.
+- name: Enable and start the timer
+  ansible.builtin.systemd_service:
+    name: "{{ user_units_timer }}"
+    enabled: true
+    state: started
+    scope: user
+  environment: "{{ service_user_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  when: not (ansible_check_mode and user_units_installed is changed)
