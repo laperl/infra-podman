@@ -2,7 +2,7 @@
 galaxy_info:
   author: laperl
   description: Validate, install and start rootless Quadlet units for the service user (SPEC 4.2)
-  license: MIT
+  license: GPL-3.0-or-later
   min_ansible_version: "2.18"
   platforms:
     - name: Ubuntu

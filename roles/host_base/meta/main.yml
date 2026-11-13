@@ -2,7 +2,7 @@
 galaxy_info:
   author: laperl
   description: Service user with linger for rootless Podman and Quadlet (SPEC D3)
-  license: MIT
+  license: GPL-3.0-or-later
   min_ansible_version: "2.18"
   platforms:
     - name: Ubuntu

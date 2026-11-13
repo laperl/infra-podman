@@ -2,7 +2,7 @@
 galaxy_info:
   author: laperl
   description: Install or remove a systemd timer of the service user, with its service if it has one
-  license: MIT
+  license: GPL-3.0-or-later
   min_ansible_version: "2.18"
   platforms:
     - name: Ubuntu

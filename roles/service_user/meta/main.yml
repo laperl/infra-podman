@@ -2,7 +2,7 @@
 galaxy_info:
   author: laperl
   description: Facts about the service user that every role needs (home, ids, environment)
-  license: MIT
+  license: GPL-3.0-or-later
   min_ansible_version: "2.18"
   platforms:
     - name: Ubuntu
