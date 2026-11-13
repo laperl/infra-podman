@@ -79,11 +79,13 @@ firefly_db_user: "{{ firefly_short }}_{{ firefly_instance }}"
 firefly_consumer: "{{ firefly_short }}-{{ firefly_instance }}"
 # Created by the postgres role for that consumer (SPEC 4.4).
 firefly_network: "{{ infra_env }}-{{ firefly_consumer }}-pg-{{ firefly_pg_instance }}-net"
-# KeePassXC entries <infra_site>/<key>; Podman secrets with the environment in front.
-firefly_app_key_secret_key: "{{ firefly_short }}-{{ firefly_instance }}-app-key"
-firefly_app_key_secret: "{{ infra_env }}-{{ firefly_app_key_secret_key }}"
-firefly_db_secret_key: "{{ firefly_db_user | replace('_', '-') }}-db-password"
-firefly_db_secret: "{{ infra_env }}-{{ firefly_db_secret_key }}"
+# For each secret, two names: *_secret_entry is the title of its KeePassXC entry
+# (<infra_site>/<entry>) and its name in infra_secrets; *_secret is the Podman secret on
+# the machine, the same with the environment in front.
+firefly_app_key_secret_entry: "{{ firefly_short }}-{{ firefly_instance }}-app-key"
+firefly_app_key_secret: "{{ infra_env }}-{{ firefly_app_key_secret_entry }}"
+firefly_db_secret_entry: "{{ firefly_db_user | replace('_', '-') }}-db-password"
+firefly_db_secret: "{{ infra_env }}-{{ firefly_db_secret_entry }}"
 firefly_cron_name: "{{ firefly_name }}-cron"
 firefly_launcher_file_name: infra-podman-{{ firefly_name }}.desktop
 

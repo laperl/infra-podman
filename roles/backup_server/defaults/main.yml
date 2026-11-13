@@ -33,8 +33,10 @@ backup_server_home: /home/svc_runner
 # Names (SPEC 4.12). Derived; do not override.
 backup_server_name: "{{ infra_env }}-backup-server"
 backup_server_volume: "{{ backup_server_name }}-data"
-backup_server_secret_key: backup-server-password
-backup_server_secret: "{{ infra_env }}-{{ backup_server_secret_key }}"
+# backup_server_secret_entry is the title of the KeePassXC entry (<infra_site>/<entry>) and
+# its name in infra_secrets; backup_server_secret is the Podman secret on the machine.
+backup_server_secret_entry: backup-server-password
+backup_server_secret: "{{ infra_env }}-{{ backup_server_secret_entry }}"
 # Only the hash of the password lives here (htpasswd, bcrypt), never the password.
 backup_server_auth_dir: "{{ backup_server_home }}/.config/infra-podman/{{ backup_server_name }}"
 

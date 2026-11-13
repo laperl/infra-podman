@@ -101,38 +101,27 @@
     cmd: loginctl enable-linger {{ service_user }}
     creates: /var/lib/systemd/linger/{{ service_user }}
 
-- name: Read the service user's UID
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ service_user }}"
+# Its uid and environment, read in one place (roles/service_user).
+- name: Read the service user
+  ansible.builtin.include_role:
+    name: service_user
 
 - name: Make sure the service user's systemd manager is running
   ansible.builtin.systemd_service:
-    name: user@{{ ansible_facts['getent_passwd'][service_user][1] }}.service
+    name: user@{{ service_user_uid }}.service
     state: started
 
 - name: Wait for the user bus that systemctl --user needs
   ansible.builtin.wait_for:
-    path: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}/bus
+    path: /run/user/{{ service_user_uid }}/bus
     timeout: 30
-
-# What sudo keeps from the caller's environment depends on the sudoers policy, and Podman
-# reads $HOME, $XDG_CONFIG_HOME and $XDG_DATA_HOME (the GitHub runner sets the XDG ones
-# to its own user), plus the user bus in $XDG_RUNTIME_DIR. All of them explicit.
-- name: Set the environment of the service user
-  ansible.builtin.set_fact:
-    host_base_user_env:
-      HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
-      XDG_CONFIG_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.config"
-      XDG_DATA_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.local/share"
-      XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
 
 - name: Check Podman as the service user
   ansible.builtin.command:
     cmd: podman info --format {% raw %}'{{ .Host.Security.Rootless }}'{% endraw %}
   become: true
   become_user: "{{ service_user }}"
-  environment: "{{ host_base_user_env }}"
+  environment: "{{ service_user_env }}"
   register: host_base_rootless
   changed_when: false
   check_mode: false
@@ -150,4 +139,4 @@
     scope: user
   become: true
   become_user: "{{ service_user }}"
-  environment: "{{ host_base_user_env }}"
+  environment: "{{ service_user_env }}"

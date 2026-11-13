@@ -16,7 +16,7 @@
     fail_msg: >-
       The Podman secret {{ backup_secret }} does not exist on {{ inventory_hostname }}.
       Create it first: ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
-      (KeePassXC entry {{ infra_site | default('<infra_site>') }}/{{ backup_secret_key }}).
+      (KeePassXC entry {{ infra_site | default('<infra_site>') }}/{{ backup_secret_entry }}).
     quiet: true
 
 - name: Check that the backup server password exists as a Podman secret
@@ -38,7 +38,7 @@
       The Podman secret {{ backup_copy_secret }} does not exist on {{ inventory_hostname }}, and
       backup_remote_url asks for a copy to the backup server. Create it first:
       ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
-      (KeePassXC entry {{ infra_site | default('<infra_site>') }}/{{ backup_copy_secret_key }}).
+      (KeePassXC entry {{ infra_site | default('<infra_site>') }}/{{ backup_copy_secret_entry }}).
     quiet: true
   when: backup_remote_url | length > 0
 

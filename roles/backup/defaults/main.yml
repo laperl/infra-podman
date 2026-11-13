@@ -62,14 +62,17 @@ backup_home: /home/svc_runner
 # Names (SPEC 4.12). Derived; do not override.
 backup_name: "{{ infra_env }}-backup"
 backup_volume: "{{ backup_name }}-repo"
-backup_secret_key: backup-restic-password
-backup_secret: "{{ infra_env }}-{{ backup_secret_key }}"
+# For each secret, two names: *_secret_entry is the title of its KeePassXC entry
+# (<infra_site>/<entry>) and its name in infra_secrets; *_secret is the Podman secret on
+# the machine, the same with the environment in front.
+backup_secret_entry: backup-restic-password
+backup_secret: "{{ infra_env }}-{{ backup_secret_entry }}"
 backup_scripts_dir: "{{ backup_home }}/.local/share/infra-podman/backup"
 backup_config_dir: "{{ backup_home }}/.config/infra-podman/backup"
 backup_staging_dir: "{{ backup_home }}/.local/state/infra-podman/backup/staging"
 backup_copy_name: "{{ backup_name }}-copy"
-backup_copy_secret_key: backup-server-password
-backup_copy_secret: "{{ infra_env }}-{{ backup_copy_secret_key }}"
+backup_copy_secret_entry: backup-server-password
+backup_copy_secret: "{{ infra_env }}-{{ backup_copy_secret_entry }}"
 backup_copy_state_dir: "{{ backup_home }}/.local/state/infra-podman/backup-copy"
 
 # What quadlet_deploy installs, and what CI renders (scripts/render-quadlets.yml). The

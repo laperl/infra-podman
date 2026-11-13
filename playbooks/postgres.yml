@@ -70,9 +70,8 @@
     # An instance removed from the inventory is never stopped or dropped by removing it
     # (docs/POSTGRES.md, section 7): only reported, on every run.
     - name: Read the service user
-      ansible.builtin.getent:
-        database: passwd
-        key: "{{ service_user }}"
+      ansible.builtin.include_role:
+        name: service_user
 
     - name: Read the PostgreSQL instances running on this machine
       ansible.builtin.command:
@@ -86,8 +85,7 @@
           - label=infra.managed-by=infra-podman
           - --format
           - '{% raw %}{{ index .Labels "infra.app" }}{% endraw %}'
-      environment:
-        XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+      environment: "{{ service_user_env }}"
       become: true
       become_user: "{{ service_user }}"
       register: postgres_found

@@ -16,19 +16,15 @@
       backup_server_tailscale true or false.
     quiet: true
 
+# Its home, ids and environment, read in one place (roles/service_user).
 - name: Read the service user
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ service_user }}"
+  ansible.builtin.include_role:
+    name: service_user
 
 - name: Set the paths and environment of the service user
   ansible.builtin.set_fact:
-    backup_server_home: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
-    backup_server_env:
-      HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
-      XDG_CONFIG_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.config"
-      XDG_DATA_HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}/.local/share"
-      XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+    backup_server_home: "{{ service_user_home }}"
+    backup_server_env: "{{ service_user_env }}"
 
 - name: Install the backup server
   ansible.builtin.include_tasks: install.yml
