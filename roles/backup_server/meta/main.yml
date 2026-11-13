@@ -2,7 +2,7 @@
 galaxy_info:
   author: laperl
   description: Server for the copy of the backups, restic rest-server as a Quadlet container (SPEC 4.11)
-  license: MIT
+  license: GPL-3.0-or-later
   min_ansible_version: "2.18"
   platforms:
     - name: Ubuntu
