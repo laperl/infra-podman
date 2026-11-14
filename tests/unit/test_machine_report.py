@@ -123,6 +123,13 @@ class MachineReport(unittest.TestCase):
         data["networks"][0]["internal"] = False
         self.assertIn("prod-ff-casa-pg-main-net: CON SALIDA", report(data)[0])
 
+    def test_what_could_not_be_read_is_a_problem(self) -> None:
+        data = copy.deepcopy(HEALTHY)
+        data["containers"], data["errors"] = [], ["«podman ps --all» falló (125): cannot chdir"]
+        text, problems = report(data)
+        self.assertIn("NO SE HA PODIDO LEER", text)
+        self.assertIn("no se pudo leer: «podman ps --all» falló (125): cannot chdir", problems)
+
     def test_an_empty_machine(self) -> None:
         empty = {key: type(value)() for key, value in HEALTHY.items()}
         text, problems = report(empty, ["backup"], [])

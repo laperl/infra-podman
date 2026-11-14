@@ -94,5 +94,7 @@
 
     - name: Report
       ansible.builtin.debug:
-        msg: "{{ check_report.stdout_lines }}"
+        # Without the empty lines and terminal control sequences that the change of user
+        # adds around the output on some systems.
+        msg: "{{ check_report.stdout_lines | reject('search', '^$|\\x1b') }}"
       when: check_report.stdout_lines is defined
