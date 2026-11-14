@@ -1,6 +1,6 @@
 ---
 # Server for the copy of the backups (SPEC 4.11, R19, R44): restic's rest-server on the
-# GX10, append-only, with a size limit and a password. Published only on 127.0.0.1 and
+# main server, append-only, with a size limit and a password. Published only on 127.0.0.1 and
 # reached from the other machines through `tailscale serve` (R25). The image lives in
 # playbooks/group_vars/all/images.yml (rest_server_image).
 

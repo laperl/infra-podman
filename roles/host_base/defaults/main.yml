@@ -1,6 +1,6 @@
 ---
 # Packages that rootless Podman with systemd user services needs on Ubuntu 24.04
-# (the GX10 and the DEV VM). All of them are in Ubuntu main. They are already present
+# (the main server and the DEV VM). All of them are in Ubuntu main. They are already present
 # on most installs; the role only makes sure.
 #   acl:               setfacl, so Ansible can hand its temporary files to the service user
 #   uidmap:            newuidmap/newgidmap for the user namespace of rootless Podman

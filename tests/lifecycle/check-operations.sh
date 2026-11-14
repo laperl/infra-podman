@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Runs the commands of docs/OPERATIONS.md exactly as written, in DEV terms, on the
-# backup-copy job of lifecycle: the runner plays the laptop and the GX10, as the DEV VM
+# backup-copy job of lifecycle: the runner plays the laptop and the main server, as the DEV VM
 # does. Each block is the fenced bash after a "<!-- test: <name> -->" line.
 # Usage: check-operations.sh <step>
 #   deployed        1    containers, timers and unit files
 #   status          2    both status files say result=ok; the list of snapshots
 #   run-now         3    a backup and a copy, both result=ok
-#   healthy         4    the laptop and the GX10 look healthy
+#   healthy         4    the laptop and the main server look healthy
 #   firefly         1, 4 Firefly III, its instance casa: deployed and healthy (firefly job)
 #   restore-local   5.1  a broken database restored under another name, checked, swapped
-#   restore-gx10    5.2  a database restored from the GX10's volume, with only the restic key
+#   restore-server    5.2  a database restored from the main server's volume, with only the restic key
 #   data-repo       5.3  the data repository from the local copy
-#   lost-laptop     5.4  the data repository from the GX10's volume, cloned as on a new laptop
+#   lost-laptop     5.4  the data repository from the main server's volume, cloned as on a new laptop
 # prod- names become dev- and the placeholders (<…>) the values of the runner; a block
 # left with a placeholder this script does not know fails, so the manual cannot drift.
 set -Eeuo pipefail
@@ -51,7 +51,7 @@ substitute() {
     -e "s|<imagen_de_restic>|$restic_image|g" \
     -e 's|<instalación>/dev-laptop|ci-site/dev-localhost|g' \
     -e "s|~/infra-podman-datos-restaurados|$work/data-restored|g" \
-    -e "s|~/Documents/SECURE_vc/ansible/infra-podman|$work/data-lost|g"
+    -e "s|~/infra-podman-data|$work/data-lost|g"
 }
 
 # run <block> [stdin file]: prints the output; fails with its last lines. The blocks of
@@ -66,11 +66,11 @@ run() {
     # svc, as docs/SETUP.md (step 12) has it in the operator's ~/.bashrc.
     # shellcheck disable=SC2016  # written to the script, expanded there
     echo 'svc() { (cd / && sudo -u svc_runner env HOME="$(getent passwd svc_runner | cut -d: -f6)" XDG_RUNTIME_DIR="/run/user/$(id -u svc_runner)" "$@"); }'
-    # In the manual, gx10 is another machine; here it is the same one.
+    # In the manual, servidor is another machine; here it is the same one.
     # shellcheck disable=SC2016
-    echo 'ssh() { if [[ $1 == -n ]]; then shift; exec </dev/null; fi; [[ $1 == gx10 ]] || return 99; shift; "$@"; }'
+    echo 'ssh() { if [[ $1 == -n ]]; then shift; exec </dev/null; fi; [[ $1 == servidor ]] || return 99; shift; "$@"; }'
     # shellcheck disable=SC2016
-    echo 'scp() { [[ $1 == -q && $2 == gx10:* ]] || return 99; cp "${2#gx10:}" "$3"; }'
+    echo 'scp() { [[ $1 == -q && $2 == servidor:* ]] || return 99; cp "${2#servidor:}" "$3"; }'
     echo "db=$db"
     echo "superuser=ci_admin"
     echo "$body" | substitute
@@ -124,9 +124,9 @@ case $step in
     expect healthy '^sano$'
     count_is healthy 'result=ok' 2
     if grep -q -- '->' "$work/healthy.out"; then fail "podman port shows a published port"; fi
-    run healthy-gx10
-    expect healthy-gx10 '^active$'
-    expect healthy-gx10 '^401$'
+    run healthy-server
+    expect healthy-server '^active$'
+    expect healthy-server '^401$'
     ;;
   firefly)
     run deployed-firefly
@@ -151,15 +151,15 @@ case $step in
     sql "DROP DATABASE ${db}_antigua"
     echo "::notice title=Restore (5.1)::broken database restored under another name (1000 rows) and swapped; the broken one kept as ${db}_antigua"
     ;;
-  restore-gx10)
-    run gx10-dump "$(keyfile)"
-    [[ -s /dev/shm/restaurar.dump ]] || fail "the dump from the GX10's volume is empty"
+  restore-server)
+    run server-dump "$(keyfile)"
+    [[ -s /dev/shm/restaurar.dump ]] || fail "the dump from the main server's volume is empty"
     [[ $(stat -c %a /dev/shm/restaurar.dump) == 600 ]] || fail "the plain dump in /dev/shm is readable by others"
-    run gx10-restore
+    run server-restore
     [[ ! -e /dev/shm/restaurar.dump ]] || fail "the plain dump was left in /dev/shm"
-    [[ $(rows "${db}_restaurada") == 1000 ]] || fail "the database restored from the GX10 does not hold the 1000 rows"
+    [[ $(rows "${db}_restaurada") == 1000 ]] || fail "the database restored from the main server does not hold the 1000 rows"
     sql "DROP DATABASE ${db}_restaurada"
-    echo "::notice title=Restore (5.2)::a database restored from the GX10's volume, without its server, with only the restic key"
+    echo "::notice title=Restore (5.2)::a database restored from the main server's volume, without its server, with only the restic key"
     ;;
   data-repo)
     run data-repo
@@ -168,16 +168,16 @@ case $step in
     rm -rf "$work/data-restored"
     ;;
   lost-laptop)
-    run lost-gx10 "$(keyfile)"
+    run lost-server "$(keyfile)"
     [[ $(stat -c %a /dev/shm/restaurar.bundle) == 600 ]] || fail "the bundle in /dev/shm is readable by others"
     run lost-laptop
     expect lost-laptop 'lifecycle data'
     [[ -z $(git -C "$work/data-lost" remote) ]] || fail "the restored data repository still has a remote"
     [[ ! -e /dev/shm/restaurar.bundle && ! -e /dev/shm/datos.bundle ]] || fail "a bundle was left in /dev/shm"
     rm -rf "$work/data-lost"
-    echo "::notice title=Lost laptop (5.4)::data repository recovered from the GX10's volume with only the restic key"
+    echo "::notice title=Lost laptop (5.4)::data repository recovered from the main server's volume with only the restic key"
     ;;
-  *) echo "usage: $0 deployed|status|run-now|healthy|restore-local|restore-gx10|data-repo|lost-laptop" >&2; exit 2 ;;
+  *) echo "usage: $0 deployed|status|run-now|healthy|restore-local|restore-server|data-repo|lost-laptop" >&2; exit 2 ;;
 esac
 rm -f "$work/key"
 echo "ok: $step"

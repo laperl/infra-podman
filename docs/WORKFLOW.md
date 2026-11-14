@@ -10,6 +10,8 @@ Resumen:
 
 Cada PR dice en su descripción qué playbook hay que desplegar y en qué máquinas. Si no lo dice, pídelo antes de mergear.
 
+**Nombres de esta documentación.** `laptop`, `servidor` y `vm` son los nombres de las máquinas en el inventario (`inventory/<entorno>/hosts.yml` del repo de datos) y sus alias en `~/.ssh/config`: ahí se dice a qué máquina y con qué usuario se despliega. `~/infra-podman-data` es la carpeta del repo de datos (`data_repo` en `~/.config/infra-podman/deploy.conf`). Si los tuyos son otros, usa los tuyos.
+
 ## 1. Pedir el cambio
 
 Abre una conversación con Claude con este repo conectado y pide la tarea en una frase, por ejemplo:
@@ -17,6 +19,26 @@ Abre una conversación con Claude con este repo conectado y pide la tarea en una
 > Implementa la fase 1 según `docs/SPEC.md`.
 
 Claude crea una rama y abre un PR en borrador. Si no puede abrirlo, te da el enlace para abrirlo tú en un clic.
+
+### Si una IA escribe el cambio y otra lo aplica
+
+Sirve cuando quien diseña y prueba no puede abrir el PR. El cambio viaja como una **orden**: un fichero Markdown y un parche (`git format-patch`), escritos sobre `main` ya mergeado. Una orden, un PR.
+
+**Quien escribe la orden** ejecuta todo lo que su entorno permita y lo deja escrito en ella, en dos apartados que no pueden faltar:
+
+- **«Probado y no probado»:** cada comprobación ejecutada, con las versiones de las herramientas y sobre qué commit, y cada una que no pudo ejecutar, con el motivo. Quien aplica lo copia tal cual en la descripción del PR: es lo que dice a cualquiera qué se ha probado.
+- **«Verificación»:** las órdenes exactas que tiene que ejecutar quien aplica. Solo lo que el autor no pudo probar y el CI tampoco prueba. Si no hay nada, lo dice: «ninguna: lo cubre el CI».
+
+Quién ejecuta cada comprobación:
+
+| Comprobación | Quien escribe la orden | Quien la aplica | CI |
+| --- | --- | --- | --- |
+| Las del workflow `lint` (las de [«Comprobaciones en local»](../README.md#comprobaciones-en-local)) | Todas, siempre | No las repite | En cada push |
+| `lifecycle`: Podman y systemd de verdad | No suele poder: lo dice | No | Solo si el PR toca lo que lista `paths:` en `.github/workflows/lifecycle.yml` |
+| Lo que la orden pida en «Verificación» | — | Sí, y dice el resultado | — |
+| `plan` y `apply` en DEV | No | No: solo el operador | No |
+
+**Quien aplica** hace solo esto: actualiza `main`, crea la rama, aplica el parche con `git am`, ejecuta lo de «Verificación», abre el PR en borrador y dice qué ha ejecutado y qué no. No instala herramientas para repetir lo que ya está probado, no cambia nada fuera del parche ni abre otros PRs, y si `git am` o una verificación falla, para y avisa. El filtro antes del merge es el CI en verde (paso 2).
 
 ## 2. Revisar el PR en GitHub
 
@@ -72,16 +94,16 @@ git push origin v0.2.0                             # 7. súbelo
 
 Sigue en `main`, justo en el tag, sin tocar ningún fichero: `deploy.sh` rechaza un checkout con cambios o sin tag firmado.
 
-**Una máquina cada vez.** La contraseña de sudo del portátil y la del GX10 son distintas, y Ansible pide una sola por ejecución (R24). Por eso, en producción, usa siempre `--limit`:
+**Una máquina cada vez.** La contraseña de sudo del portátil y la del servidor principal son distintas, y Ansible pide una sola por ejecución (R24). Por eso, en producción, usa siempre `--limit`:
 
 ```bash
 ./deploy.sh plan  <playbook> --limit laptop       # 1. lee el plan con calma
 ./deploy.sh apply <playbook> --limit laptop       # 2. escribe prod y la contraseña de sudo del portátil
 ./deploy.sh apply <playbook> --limit laptop       # 3. tiene que dar changed=0
 
-./deploy.sh plan  <playbook> --limit gx10         # lo mismo con la contraseña de sudo del GX10
-./deploy.sh apply <playbook> --limit gx10
-./deploy.sh apply <playbook> --limit gx10
+./deploy.sh plan  <playbook> --limit servidor         # lo mismo con la contraseña de sudo del servidor principal
+./deploy.sh apply <playbook> --limit servidor
+./deploy.sh apply <playbook> --limit servidor
 ```
 
 Qué vas a ver:
@@ -101,12 +123,12 @@ Busca el mensaje en [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md): están todos los
 
 ## Cambiar datos
 
-Los datos (máquinas, instancias, bases, usuarios y aplicaciones) viven en tu **repo de datos**, `~/Documents/SECURE_vc/ansible/infra-podman` (SPEC 4.13, [`SETUP.md`](SETUP.md), paso 14). No pasan por GitHub ni por PR: los cambias tú y los apruebas con tu firma. Qué va en cada fichero: [`inventory.example/`](../inventory.example/README.md).
+Los datos (máquinas, instancias, bases, usuarios y aplicaciones) viven en tu **repo de datos**, `~/infra-podman-data` (SPEC 4.13, [`SETUP.md`](SETUP.md), paso 14). No pasan por GitHub ni por PR: los cambias tú y los apruebas con tu firma. Qué va en cada fichero: [`inventory.example/`](../inventory.example/README.md).
 
-Cuando un PR de código diga «añade esto al repo de datos», hazlo así, con el volumen `SECURE_vc` montado y KeePassXC desbloqueado:
+Cuando un PR de código diga «añade esto al repo de datos», hazlo así, con el volumen cifrado del repo de datos montado y KeePassXC desbloqueado:
 
 ```bash
-cd ~/Documents/SECURE_vc/ansible/infra-podman
+cd ~/infra-podman-data
 $EDITOR inventory/prod/group_vars/postgres_hosts.yml   # el fichero que diga el PR
 git diff                                               # revisa el cambio
 git add -A && git commit -m "qué cambias y por qué"    # se firma solo (commit.gpgSign)
@@ -136,12 +158,12 @@ Y después, desde tu copia del código, `plan` y `apply` como siempre (paso 6).
 | Playbook | Qué hace | Máquinas |
 | --- | --- | --- |
 | `check` | Solo lee: comprueba que llega a cada máquina y su versión de Podman | Todas |
-| `base` | Usuario de servicio `svc_runner` con linger (fase 1) | `laptop`, `gx10` (DEV: `vmiadev`) |
+| `base` | Usuario de servicio `svc_runner` con linger (fase 1) | `laptop`, `servidor` (DEV: `vm`) |
 | `secrets` | Solo con `./deploy.sh secrets`: crea en cada máquina los secretos que le faltan, leyéndolos de KeePassXC. Pide la contraseña maestra y la de sudo | Una cada vez, con `--limit` |
-| `postgres` | Las instancias de Postgres (`pg-main`). Necesita antes `base` y `secrets`. Si cambia la imagen, hace antes un backup y se para si falla | `laptop` (DEV: `vmiadev`) |
-| `firefly` | Las instancias de Firefly III (`ff-<instancia>`). Necesita antes `base`, `secrets` y `postgres`, con su base y su usuario. Si cambia la imagen, hace antes un backup y se para si falla ([`services/INSTALL.md`](services/INSTALL.md)) | `laptop` (DEV: `vmiadev`) |
-| `backup` | Backup diario local, a las 13:00, y el aviso de escritorio en el portátil. Con `backup_remote_url`, también la copia al GX10 cada hora. Necesita antes `base` y `secrets` ([`SETUP.md`](SETUP.md), pasos 17 y 18) | `laptop` (DEV: `vmiadev`) |
-| `backup-server` | El servidor que guarda la copia de los backups, solo para añadir, y su puerto en Tailscale. Necesita antes `base` y `secrets` ([`SETUP.md`](SETUP.md), paso 18) | `gx10` (DEV: `vmiadev`) |
+| `postgres` | Las instancias de Postgres (`pg-main`). Necesita antes `base` y `secrets`. Si cambia la imagen, hace antes un backup y se para si falla | `laptop` (DEV: `vm`) |
+| `firefly` | Las instancias de Firefly III (`ff-<instancia>`). Necesita antes `base`, `secrets` y `postgres`, con su base y su usuario. Si cambia la imagen, hace antes un backup y se para si falla ([`services/INSTALL.md`](services/INSTALL.md)) | `laptop` (DEV: `vm`) |
+| `backup` | Backup diario local, a las 13:00, y el aviso de escritorio en el portátil. Con `backup_remote_url`, también la copia al servidor principal cada hora. Necesita antes `base` y `secrets` ([`SETUP.md`](SETUP.md), pasos 17 y 18) | `laptop` (DEV: `vm`) |
+| `backup-server` | El servidor que guarda la copia de los backups, solo para añadir, y su puerto en Tailscale. Necesita antes `base` y `secrets` ([`SETUP.md`](SETUP.md), paso 18) | `servidor` (DEV: `vm`) |
 
 ## Cuando hay una imagen nueva
 

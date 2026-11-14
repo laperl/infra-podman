@@ -3,7 +3,7 @@
 Qué hacer cuando algo falla, ordenado por pieza. Busca el mensaje que ves (Ctrl+F con un trozo): aquí está tal como lo escribe el código, con `…` en lo que cambia en cada caso.
 
 - Las órdenes funcionan desde cualquier carpeta, salvo `./deploy.sh`, que va en tu copia del código. Usan la función `svc` de [`SETUP.md`](SETUP.md), paso 12.
-- En DEV, cambia `prod` por `dev` y `laptop`/`gx10` por `vmiadev`.
+- En DEV, cambia `prod` por `dev` y `laptop`/`servidor` por `vm`.
 - Lo que depende de SELinux está marcado **«por comprobar en el portátil»**: el CI no tiene SELinux.
 - Cómo está montada cada pieza: [`ARCHITECTURE.md`](ARCHITECTURE.md). El día a día y cómo restaurar: [`OPERATIONS.md`](OPERATIONS.md).
 
@@ -21,7 +21,7 @@ Qué hacer cuando algo falla, ordenado por pieza. Busca el mensaje que ves (Ctrl
 
 | Lo que ves | Por qué | Qué hacer |
 | --- | --- | --- |
-| `deploy.sh: no existe el repo de datos …. ¿Está montado el volumen cifrado?` | El volumen `SECURE_vc` no está montado | Móntalo en VeraCrypt y repite |
+| `deploy.sh: no existe el repo de datos …. ¿Está montado el volumen cifrado?` | El volumen cifrado donde vive el repo de datos no está montado | Móntalo y repite |
 | `deploy.sh: --confirm-drop solo vale con apply postgres` | La usaste con `plan` o con otro playbook | Solo `./deploy.sh apply postgres … --confirm-drop <instancia>` |
 | `deploy.sh: --retire solo vale con apply` o `--retire no vale con '<playbook>': su playbook no despliega por instancias` | La usaste con `plan`, o con un playbook que no tiene instancias que retirar | `./deploy.sh apply postgres … --retire <instancia>` o `./deploy.sh apply firefly … --retire <instancia>` |
 | `deploy.sh: nombre de instancia no válido: …` | El nombre no es solo letras minúsculas y números | El de `name:` en `postgres_instances` |
@@ -40,8 +40,8 @@ Qué hacer cuando algo falla, ordenado por pieza. Busca el mensaje que ves (Ctrl
 | `'…' is not in infra_secrets for prod` | El nombre de `--rotate` no está en la lista de secretos | Copia el nombre exacto de `infra_secrets` (repo de datos, `group_vars/all.yml`) |
 | `Incorrect sudo password` o `Missing sudo password` | Has escrito la contraseña de sudo de otra máquina, o falta `--limit` | Repite con `--limit` y la contraseña de esa máquina (R24) |
 | `UNREACHABLE` en `laptop` | sshd está parado, o el alias `laptop` de `~/.ssh/config` no está bien | `ssh laptop true`; [`SETUP.md`](SETUP.md), paso 9 |
-| `UNREACHABLE` en `gx10` | El GX10 está apagado o fuera de Tailscale | `ssh gx10 true` y `tailscale status` |
-| `UNREACHABLE` en `vmiadev` | La VM está apagada | Arráncala; `ssh vmiadev true` |
+| `UNREACHABLE` en `servidor` | El servidor principal está apagado o fuera de Tailscale | `ssh servidor true` y `tailscale status` |
+| `UNREACHABLE` en `vm` | La VM está apagada | Arráncala; `ssh vm true` |
 | `Permission denied (publickey)` | Tu clave de acceso no está en el agente (KeePassXC bloqueado) o no está en el `authorized_keys` de esa máquina | Desbloquea KeePassXC; `ssh-add -l`. Si la clave está y sigue, [`SETUP.md`](SETUP.md), pasos 6 y 9.1 |
 | `ansible-navigator` no puede descargar la imagen de Ansible | `podman login ghcr.io` se borra al reiniciar el portátil | `podman login ghcr.io --username laperl` con el token de KeePassXC ([`SETUP.md`](SETUP.md), paso 2) |
 
@@ -51,8 +51,8 @@ Qué hacer cuando algo falla, ordenado por pieza. Busca el mensaje que ves (Ctrl
 | --- | --- | --- |
 | `deploy.sh: HEAD (…) no tiene ningún tag firmado por una clave de confianza.` | El tag está en otro commit (lo creaste antes del `git pull`) o no está firmado. El mensaje dice dónde está el último tag | Si no lo has subido: `git tag -d <tag>` y repite [`WORKFLOW.md`](WORKFLOW.md), paso 5. Comprueba con `git tag --points-at HEAD` y `git verify-tag <tag>`. Si ya lo subiste, crea el siguiente número |
 | `deploy.sh: hay cambios sin commit o ficheros sin seguimiento; en prod solo se despliega un tag firmado y limpio` | Hay algo modificado en tu copia del código | `git status`. Guarda tus cambios en otra rama o descártalos |
-| `deploy.sh: el repo de datos tiene cambios sin commit o ficheros sin seguimiento (…)` | Has editado datos y no has hecho el commit | `git -C ~/Documents/SECURE_vc/ansible/infra-podman status`. Commit firmado o `git restore` ([`WORKFLOW.md`](WORKFLOW.md), «Cambiar datos») |
-| `deploy.sh: el último commit del repo de datos (…) no está firmado por una clave de confianza.` | Commit hecho sin firma o con otra clave | `git -C ~/Documents/SECURE_vc/ansible/infra-podman verify-commit HEAD`. Revisa la firma de ese repo ([`SETUP.md`](SETUP.md), paso 14) y rehaz el commit: `git -C ~/Documents/SECURE_vc/ansible/infra-podman commit --amend --no-edit -S` |
+| `deploy.sh: el repo de datos tiene cambios sin commit o ficheros sin seguimiento (…)` | Has editado datos y no has hecho el commit | `git -C ~/infra-podman-data status`. Commit firmado o `git restore` ([`WORKFLOW.md`](WORKFLOW.md), «Cambiar datos») |
+| `deploy.sh: el último commit del repo de datos (…) no está firmado por una clave de confianza.` | Commit hecho sin firma o con otra clave | `git -C ~/infra-podman-data verify-commit HEAD`. Revisa la firma de ese repo ([`SETUP.md`](SETUP.md), paso 14) y rehaz el commit: `git -C ~/infra-podman-data commit --amend --no-edit -S` |
 | `deploy.sh: falta …/allowed_signers (ver docs/SIGNING.md)` | Falta tu lista de claves de confianza | [`SIGNING.md`](SIGNING.md), paso 2 |
 | `deploy.sh: … no puede apuntar a un fichero del repo` (o `del repo de datos`) | `allowed_signers` es un enlace a un fichero de uno de los repos. Así cualquiera con acceso al repo podría añadir su clave (R4) | Que sea un fichero propio en `~/.config/infra-podman/` |
 | `gpg.ssh.allowedSignersFile needs to be configured and exist` | Al comprobar un tag a mano, git no sabe qué claves son de confianza | Configúralo en ese repo ([`SIGNING.md`](SIGNING.md)). A `deploy.sh` no le afecta |
@@ -121,31 +121,31 @@ Los mensajes que empiezan por «La copia de … ha fallado» salen en el aviso d
 | `Todavía no se ha hecho ninguna copia (instalado hace … h)` | El backup está instalado pero no ha copiado nunca | `svc systemctl --user start prod-backup.service` y mira el resultado |
 | `No existe /var/lib/infra-podman/backup-status: el backup no está instalado.` | El aviso está instalado, pero el backup no | `./deploy.sh apply backup --limit laptop` |
 
-## 7. Copia al GX10
+## 7. Copia al servidor principal
 
-Los mensajes salen en el aviso de escritorio y en `cat /var/lib/infra-podman/backup-status/prod-backup-copy.status`. Si la copia al GX10 falla, **tus copias locales siguen bien**.
+Los mensajes salen en el aviso de escritorio y en `cat /var/lib/infra-podman/backup-status/prod-backup-copy.status`. Si la copia al servidor principal falla, **tus copias locales siguen bien**.
 
 | Lo que ves | Por qué | Qué hacer |
 | --- | --- | --- |
-| `result=unreachable` y `El servidor de copias (…) no responde. Se volverá a intentar cada hora.` | El GX10 está apagado o fuera de Tailscale. No es un fallo | Nada, si es puntual. Si dura, la fila siguiente |
-| `la última copia correcta es de …, hace más de 168 h. El servidor de copias (…) no responde` | Una semana sin llegar al GX10 | 1. `ssh gx10 true`. 2. Desde el portátil: `curl -s -o /dev/null -w '%{http_code}\n' http://<nombre del GX10>.<tu red>.ts.net:18000/`: `401` es que responde; `000`, que no llega. 3. En el GX10, el apartado 8 |
-| `bad address` en los logs de la copia | El contenedor no resuelve el nombre de Tailscale del GX10. Por comprobar en el portátil | Usa la IP de Tailscale del GX10, que no cambia: `tailscale ip -4 <nombre del GX10>`. Ponla en `backup_remote_url` del repo de datos y `./deploy.sh apply backup --limit laptop` |
-| `el servidor de copias no acepta el usuario o la contraseña.` | La contraseña del portátil y el hash del GX10 no coinciden | `./deploy.sh secrets --rotate backup-server-password --limit gx10`, lo mismo con `--limit laptop`, y `./deploy.sh apply backup-server --limit gx10` |
-| `la clave de restic no abre el repositorio del servidor.` | `backup-restic-password` no es la clave con la que se creó la copia del GX10 | **No borres nada.** La buena está en el historial de esa entrada de KeePassXC. Nunca se crea un repositorio nuevo encima |
-| `el servidor de copias está al … % de su tope` o `el servidor de copias está lleno` | Las copias del GX10 se acercan a su tope (30 GB) o lo han alcanzado. Lleno, no copia nada nuevo | En el GX10, `df -h /`. Sube `backup_server_max_size_gb` en `group_vars/all.yml` del repo de datos, commit firmado, `./deploy.sh apply backup-server --limit gx10` y `./deploy.sh apply backup --limit laptop`. En el GX10 no se borra nada solo (R26) |
+| `result=unreachable` y `El servidor de copias (…) no responde. Se volverá a intentar cada hora.` | El servidor principal está apagado o fuera de Tailscale. No es un fallo | Nada, si es puntual. Si dura, la fila siguiente |
+| `la última copia correcta es de …, hace más de 168 h. El servidor de copias (…) no responde` | Una semana sin llegar al servidor principal | 1. `ssh servidor true`. 2. Desde el portátil: `curl -s -o /dev/null -w '%{http_code}\n' http://<nombre del servidor principal>.<tu red>.ts.net:18000/`: `401` es que responde; `000`, que no llega. 3. En el servidor principal, el apartado 8 |
+| `bad address` en los logs de la copia | El contenedor no resuelve el nombre de Tailscale del servidor principal. Por comprobar en el portátil | Usa la IP de Tailscale del servidor principal, que no cambia: `tailscale ip -4 <nombre del servidor principal>`. Ponla en `backup_remote_url` del repo de datos y `./deploy.sh apply backup --limit laptop` |
+| `el servidor de copias no acepta el usuario o la contraseña.` | La contraseña del portátil y el hash del servidor principal no coinciden | `./deploy.sh secrets --rotate backup-server-password --limit servidor`, lo mismo con `--limit laptop`, y `./deploy.sh apply backup-server --limit servidor` |
+| `la clave de restic no abre el repositorio del servidor.` | `backup-restic-password` no es la clave con la que se creó la copia del servidor principal | **No borres nada.** La buena está en el historial de esa entrada de KeePassXC. Nunca se crea un repositorio nuevo encima |
+| `el servidor de copias está al … % de su tope` o `el servidor de copias está lleno` | Las copias del servidor principal se acercan a su tope (30 GB) o lo han alcanzado. Lleno, no copia nada nuevo | En el servidor principal, `df -h /`. Sube `backup_server_max_size_gb` en `group_vars/all.yml` del repo de datos, commit firmado, `./deploy.sh apply backup-server --limit servidor` y `./deploy.sh apply backup --limit laptop`. En el servidor principal no se borra nada solo (R26) |
 | `el servidor de copias no deja escribir en …` | La carpeta no empieza por el nombre de la instalación | `infra_site` tiene que ser el mismo en el repo de datos que en la carpeta del mensaje |
-| `The Podman secret prod-backup-server-password does not exist on …, and backup_remote_url asks for a copy` | Falta la contraseña del servidor en esa máquina | `./deploy.sh secrets --limit laptop` (o `gx10`; entrada `backup-server-password`) |
-| `The Podman secret prod-backup-server-password does not exist on gx10` | Lo mismo, en el GX10, al desplegar el servidor | `./deploy.sh secrets --limit gx10` |
+| `The Podman secret prod-backup-server-password does not exist on …, and backup_remote_url asks for a copy` | Falta la contraseña del servidor en esa máquina | `./deploy.sh secrets --limit laptop` (o `servidor`; entrada `backup-server-password`) |
+| `The Podman secret prod-backup-server-password does not exist on servidor` | Lo mismo, en el servidor principal, al desplegar el servidor | `./deploy.sh secrets --limit servidor` |
 | El servidor no arranca o has perdido su contraseña | — | Las copias siguen en su volumen y se leen solo con la clave de restic: [`OPERATIONS.md`](OPERATIONS.md), 5.2. Para una contraseña nueva: cámbiala en KeePassXC y sigue la fila «no acepta el usuario o la contraseña» |
 
 ## 8. Tailscale
 
 | Lo que ves | Por qué | Qué hacer |
 | --- | --- | --- |
-| `'tailscale serve status' failed on …. Is Tailscale installed and connected?` | Tailscale no está instalado o no está conectado en esa máquina | En el GX10: `tailscale status`. En una máquina sin Tailscale (la VM DEV), `backup_server_tailscale: false` en el repo de datos |
+| `'tailscale serve status' failed on …. Is Tailscale installed and connected?` | Tailscale no está instalado o no está conectado en esa máquina | En el servidor principal: `tailscale status`. En una máquina sin Tailscale (la VM DEV), `backup_server_tailscale: false` en el repo de datos |
 | `tailscale serve already uses port 18000 on … for something else` | Ese puerto ya lo usa otra cosa en `tailscale serve`. Ansible no la toca | `sudo tailscale serve status`. Libéralo a mano o elige otro `backup_server_port` en el repo de datos |
-| `sudo tailscale serve status` no muestra el 18000 | Se ha borrado la configuración de `tailscale serve` | `./deploy.sh apply backup-server --limit gx10` (solo añade ese puerto) |
-| Quieres quitar el puerto 18000 | — | En el GX10: `sudo tailscale serve --tcp=18000 tcp://localhost:18000 off` |
+| `sudo tailscale serve status` no muestra el 18000 | Se ha borrado la configuración de `tailscale serve` | `./deploy.sh apply backup-server --limit servidor` (solo añade ese puerto) |
+| Quieres quitar el puerto 18000 | — | En el servidor principal: `sudo tailscale serve --tcp=18000 tcp://localhost:18000 off` |
 
 ## 9. SELinux (por comprobar en el portátil)
 
@@ -154,7 +154,7 @@ Solo el portátil tiene SELinux. Cada volumen va marcado como privado de su cont
 | Lo que ves | Por qué | Qué hacer |
 | --- | --- | --- |
 | `stat /repo/config: permission denied` al leer las copias con una orden propia | El volumen `prod-backup-repo` es privado del contenedor de backup | Añade `--security-opt label=disable` a la orden, como las de [`OPERATIONS.md`](OPERATIONS.md). No cambia la marca del volumen |
-| La copia al GX10 falla y sus logs hablan de permisos al leer el repositorio local | El contenedor de copia no puede leer el repositorio local. Debería poder: va sin etiqueta propia (`SecurityLabelDisable`, R44) | Mándame los logs: `sudo journalctl _SYSTEMD_USER_UNIT=prod-backup-copy.service -n 50` |
+| La copia al servidor principal falla y sus logs hablan de permisos al leer el repositorio local | El contenedor de copia no puede leer el repositorio local. Debería poder: va sin etiqueta propia (`SecurityLabelDisable`, R44) | Mándame los logs: `sudo journalctl _SYSTEMD_USER_UNIT=prod-backup-copy.service -n 50` |
 | `deploy.sh` no llega a las máquinas aunque KeePassXC está abierto | El contenedor de Ansible no puede usar tu `~/.ssh` ni el agente sin `label=disable` (R16) | Comprueba que `ansible-navigator.yml` sigue con `--security-opt=label=disable` |
 
 ## 10. El CI
@@ -165,7 +165,7 @@ Los errores salen en GitHub, en el PR: pestaña **Checks**, en el job en rojo, c
 | --- | --- | --- |
 | `POLICY: …` (job `lint`) | Una plantilla incumple una regla del repo: `Notify=healthy`, imagen sin digest, falta un nombre o una etiqueta, un puerto publicado fuera de `127.0.0.1` (R25), falta un límite de memoria, procesador o procesos (R46), falta `NoNewPrivileges=true` o `DropCapability=all`, o usa la red del host (R51)… | Lo corrige Claude en el mismo PR |
 | `FAIL: the rendered units differ from tests/quadlet/golden` (job `lint` o `quadlet-forward`) | Lo que los roles instalarían ya no es igual a la copia guardada en `tests/quadlet/golden`: ha cambiado una plantilla o un valor por defecto. El `diff` de encima dice qué líneas | Si el cambio es el que se quería: `tests/quadlet/run.sh --update-golden` y commit; el PR enseña entonces el cambio exacto de cada unidad. Si no se quería (un refactor), el fallo es el aviso: se corrige el código, no la copia |
-| `GENERATOR: … rejected the units:` (job `lint` o `quadlet-forward`) | El generador de Podman no acepta una plantilla. En `quadlet-forward` (Podman más nuevo) avisa de lo que fallará al actualizar el GX10 | Lo corrige Claude en el mismo PR |
+| `GENERATOR: … rejected the units:` (job `lint` o `quadlet-forward`) | El generador de Podman no acepta una plantilla. En `quadlet-forward` (Podman más nuevo) avisa de lo que fallará al actualizar el servidor principal | Lo corrige Claude en el mismo PR |
 | `the second apply changed something` (job `lifecycle`) | Un segundo `apply` sin cambios cambió algo: no es idempotente (SPEC 4.2) | Lo corrige Claude en el mismo PR |
 | `… appears in the logs` o `the password appears in the Ansible output` | Una contraseña de prueba ha salido en los logs | No mergees. Lo corrige Claude |
 | `unknown placeholder in the block '…'` o `the block '…' failed` (`check-operations`) | Un bloque de [`OPERATIONS.md`](OPERATIONS.md) ya no funciona tal como está escrito | Lo corrige Claude en el mismo PR |

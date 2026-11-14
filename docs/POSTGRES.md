@@ -139,7 +139,7 @@ postgres_instances:
 - **`group:`** es siempre `owner`, `writer` o `reader`. El grupo real es `<base>_<grupo>`, y lo que puede hacer cada uno está en la sección 2.
 - **`users:`** es opcional. Sin usuarios, la base existe pero nadie entra salvo el administrador.
 - **Una base por instancia de aplicación** (R48): dos Firefly son dos bases (`ff_casa`, `ff_canary`), cada una con su usuario y su consumidor (`ff-casa`, `ff-canary`). Nunca dos instancias en la misma base. Detalle en [`services/README.md`](services/README.md).
-- **Una instancia en otra máquina** va en `host_vars/<máquina>.yml` del repo de datos, con su propio nombre (por ejemplo `gx10`). Cada aplicación tiene que estar en la misma máquina que su Postgres: las redes de Podman no salen de la máquina.
+- **Una instancia en otra máquina** va en `host_vars/<máquina>.yml` del repo de datos, con su propio nombre (por ejemplo `servidor`). Cada aplicación tiene que estar en la misma máquina que su Postgres: las redes de Podman no salen de la máquina.
 
 ## 7. Altas, cambios y bajas
 
@@ -201,7 +201,7 @@ Se crea el usuario con la contraseña de su secreto, en `app2_owner`, y solo pue
 
 **Una base.** Quitas su bloque entero y aplicas:
 1. Si hay alguien conectado a ella, **se para** sin borrar nada.
-2. Hace una **copia completa antes de borrar**, igual que antes de cambiar la imagen de Postgres (sección 1). Esa copia llega también al GX10. Si la copia falla, o la máquina no tiene copias configuradas, **no borra**.
+2. Hace una **copia completa antes de borrar**, igual que antes de cambiar la imagen de Postgres (sección 1). Esa copia llega también al servidor principal. Si la copia falla, o la máquina no tiene copias configuradas, **no borra**.
 3. Borra la base y sus tres grupos.
 4. Borra sus usuarios que ya no estén en ninguna otra base, como en el caso anterior.
 
@@ -256,7 +256,7 @@ Solo cuando estés seguro: **no tiene vuelta atrás**, salvo restaurar una copia
    - `--prune` libera el espacio.
    - Esta orden escribe en el repositorio: hazlo cuando no esté corriendo el backup (`svc systemctl --user is-active prod-backup.service` dice `inactive`).
 
-   **En el GX10**, la copia externa no se puede borrar desde el portátil: su servidor solo deja añadir (R44). Se borra en el GX10, directamente sobre su volumen, con la clave de restic, que se pega cuando la pide. Es el mismo acceso que para restaurar desde el GX10 (OPERATIONS, apartado 5.2); `<imagen_de_restic>` e `<instalación>` son los de ese apartado:
+   **En el servidor principal**, la copia externa no se puede borrar desde el portátil: su servidor solo deja añadir (R44). Se borra en el servidor principal, directamente sobre su volumen, con la clave de restic, que se pega cuando la pide. Es el mismo acceso que para restaurar desde el servidor principal (OPERATIONS, apartado 5.2); `<imagen_de_restic>` e `<instalación>` son los de ese apartado:
    ```bash
    img=<imagen_de_restic>
    read -rs -p 'Clave de restic: ' key; echo

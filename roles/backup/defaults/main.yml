@@ -1,7 +1,7 @@
 ---
 # Daily local backup of one machine (SPEC 4.11, R19): every database of every PostgreSQL
 # instance of the machine and, on the laptop, the operator's data repository. Copy to the
-# GX10 arrives in phase 1e2. The image lives in playbooks/group_vars/all/images.yml.
+# main server arrives in phase 1e2. The image lives in playbooks/group_vars/all/images.yml.
 
 backup_state: present
 
@@ -26,8 +26,8 @@ backup_notify_max_age_hours: 36
 # Copy to the backup server (phase 1e2, R44): only when backup_remote_url is set, in
 # host_vars of the data repository. Every hour, if the server answers, restic copies
 # there the snapshots it does not have yet. The local repository is never changed.
-#   backup_remote_url: the server, without a path. In prod, the GX10 through Tailscale:
-#     http://<Tailscale name or IP of the GX10>:<backup_server_port>. In dev and CI, where
+#   backup_remote_url: the server, without a path. In prod, the main server through Tailscale:
+#     http://<Tailscale name or IP of the main server>:<backup_server_port>. In dev and CI, where
 #     server and client are the same machine: http://127.0.0.1:8000, with
 #   backup_remote_network: container:<env>-backup-server (it shares the server's network).
 #   The repository there is <infra_site>/<infra_env>-<this machine>, and the user infra_site
