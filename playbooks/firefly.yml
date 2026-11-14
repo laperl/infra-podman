@@ -20,11 +20,12 @@
           - firefly_instances | map(attribute='name') | unique | list | length == firefly_instances | length
           - firefly_listening | unique | list | length == firefly_listening | length
           - firefly_retire | default('') | length == 0 or firefly_retire in firefly_instances | map(attribute='name')
+          - firefly_purge | default('') | length == 0 or firefly_purge in firefly_instances | map(attribute='name')
         fail_msg: >-
           firefly_instances of {{ inventory_hostname }} (group_vars/firefly_hosts.yml of the data
           repository): each instance with a name, and neither a name nor an address and port of
-          inbound.publish repeated on the same machine (docs/services/README.md). --retire only
-          for an instance that is still declared.
+          inbound.publish repeated on the same machine (docs/services/README.md). --retire and
+          --purge only for an instance that is still declared.
         quiet: true
       vars:
         # <address>:<host port> of every instance, without the container port.
@@ -43,7 +44,11 @@
       vars:
         # firefly_retire <name>: only that one is removed (its data kept); -e firefly_state,
         # as an extra variable, still wins over this for every instance.
-        firefly_state: "{{ 'absent' if firefly_item.name == firefly_retire | default('') else 'present' }}"
+        firefly_state: >-
+          {{ 'absent' if firefly_item.name in [firefly_retire | default(''), firefly_purge | default('')] else 'present' }}
+        # firefly_purge <name>: retired as above and then its volumes and its own secrets
+        # are deleted, after a backup (roles/firefly/tasks/purge.yml).
+        firefly_purging: "{{ firefly_item.name == firefly_purge | default('') }}"
 
     # An instance removed from the inventory is never stopped or removed by removing it:
     # only reported, on every run (as PostgreSQL's, docs/POSTGRES.md, section 7).

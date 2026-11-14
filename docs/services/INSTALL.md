@@ -264,13 +264,21 @@ En DEV, `--env dev` y `infra-dev.kdbx`; en producción, desde un tag ([`WORKFLOW
 
 **Antes de nada, si los datos importan:** la copia diaria ya tiene su base. Si quieres una copia de este momento, lanza `svc systemctl --user start <entorno>-backup.service` ([`OPERATIONS.md`](../OPERATIONS.md), apartado 3).
 
-**1. Retirar la instancia**, mientras **sigue** en `firefly_instances`:
+**1. Purgar la instancia**, mientras **sigue** en `firefly_instances`:
 ```bash
-./deploy.sh apply firefly --env <entorno> --limit <máquina> --retire <instancia>
+./deploy.sh apply firefly --env <entorno> --limit <máquina> --purge <instancia>
 ```
-Para Firefly y quita su contenedor, sus tareas diarias y su lanzador. Las demás instancias siguen igual. Se quedan sus justificantes, su base y sus secretos.
+Hace esto, en orden:
+1. para Firefly y quita su contenedor, sus tareas diarias y su lanzador;
+2. copia sus justificantes en el backup de la máquina (`reason=pre-purge`). Si la máquina no tiene backup o la copia falla, **se para aquí sin borrar nada**: la instancia queda retirada, con sus datos;
+3. borra el volumen de justificantes y su clave de aplicación;
+4. te dice lo que queda por hacer.
 
-**No ejecutes otro `apply firefly` hasta el paso 2.** Mientras siga declarada en el fichero, un `apply` sin `--retire` la vuelve a crear.
+Las demás instancias siguen igual, y su base todavía no se toca.
+
+**Si solo quieres pararla y conservar sus datos**, usa `--retire <instancia>` en lugar de `--purge`: hace solo el punto 1.
+
+**No ejecutes otro `apply firefly` hasta el paso 2.** Mientras siga declarada en el fichero, un `apply` sin `--retire` ni `--purge` la vuelve a crear.
 
 **2. Quitarla del repo de datos** y hacer un commit firmado:
 - en `group_vars/firefly_hosts.yml`, su bloque `- name: <instancia>` de `firefly_instances`. Si era la única instancia, deja `firefly_instances: []`;
@@ -291,25 +299,16 @@ El `apply` hace esto, en orden ([`POSTGRES.md`](../POSTGRES.md), apartado 7):
 
 Si era la **última** base de esa Postgres, se para y te pide confirmarlo. Repite el `apply` con `--confirm-drop <postgres>`.
 
-**4. Borrar lo que queda en la máquina.** En ella, con la función `svc` ([`SETUP.md`](../SETUP.md), paso 12):
-```bash
-sudo rm ~svc_runner/.config/containers/systemd/<entorno>-ff-<instancia>-uploads.volume   # la unidad del volumen
-svc systemctl --user daemon-reload
-svc podman volume rm <entorno>-ff-<instancia>-uploads                                     # LOS JUSTIFICANTES
-svc podman secret rm <entorno>-ff-<instancia>-app-key                                     # su clave
-```
-Si alguna cosa ya no existe, la orden lo dice y no pasa nada.
+**4. En KeePassXC:** borra las entradas `ff-<instancia>-app-key` y `ff-<instancia>-db-password`.
 
-**5. En KeePassXC:** borra las entradas `ff-<instancia>-app-key` y `ff-<instancia>-db-password`.
-
-**6. Sus copias, si también las quieres borrar** (opcional). La de su base es la ruta `/backup/pg-<postgres>/pgdump/ff_<instancia>`. Se borran como las de una instancia de Postgres ([`POSTGRES.md`](../POSTGRES.md), apartado 7, «Borrar del todo una instancia retirada», paso 4), cambiando el filtro `--tag app=pg-<postgres>` por:
+**5. Sus copias, si también las quieres borrar** (opcional). La de su base es la ruta `/backup/pg-<postgres>/pgdump/ff_<instancia>`, y la de sus justificantes, `/backup/ff-<instancia>/volume/uploads`. Se borran como las de una instancia de Postgres ([`POSTGRES.md`](../POSTGRES.md), apartado 7, «Borrar del todo una instancia retirada», paso 4), cambiando el filtro `--tag app=pg-<postgres>` por:
 ```
 --path /backup/pg-<postgres>/pgdump/ff_<instancia>
 ```
 Así solo se borran las copias de esa base, no las de otras bases de la misma Postgres.
 
 **Comprobar:**
-- `svc podman ps -a --filter name=<entorno>-ff-<instancia>` no saca ninguna línea;
+- `svc podman ps -a --filter name=<entorno>-ff-<instancia>` no saca ninguna línea, y `svc podman volume ls` ya no lista `<entorno>-ff-<instancia>-uploads`;
 - `svc podman exec <entorno>-pg-<postgres> psql -U <tu_admin> -d postgres -c '\l'` ya no lista `ff_<instancia>`.
 
 ## 11. Quitar una instancia de Postgres (y crear otra con otro nombre)

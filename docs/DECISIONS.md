@@ -510,3 +510,12 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Hoy:** el único proveedor es Postgres y la única aplicación, Firefly III (`database: postgres`, `providers: [postgres]`, `egress: false`). La plantilla de la red con salida se escribe con la primera aplicación que la declare.
 - **Aprobada por:** el operador, el 2026-11-14.
 - **SPEC:** 4.4.
+
+### R57. Purgar una instancia: copia de sus volúmenes y después borrado
+
+- **Decisión:** `./deploy.sh apply <app> --purge <instancia>` retira la instancia y después borra sus volúmenes y sus secretos propios. Antes copia cada volumen que exista con el backup de la máquina, con `reason=pre-purge`. Si la máquina no tiene backup, lo tiene de antes de que copiara volúmenes, o la copia falla, no se borra nada y la instancia queda solo retirada. Escribir el nombre de la instancia es la única confirmación, como en `--confirm-drop`. La base no se toca: se borra por el camino de Postgres, con su copia `pre-drop`. Las entradas de KeePassXC las borra el operador.
+- **Motivo:** el volumen de una instancia se borraba con cuatro órdenes a mano en la máquina y sin copia previa: el único borrado de datos de la plataforma sin red de seguridad. Una sola orden, elegida por el operador frente a exigir un `--retire` antes.
+- **Por qué la copia tiene su propio motivo:** la retención agrupa por etiquetas, así que una copia diaria nunca borra la de `pre-purge`.
+- **Repetirla es seguro:** si los volúmenes ya no existen, no se lanza ninguna copia y solo se termina la limpieza.
+- **Aprobada por:** el operador, el 2026-11-14.
+- **SPEC:** 4.10.

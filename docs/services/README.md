@@ -86,7 +86,8 @@ Lo que una instancia no dice lo toma del valor por defecto del rol (`roles/<app>
 
 - **Borrarla del inventario no la para ni la borra:** el `apply` solo avisa de que sigue en marcha (`left running as they are`), como Postgres.
 - **Retirarla**, mientras sigue declarada: `./deploy.sh apply <app> --retire <instancia>`. Se van el contenedor, sus tareas y su lanzador. Se quedan su base, su volumen y sus secretos, y las demás instancias no se tocan.
-- **Borrar sus datos y su base** son pasos aparte, a mano y sin vuelta atrás salvo restaurar una copia.
+- **Purgarla**, mientras sigue declarada: `./deploy.sh apply <app> --purge <instancia>`. La retira y después **borra** sus volúmenes y sus secretos propios. Antes copia los volúmenes en el backup de la máquina (`reason=pre-purge`, que la retención diaria no borra); si esa copia no se puede hacer, no borra nada y la instancia queda solo retirada. Escribir el nombre es la única confirmación.
+- **Su base se borra aparte**, por el camino de Postgres, con su propia copia previa.
 
 El procedimiento completo, orden por orden, está en [`INSTALL.md`](INSTALL.md), apartado 10.
 

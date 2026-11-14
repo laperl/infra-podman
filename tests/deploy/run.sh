@@ -156,6 +156,13 @@ called_with "--retire becomes -e <playbook>_retire" \
   "^navigator run playbooks/exampleapp.yml -i $data/inventory/dev/hosts.yml -- --diff --ask-become-pass -e exampleapp_retire=one\$"
 rm "$repo/playbooks/exampleapp.yml"
 expect refused "--confirm-drop and --retire do not go together" apply postgres --env dev --confirm-drop main --retire main
+expect ok "apply firefly --purge is accepted" apply firefly --env dev --purge laptop
+called_with "--purge becomes -e <playbook>_purge" \
+  "^navigator run playbooks/firefly.yml -i $data/inventory/dev/hosts.yml -- --diff --ask-become-pass -e firefly_purge=laptop\$"
+expect refused "--purge is refused with plan" plan firefly --env dev --purge laptop
+expect refused "--purge is refused with a playbook that cannot purge" apply postgres --env dev --purge main
+expect refused "--retire and --purge do not go together" apply firefly --env dev --retire laptop --purge laptop
+expect refused "--purge without a name is refused" apply firefly --env dev --purge
 expect refused "an invalid instance name is refused" apply postgres --env dev --retire 'main;x'
 expect refused "--retire without a name is refused" apply postgres --env dev --retire
 
