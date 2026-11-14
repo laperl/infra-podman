@@ -3,3 +3,7 @@
 # by the name they have there (<env>-<name in infra_secrets>). The calling role sets it
 # with include_role.
 podman_secrets_required: []
+
+# Who asks: the name the calling role has in readers: of infra_secrets, without the
+# environment. For example pg-main, ff-laptop, backup, backup-server.
+podman_secrets_reader: ""

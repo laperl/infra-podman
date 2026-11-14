@@ -66,6 +66,7 @@
   ansible.builtin.include_role:
     name: podman_secrets
   vars:
+    podman_secrets_reader: "pg-{{ postgres_instance }}"
     podman_secrets_required: >-
       {{ [postgres_secret] + (postgres_user_names | map('replace', '_', '-')
          | map('regex_replace', '^(.*)$', infra_env ~ '-\1-db-password') | list) }}

@@ -44,6 +44,7 @@
   ansible.builtin.include_role:
     name: podman_secrets
   vars:
+    podman_secrets_reader: "{{ firefly_consumer }}"
     podman_secrets_required:
       - "{{ firefly_app_key_secret }}"
       - "{{ firefly_db_secret }}"

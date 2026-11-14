@@ -9,7 +9,13 @@ Lista de los secretos que usa la plataforma (SPEC 4.5). **Nunca valores**: solo 
 - Las bases `.kdbx` nunca entran en el repo, ni siquiera la de DEV (`.gitignore` las excluye).
 - `infra-dev.kdbx` es desechable: solo existe en el portátil y se recrea con los nombres de `infra_secrets` (`inventory/dev/group_vars/all.yml` del repo de datos, SPEC 4.13). No se copia a la VM ni se le hace copia de seguridad (R17).
 
-| Nombre del secreto en Podman | Ruta en KeePassXC | Consumidores | Rotación |
+**Quién lee cada secreto** se escribe en un solo sitio: `readers:` de su línea en `infra_secrets` (`inventory/<entorno>/group_vars/all.yml` del repo de datos). Esta página dice qué clases de secretos hay y qué nombre poner ahí; las instancias concretas solo están en tu inventario.
+
+- Un rol no puede usar un secreto que no lo nombre en `readers:`: el `plan` se para y dice qué línea falta.
+- Un secreto que leen dos (la contraseña de un usuario la leen Postgres y su aplicación) es **una sola línea con los dos** en `readers:`. El mismo nombre en dos líneas se rechaza.
+- Los nombres de lector van sin el entorno: `pg-<instancia>`, `ff-<instancia>`, el `consumer:` de un usuario de Postgres, `backup` y `backup-server`.
+
+| Nombre del secreto en Podman | Ruta en KeePassXC | Consumidores (lo que va en `readers:`) | Rotación |
 | --- | --- | --- | --- |
 | `test-dummy` | `<instalación>/test-dummy` | Solo pruebas del lookup `kdbx.py` (fase 0). Solo existe en `infra-dev.kdbx` | No aplica |
 | `<entorno>-pg-main-superuser-password` | `<instalación>/pg-main-superuser-password` | Superusuario de la instancia `pg-main`, el declarado en el repo de datos (`superuser:`; portátil en prod, `vm` en dev). Solo se usa al crear la base, con el volumen vacío | Manual. Primero `ALTER ROLE <superusuario> PASSWORD …` dentro de la base, después `deploy.sh secrets --rotate pg-main-superuser-password --limit <máquina>` (SPEC 4.5). Cambiar solo el secreto no cambia la contraseña |

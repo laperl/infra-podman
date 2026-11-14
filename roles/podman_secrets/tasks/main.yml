@@ -8,9 +8,31 @@
 #     ansible.builtin.include_role:
 #       name: podman_secrets
 #     vars:
+#       podman_secrets_reader: "{{ myapp_consumer }}"
 #       podman_secrets_required:
 #         - "{{ myapp_app_key_secret }}"
 #         - "{{ myapp_db_secret }}"
+# infra_secrets of the data repository is the only place that says who reads each secret
+# (readers:). A role cannot use a secret that does not name it: two applications share a
+# secret only when the operator wrote both.
+- name: Require that each secret names this reader
+  ansible.builtin.assert:
+    that:
+      - podman_secrets_reader | length > 0
+      - podman_secrets_not_for_reader | length == 0
+    fail_msg: >-
+      {{ podman_secrets_reader }} is not a reader of: {{ podman_secrets_not_for_reader | join(', ') }}.
+      In infra_secrets of the data repository each secret says who reads it: write
+      {{ podman_secrets_reader }} in readers: of each one, for example
+      readers: [{{ podman_secrets_reader }}] (docs/SECRETS_INVENTORY.md).
+    quiet: true
+  vars:
+    podman_secrets_not_for_reader: >-
+      {{ podman_secrets_required | map('regex_replace', '^' ~ infra_env ~ '-', '')
+         | reject('in', infra_secrets | default([]) | selectattr('readers', 'defined')
+                        | selectattr('readers', 'contains', podman_secrets_reader) | map(attribute='name') | list)
+         | list }}
+
 - name: Read the service user
   ansible.builtin.include_role:
     name: service_user
