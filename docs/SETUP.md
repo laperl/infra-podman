@@ -638,7 +638,8 @@ En `~/infra-podman-data`:
 4. `inventory/dev/host_vars/vm.yml`, un fichero nuevo. La VM no tiene Tailscale: el servidor no se expone y la copia llega desde la propia VM.
    ```yaml
    ---
-   backup_server_tailscale: false
+   backup_server_inbound:
+     publish: ["127.0.0.1:18000:8000"]
    backup_remote_url: http://127.0.0.1:8000
    backup_remote_network: container:dev-backup-server
    ```

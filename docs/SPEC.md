@@ -84,6 +84,7 @@ Eres el ingeniero que implementa esta plataforma para un operador único. Eres e
     service_user/              # solo lee: carpeta, ids y entorno del usuario de servicio, para los demás roles
     quadlet_deploy/            # copia, valida y activa Quadlets
     user_units/                # instala o quita un temporizador de systemd del usuario de servicio
+    tailscale_serve/           # expone puertos de la máquina por Tailscale (4.4)
     postgres/  firefly/  ...   # un rol fino por servicio con sus plantillas
   playbooks/
   scripts/                     # utilidades de CI: render y validación de Quadlets

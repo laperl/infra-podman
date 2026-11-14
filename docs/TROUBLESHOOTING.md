@@ -142,8 +142,8 @@ Los mensajes salen en el aviso de escritorio y en `cat /var/lib/infra-podman/bac
 
 | Lo que ves | Por qué | Qué hacer |
 | --- | --- | --- |
-| `'tailscale serve status' failed on …. Is Tailscale installed and connected?` | Tailscale no está instalado o no está conectado en esa máquina | En el servidor principal: `tailscale status`. En una máquina sin Tailscale (la VM DEV), `backup_server_tailscale: false` en el repo de datos |
-| `tailscale serve already uses port 18000 on … for something else` | Ese puerto ya lo usa otra cosa en `tailscale serve`. Ansible no la toca | `sudo tailscale serve status`. Libéralo a mano o elige otro `backup_server_port` en el repo de datos |
+| `'tailscale serve status' failed on …. Is Tailscale installed and connected?` | Tailscale no está instalado o no está conectado en esa máquina | En el servidor principal: `tailscale status`. En una máquina sin Tailscale (la VM DEV), quita `tailscale_serve` de `backup_server_inbound` en el repo de datos |
+| `tailscale serve already uses port 18000 on … for something else` | Ese puerto ya lo usa otra cosa en `tailscale serve`. Ansible no la toca | `sudo tailscale serve status`. Libéralo a mano o elige otro puerto en `backup_server_inbound` en el repo de datos |
 | `sudo tailscale serve status` no muestra el 18000 | Se ha borrado la configuración de `tailscale serve` | `./deploy.sh apply backup-server --limit servidor` (solo añade ese puerto) |
 | Quieres quitar el puerto 18000 | — | En el servidor principal: `sudo tailscale serve --tcp=18000 tcp://localhost:18000 off` |
 

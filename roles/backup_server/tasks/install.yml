@@ -130,13 +130,16 @@
   become_user: "{{ service_user }}"
   when: backup_server_hash is changed and not ansible_check_mode
 
-- name: Wait until the server answers on 127.0.0.1
+# On the first <address>:<host port> of backup_server_inbound.publish.
+- name: Wait until the server answers
   ansible.builtin.wait_for:
-    host: 127.0.0.1
-    port: "{{ backup_server_port | int }}"
+    host: "{{ backup_server_publish[0].split(':')[0] }}"
+    port: "{{ backup_server_publish[0].split(':')[1] | int }}"
     timeout: 60
   when: not ansible_check_mode
 
 - name: Expose it through Tailscale
-  ansible.builtin.include_tasks: tailscale.yml
-  when: backup_server_tailscale
+  ansible.builtin.include_role:
+    name: tailscale_serve
+  vars:
+    tailscale_serve_ports: "{{ backup_server_tailscale_serve }}"

@@ -1,0 +1,46 @@
+---
+# One place to reach a service from the other machines of the tailnet (SPEC 4.4, R55):
+# `tailscale serve --bg --tcp=<port> tcp://localhost:<port>`, as root, for each port of
+# tailscale_serve_ports. The service must publish that port on 127.0.0.1 (inbound.publish).
+# Nothing is removed here: a forwarder that is no longer wanted is removed by hand
+# (sudo tailscale serve --tcp=<port> tcp://localhost:<port> off).
+#
+# Use it like this:
+#   - name: Expose it through Tailscale
+#     ansible.builtin.include_role:
+#       name: tailscale_serve
+#     vars:
+#       tailscale_serve_ports: "{{ myapp_inbound.tailscale_serve | default([]) }}"
+- name: Check the ports
+  ansible.builtin.assert:
+    that:
+      - tailscale_serve_ports is sequence and tailscale_serve_ports is not string
+      - tailscale_serve_ports | map('string') | select('match', '^[0-9]{1,5}$') | list | length == tailscale_serve_ports | length
+    fail_msg: tailscale_serve is a list of ports, like [18000]
+    quiet: true
+
+- name: Read what tailscale serve already does
+  ansible.builtin.command:
+    cmd: tailscale serve status --json
+  become: true
+  register: tailscale_serve_status
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: tailscale_serve_ports | length > 0
+
+- name: Require Tailscale
+  ansible.builtin.assert:
+    that: tailscale_serve_status.rc == 0
+    fail_msg: >-
+      'tailscale serve status' failed on {{ inventory_hostname }} ({{ tailscale_serve_status.stderr | default('') | trim }}).
+      Is Tailscale installed and connected? Where there is no Tailscale (the DEV VM), leave
+      tailscale_serve out of inbound in the data repository.
+    quiet: true
+  when: tailscale_serve_ports | length > 0
+
+- name: Serve each port
+  ansible.builtin.include_tasks: port.yml
+  loop: "{{ tailscale_serve_ports }}"
+  loop_control:
+    loop_var: tailscale_serve_port

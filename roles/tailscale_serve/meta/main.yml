@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  author: laperl
+  description: Forward ports of the machine's Tailscale address to 127.0.0.1 with tailscale serve
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.18"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+    - name: Fedora
+      versions:
+        - "44"
+dependencies: []

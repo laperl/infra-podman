@@ -27,7 +27,7 @@ backup_notify_max_age_hours: 36
 # host_vars of the data repository. Every hour, if the server answers, restic copies
 # there the snapshots it does not have yet. The local repository is never changed.
 #   backup_remote_url: the server, without a path. In prod, the main server through Tailscale:
-#     http://<Tailscale name or IP of the main server>:<backup_server_port>. In dev and CI, where
+#     http://<Tailscale name or IP of the main server>:<its port, backup_server_inbound>. In dev and CI, where
 #     server and client are the same machine: http://127.0.0.1:8000, with
 #   backup_remote_network: container:<env>-backup-server (it shares the server's network).
 #   The repository there is <infra_site>/<infra_env>-<this machine>, and the user infra_site
