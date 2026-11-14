@@ -1,6 +1,6 @@
 ---
-# Read-only: connectivity, versions and what is left on each machine that the inventory no
-# longer declares. Safe in plan and apply: it changes nothing on the servers.
+# Read-only: connectivity, versions and the state of each machine. Safe in plan and apply:
+# it changes nothing on the servers.
 - name: Check that servers are reachable and run Podman 4.9 or newer
   hosts: servers
   gather_facts: false
@@ -33,10 +33,12 @@
           {{ inventory_hostname }}: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }},
           {{ check_podman.stdout }}, connected as {{ ansible_facts['user_id'] | default(ansible_user | default('?')) }}
 
-# What is on each machine and the inventory does not declare any more: left after retiring
-# an instance, or after removing it from the inventory without purging it. Only reported:
-# nothing is stopped or deleted here (docs/services/INSTALL.md, sections 10 and 11).
-- name: Report what is on each machine and nobody declares
+# What runs on each machine and whether it is well: services and their health, scheduled
+# tasks, networks, volumes, what the backup copies and how its last run went, secrets, and
+# what is left that the inventory no longer declares. Only reported: nothing is started,
+# stopped or deleted (docs/OPERATIONS.md, section 4). files/machine-report.py does it, the
+# same for every application: it finds them by their labels.
+- name: Report the state of each machine
   hosts: servers
   gather_facts: false
   vars:
@@ -54,6 +56,15 @@
       {%- endfor -%}
       {%- endfor -%}
       {{ found }}
+    # The Podman secrets the inventory installs on this machine (playbooks/secrets.yml).
+    check_secrets: >-
+      {%- set found = [] -%}
+      {%- for secret in infra_secrets | default([]) | selectattr('group', 'defined') -%}
+      {%- if ([secret.group] | flatten) | intersect(group_names) | length > 0 -%}
+      {%- set _ = found.append(infra_env ~ '-' ~ secret.name) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ found }}
   tasks:
     - name: Find the service user
       ansible.builtin.getent:
@@ -62,76 +73,26 @@
         fail_key: false
       when: service_user is defined
 
-    - name: Report on a machine that has the service user
+    - name: Read the state of the machine
+      ansible.builtin.script:
+        cmd: files/machine-report.py
+        executable: python3
+      environment:
+        HOME: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
+        XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+        MACHINE_REPORT_INPUT: >-
+          {{ {'host': inventory_hostname, 'env': infra_env, 'declared': check_declared,
+              'secrets': check_secrets} | to_json }}
+      become: true
+      become_user: "{{ service_user }}"
+      register: check_report
+      changed_when: false
+      check_mode: false
       when:
         - service_user is defined
         - ansible_facts['getent_passwd'][service_user] is not none
-      vars:
-        check_home: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
-        check_env:
-          HOME: "{{ check_home }}"
-          XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
-      block:
-        # One line per object: <kind> <name> <its infra.app label>. podman network ls only
-        # gives all the labels together, as text: infra.app is taken out of it below.
-        - name: Read the containers, volumes and networks of the platform
-          ansible.builtin.shell:
-            cmd: |
-              set -e
-              podman ps --all --filter label=infra.managed-by=infra-podman --format '{% raw %}container {{.Names}} {{index .Labels "infra.app"}}{% endraw %}'
-              podman volume ls --filter label=infra.managed-by=infra-podman --format '{% raw %}volume {{.Name}} {{index .Labels "infra.app"}}{% endraw %}'
-              podman network ls --filter label=infra.managed-by=infra-podman --format '{% raw %}network {{.Name}} {{.Labels}}{% endraw %}'
-          environment: "{{ check_env }}"
-          become: true
-          become_user: "{{ service_user }}"
-          register: check_objects
-          changed_when: false
-          check_mode: false
 
-        - name: Read the Podman secrets
-          ansible.builtin.command:
-            cmd: podman secret ls --format '{% raw %}{{.Name}}{% endraw %}'
-          environment: "{{ check_env }}"
-          become: true
-          become_user: "{{ service_user }}"
-          register: check_secrets
-          changed_when: false
-          check_mode: false
-
-        - name: Read what the applications add to the daily backup
-          ansible.builtin.find:
-            paths: "{{ check_home }}/.config/infra-podman/backup/backup.d"
-            patterns: "*.conf"
-          become: true
-          become_user: "{{ service_user }}"
-          register: check_backup_items
-
-        - name: Report
-          ansible.builtin.debug:
-            msg: >-
-              {{ ([inventory_hostname ~ ': on the machine and not declared in the inventory (nothing is touched):']
-                  + check_undeclared)
-                 if check_undeclared | length > 0
-                 else inventory_hostname ~ ': nothing on the machine that the inventory does not declare.' }}
-          vars:
-            check_undeclared: >-
-              {%- set lines = [] -%}
-              {%- for line in check_objects.stdout_lines -%}
-              {%- set kind, name, labels = (line.split(' ', 2) + ['', ''])[:3] -%}
-              {%- set app = (labels | regex_search('infra\\.app=([a-z0-9-]+)', '\\1') | default([''], true) | first)
-                            if kind == 'network' else labels -%}
-              {%- if app not in check_declared -%}
-              {%- set _ = lines.append(kind ~ ' ' ~ name ~ ' (of ' ~ (app or 'no instance') ~ ')') -%}
-              {%- endif -%}
-              {%- endfor -%}
-              {%- for name in check_secrets.stdout_lines | select('match', '^' ~ infra_env ~ '-') -%}
-              {%- if name | regex_replace('^' ~ infra_env ~ '-', '') not in infra_secrets | default([]) | map(attribute='name') -%}
-              {%- set _ = lines.append('secret ' ~ name ~ ' (not in infra_secrets)') -%}
-              {%- endif -%}
-              {%- endfor -%}
-              {%- for file in check_backup_items.files | default([]) | map(attribute='path') | map('basename') -%}
-              {%- if file | regex_replace('\\.conf$', '') not in check_declared -%}
-              {%- set _ = lines.append('backup items ' ~ file ~ ' (in backup.d)') -%}
-              {%- endif -%}
-              {%- endfor -%}
-              {{ lines }}
+    - name: Report
+      ansible.builtin.debug:
+        msg: "{{ check_report.stdout_lines }}"
+      when: check_report.stdout_lines is defined
