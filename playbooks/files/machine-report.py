@@ -102,6 +102,11 @@ def collect() -> dict:
                          for path in sorted(glob.glob(os.path.join(backup, "backup.d", "*.conf")))],
         "backup_status": status,
     }
+    # podman ps does not tell a container without network from one on Podman's default
+    # network, which has a way out: its network mode does.
+    for container in data["containers"]:
+        container["NetworkMode"] = run("podman", "inspect", "--format", "{{.HostConfig.NetworkMode}}",
+                                       container.get("Id", "")).strip()
     data["errors"] = list(ERRORS)
     return data
 
@@ -130,10 +135,12 @@ def container_line(container: dict) -> tuple[str, str]:
     elif "(healthy)" in status:
         health, problem = "en marcha, sano", ""
     else:
-        health, problem = "en marcha", ""
+        health, problem = "en marcha (sin comprobación de salud)", ""
     ports = ", ".join(f"{port.get('host_ip') or '0.0.0.0'}:{port.get('host_port')}->{port.get('container_port')}"
                       for port in container.get("Ports") or []) or "ninguna"
-    networks = ", ".join(container.get("Networks") or []) or "ninguna"
+    mode = container.get("NetworkMode") or "?"
+    networks = ", ".join(container.get("Networks") or []) or (
+        "ninguna (sin red)" if mode == "none" else f"la de Podman por defecto, CON SALIDA ({mode})")
     text = (f"{name}: {health}. Entrada: {ports}. Redes: {networks}. "
             f"Imagen: {short_image(container.get('Image', '?'))}")
     return text, problem
@@ -234,6 +241,15 @@ def report(data: dict, host: str, env: str, declared: list[str], secrets: list[s
                      + (f". {status['message']}" if result != "ok" and status.get("message") else ""))
         if result == "failed":
             problems.append(f"{unit}: la última copia falló")
+
+    # A volume is in the backup when a line names it, or when its instance is copied with
+    # its own tool (pg). The backup's own volumes are the copy itself.
+    words = [item.split() for item in data["backup_items"]]
+    copied = {item[3] for item in words if item[0] == "volume" and len(item) > 3}
+    dumped = {item[1] for item in words if item[0] == "pg" and len(item) > 1} | {"backup"}
+    for volume in sorted(data["volumes"], key=lambda item: item.get("Name", "")):
+        if volume.get("Name") not in copied and label(volume, "infra.app") not in dumped:
+            lines.append(f"  FUERA DE LA COPIA: el volumen {volume.get('Name')} (de {label(volume, 'infra.app') or '?'})")
 
     lines.append("SECRETOS")
     missing = sorted(set(secrets) - set(data["secrets"]))

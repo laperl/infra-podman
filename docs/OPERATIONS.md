@@ -115,7 +115,7 @@ Repásalo tras un reinicio, tras un `apply` o cuando quieras quedarte tranquilo.
 | `SERVICIOS` | Cada contenedor: en marcha o parado, sano o no, por dónde se entra, sus redes y su imagen. `FALTA` si una instancia del inventario no tiene contenedor |
 | `TAREAS PROGRAMADAS` | Cada temporizador: activo o no, cuándo salta, cuándo saltó y cómo terminó |
 | `REDES` y `VOLÚMENES` | Los que hay, de qué instancia son y si la red tiene salida |
-| `COPIAS` | Qué copia el backup de esa máquina, línea a línea, y el resultado de la última copia y del último envío (apartado 2) |
+| `COPIAS` | Qué copia el backup de esa máquina, línea a línea, y el resultado de la última copia y del último envío (apartado 2). `FUERA DE LA COPIA`: un volumen que nada copia; se activa con `backup:` en su instancia ([`services/README.md`](services/README.md), apartado 8) |
 | `SECRETOS` | Cuántos pide el inventario y cuáles faltan |
 | `SOBRA` | Lo que hay en la máquina y el inventario ya no declara. No es un fallo |
 | `RESUMEN` | `todo correcto`, o la lista de problemas |
