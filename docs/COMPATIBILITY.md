@@ -7,7 +7,7 @@ Copia de la sección 4.3 de [`SPEC.md`](SPEC.md), más lo comprobado en la prác
 - **Prohibido** usar funciones de Quadlet posteriores a 4.9. En concreto, `Notify=healthy` y los ficheros `.pod` llegaron con Podman 5.0. Cualquier clave se comprueba en la documentación de 4.9.
 - **Dependencias entre servicios** (por ejemplo, Firefly espera a Postgres): `Requires=` y `After=` más un `ExecStartPre` que espere, con tiempo máximo, a que la dependencia esté sana. Fija `TimeoutStartSec` explícito. Probado en `lifecycle` con Firefly (fase 2): con Postgres en pausa, Firefly no arranca y se rinde a su `TimeoutStartSec`; con `Restart=on-failure`, arranca solo cuando Postgres vuelve a estar sano.
 - **Red rootless:** en 4.9 la salida al exterior de las redes rootless usa slirp4netns. Podman 5.0 cambió a pasta y Podman 6 elimina slirp4netns. Por eso **ninguna plantilla lleva opciones de slirp4netns ni de pasta**: así el cambio de versión no toca el código.
-- **Al actualizar el GX10 a Podman 5 o superior:** se sustituye el patrón de espera por `Notify=healthy` en un único sitio de las plantillas.
+- **Al actualizar el servidor principal a Podman 5 o superior:** se sustituye el patrón de espera por `Notify=healthy` en un único sitio de las plantillas.
 
 ## Cómo se comprueba una clave
 
@@ -57,7 +57,7 @@ Podman 4.9 sí limita memoria, CPU y procesos. Lo que falta en Quadlet 4.9 es la
 | `/dev/shm` | `ShmSize=64m` (clave propia) | Sí |
 | `Memory=` | **No existe**: `unsupported key` | — |
 
-Los límites se pasan como **parámetros por servicio** y se escriben en un único sitio de las plantillas, para cambiar en un solo punto a claves nativas si la versión de Podman del GX10 llega a tenerlas (se comprobará en la documentación de esa versión). Diseño en la fase 1 (ver [`ROADMAP.md`](ROADMAP.md)).
+Los límites se pasan como **parámetros por servicio** y se escriben en un único sitio de las plantillas, para cambiar en un solo punto a claves nativas si la versión de Podman del servidor principal llega a tenerlas (se comprobará en la documentación de esa versión). Diseño en la fase 1 (ver [`ROADMAP.md`](ROADMAP.md)).
 
 `MemoryMax=` en `[Service]` (systemd) también funcionaría, pero limita el servicio entero (incluido `conmon`), no solo el contenedor. Se prefieren las opciones de Podman.
 
@@ -94,7 +94,7 @@ El 2026-11-03, en `ubuntu-24.04` con Podman 4.9.3 sin root y systemd de usuario:
 - **La unidad generada conserva la sección original** como `[X-Container]`: cada valor aparece dos veces en `systemctl --user cat`.
 - **SELinux y el volumen del backup (Fedora):** el contenedor de backup monta su repositorio con `:Z`, que lo marca como privado. Otro contenedor que lo monte sin más recibe `stat /repo/config: permission denied`. Para consultarlo a mano: `--security-opt label=disable`, que no cambia la marca (como el contenedor de Ansible, R16). En Ubuntu no pasa, por eso el CI no lo vio. Detectado por el operador en el portátil el 2026-11-04.
 - **restic y los atributos extendidos:** restic guarda los de cada carpeta (listas de permisos, etiquetas de SELinux en Fedora). Si el destino de una restauración no los admite, restaura los ficheros pero termina con error. Se restaura con `--exclude-xattr '*'` (restic 0.18 o posterior). Visto en el CI y [en Fedora](https://discussion.fedoraproject.org/t/selinux-errors-on-restic-restore-test/181360).
-- **Copia al GX10 (fase 1e2, R44), comprobado con el generador 4.9.3:**
+- **Copia al servidor principal (fase 1e2, R44), comprobado con el generador 4.9.3:**
   - `SecurityLabelDisable=true` existe y genera `--security-opt label:disable`.
   - `Network=container:<nombre>` pasa tal cual a `--network`: en DEV y en el CI, la copia comparte la red del servidor.
   - `SuccessExitStatus=` en `[Service]` se conserva: el código 75 (el servidor no responde) no es un fallo.

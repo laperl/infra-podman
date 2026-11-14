@@ -19,5 +19,5 @@ La IA propone, el código determinista ejecuta y un humano aprueba lo irreversib
 ## Qué queda fuera
 
 - Exponer nada a internet: todo va por Tailscale.
-- Gestionar desde Ansible el Docker de vLLM en el GX10, por ahora.
+- Gestionar desde Ansible el Docker de vLLM en el servidor principal, por ahora.
 - Que una IA despliegue, mergee o cree tags.

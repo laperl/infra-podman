@@ -842,8 +842,8 @@ jobs:
       - name: "Manual: restore from the local copy, check, swap (5.1)"
         run: $OPS restore-local 2>&1 | tee -a all.log
 
-      - name: "Manual: restore from the GX10's volume, without its server (5.2)"
-        run: $OPS restore-gx10 2>&1 | tee -a all.log
+      - name: "Manual: restore from the main server's volume, without its server (5.2)"
+        run: $OPS restore-server 2>&1 | tee -a all.log
 
       - name: "Manual: the data repository, from the local copy and as on a new laptop (5.3, 5.4)"
         run: |

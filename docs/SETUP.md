@@ -91,28 +91,28 @@ Sigue [`SIGNING.md`](SIGNING.md).
 En la VM (Ubuntu Server 24.04 x86_64), con tu usuario:
 
 ```bash
-sudo apt update && sudo apt install -y podman   # Podman 4.9, igual que el GX10
+sudo apt update && sudo apt install -y podman   # Podman 4.9, igual que el servidor principal
 podman --version
 ```
 
 Para entrar desde el portátil, tu clave pública tiene que estar en el `~/.ssh/authorized_keys` de la VM (`ssh-copy-id` desde el portátil).
 
-En el portátil, define en `~/.ssh/config` el alias que usa el inventario, `vmiadev`. La dirección y el usuario se quedan en tu `~/.ssh/config`, fuera del repo:
+En el portátil, define en `~/.ssh/config` el alias que usa el inventario, `vm`. La dirección y el usuario se quedan en tu `~/.ssh/config`, fuera del repo:
 
 ```text
-Host vmiadev
+Host vm
     HostName 192.168.122.10      # la IP de tu VM
     User tu_usuario_en_la_vm
     ForwardAgent no
 ```
 
-Si ya tienes un bloque `Host *` con `ForwardAgent yes`, el bloque `Host vmiadev` tiene que ir **antes**: ssh se queda con el primer valor que encuentra. Comprueba con `ssh -G vmiadev | grep -i forwardagent`: tiene que salir `forwardagent no`.
+Si ya tienes un bloque `Host *` con `ForwardAgent yes`, el bloque `Host vm` tiene que ir **antes**: ssh se queda con el primer valor que encuentra. Comprueba con `ssh -G vm | grep -i forwardagent`: tiene que salir `forwardagent no`.
 
-Conéctate una vez a mano para aceptar su huella: `ssh vmiadev true`. Ansible corre en un contenedor que lee tu `~/.ssh` en solo lectura y no puede preguntarte por huellas nuevas.
+Conéctate una vez a mano para aceptar su huella: `ssh vm true`. Ansible corre en un contenedor que lee tu `~/.ssh` en solo lectura y no puede preguntarte por huellas nuevas.
 
 ### La VM no debe ver tus claves
 
-Entra en la VM (`ssh vmiadev`) y comprueba:
+Entra en la VM (`ssh vm`) y comprueba:
 
 ```bash
 echo "$SSH_AUTH_SOCK"    # vacío
@@ -120,7 +120,7 @@ ssh-add -l               # "Could not open a connection to your authentication a
 ls ~/.ssh                # solo authorized_keys y known_hosts, ninguna clave privada
 ```
 
-Si `ssh-add -l` lista tus claves, la sesión está **reenviando tu agente** (`ssh -A` o `ForwardAgent yes`). Mientras dure esa sesión, cualquier proceso de la VM, opencode incluido, puede usar tus claves: entrar en el GX10 o firmar un tag. Es justo lo que D14 prohíbe. Pon `ForwardAgent no` como arriba y vuelve a entrar. Los inventarios ya lo desactivan para las conexiones de Ansible (R17), pero tu `ssh` a mano depende de tu `~/.ssh/config`.
+Si `ssh-add -l` lista tus claves, la sesión está **reenviando tu agente** (`ssh -A` o `ForwardAgent yes`). Mientras dure esa sesión, cualquier proceso de la VM, opencode incluido, puede usar tus claves: entrar en el servidor principal o firmar un tag. Es justo lo que D14 prohíbe. Pon `ForwardAgent no` como arriba y vuelve a entrar. Los inventarios ya lo desactivan para las conexiones de Ansible (R17), pero tu `ssh` a mano depende de tu `~/.ssh/config`.
 
 Si más adelante opencode ejecuta pruebas dentro de la VM, necesitará una copia del repo. Eso se decide cuando llegue ese momento; no hace falta para la fase 0.
 
@@ -131,7 +131,7 @@ Si más adelante opencode ejecuta pruebas dentro de la VM, necesitará una copia
 ```text
 kdbx_dev = ~/ruta/a/infra-dev.kdbx
 kdbx_prod = ~/ruta/a/infra-pro.kdbx
-data_repo = ~/Documents/SECURE_vc/ansible/infra-podman
+data_repo = ~/infra-podman-data
 ```
 
 `data_repo` es la ruta de tu repo de datos, donde vive el inventario (paso 14). La lee `deploy.sh` desde la fase 1c, en DEV y en producción.
@@ -141,13 +141,13 @@ data_repo = ~/Documents/SECURE_vc/ansible/infra-podman
 En tu copia del repo, en la rama del PR, con KeePassXC desbloqueado:
 
 ```bash
-./deploy.sh plan check --env dev       # conecta con vmiadev y comprueba Podman >= 4.9 sin cambiar nada
+./deploy.sh plan check --env dev       # conecta con vm y comprueba Podman >= 4.9 sin cambiar nada
 ./deploy.sh secrets --env dev          # pide la contraseña de infra-dev.kdbx y lee test-dummy
 tail -2 ~/.local/state/infra-podman/deploy.log
 ```
 
 Resultado esperado:
-- **`plan`:** una línea `vmiadev: Ubuntu 24.04, podman version 4.9.3, connected as …` y `failed=0`.
+- **`plan`:** una línea `vm: Ubuntu 24.04, podman version 4.9.3, connected as …` y `failed=0`.
 - **`secrets`:** `1 secret(s) readable from KeePassXC for dev`.
 - **Registro:** dos líneas acabadas en `ok`.
 
@@ -200,7 +200,7 @@ Acepta la huella una vez: `ssh laptop true`. Tiene que entrar sin pedir contrase
 `laptop` está en el inventario de producción, así que `deploy.sh` exige un tag firmado (`docs/WORKFLOW.md`). Para comprobar **antes del merge** que el contenedor de Ansible llega al portátil, desde la rama del PR, lanza ansible-navigator a mano con `check`, que solo lee:
 
 ```bash
-ansible-navigator run playbooks/check.yml -i ~/Documents/SECURE_vc/ansible/infra-podman/inventory/prod/hosts.yml -- --limit laptop
+ansible-navigator run playbooks/check.yml -i ~/infra-podman-data/inventory/prod/hosts.yml -- --limit laptop
 ```
 
 Resultado esperado: `laptop: Fedora 44, podman version 5…` y `failed=0`.
@@ -211,7 +211,7 @@ Resultado esperado: `laptop: Fedora 44, podman version 5…` y `failed=0`.
 
 - Ansible entra con **tu usuario** y usa sudo para crear `svc_runner`, activar el linger y convertirse en `svc_runner`, que es quien ejecuta los contenedores.
 - Tu usuario ya tiene sudo si `sudo true` te funciona: está en el grupo `wheel` en Fedora y `sudo` en Ubuntu (`id -nG`). No hay que añadir nada.
-- Ansible pide una sola contraseña por ejecución. Si la del portátil y la del GX10 son distintas, despliega cada máquina por separado: `--limit laptop` y `--limit gx10`.
+- Ansible pide una sola contraseña por ejecución. Si la del portátil y la del servidor principal son distintas, despliega cada máquina por separado: `--limit laptop` y `--limit servidor`.
 
 ## 11. Usuario de servicio (fase 1, PR 1/4)
 
@@ -223,7 +223,7 @@ Primero en DEV, desde la rama del PR:
 ./deploy.sh apply base --env dev      # el segundo apply tiene que dar changed=0
 ```
 
-Después, en producción: merge, tag firmado y `plan`/`apply` en cada máquina con `--limit laptop` y `--limit gx10`. Paso a paso en [`WORKFLOW.md`](WORKFLOW.md), pasos 4 a 6.
+Después, en producción: merge, tag firmado y `plan`/`apply` en cada máquina con `--limit laptop` y `--limit servidor`. Paso a paso en [`WORKFLOW.md`](WORKFLOW.md), pasos 4 a 6.
 
 Comprobación a mano en cada máquina:
 
@@ -263,13 +263,13 @@ En **`infra-pro.kdbx`**, la misma entrada con una contraseña generada por KeePa
 ### 13.2 En DEV, desde la rama del PR
 
 ```bash
-./deploy.sh secrets --env dev --limit vmiadev   # contraseña de infra-dev.kdbx y después la de sudo de vmiadev
+./deploy.sh secrets --env dev --limit vm   # contraseña de infra-dev.kdbx y después la de sudo de vm
 ./deploy.sh plan postgres --env dev
 ./deploy.sh apply postgres --env dev
 ./deploy.sh apply postgres --env dev            # changed=0
 ```
 
-Comprueba en `vmiadev` (con la función `svc` del paso 12):
+Comprueba en `vm` (con la función `svc` del paso 12):
 
 ```bash
 svc podman healthcheck run dev-pg-main && echo sano
@@ -296,11 +296,11 @@ Desde la fase 1c, el inventario (máquinas, instancias y, más adelante, bases, 
 
 Se hace **una vez**, **antes** de probar en DEV la rama del PR de la fase 1c: desde esa versión, `deploy.sh` ya no encuentra el inventario en el repo de código.
 
-Con el volumen cifrado `SECURE_vc` montado y KeePassXC desbloqueado:
+Con el volumen cifrado del repo de datos montado y KeePassXC desbloqueado:
 
 ```bash
 CODE=~/Documents/src/github.com/laperl/infra-podman
-DATA=~/Documents/SECURE_vc/ansible/infra-podman
+DATA=~/infra-podman-data
 
 # 1. El tag desplegado está firmado (tiene que decir Good "git" signature)
 git -C "$CODE" fetch --tags && git -C "$CODE" verify-tag v0.2.0
@@ -326,7 +326,7 @@ git -C "$DATA" rev-parse HEAD:inventory              # el MISMO número: copia i
 git status --short                                   # vacío
 
 # 5. Decirle a deploy.sh dónde está
-echo 'data_repo = ~/Documents/SECURE_vc/ansible/infra-podman' >> ~/.config/infra-podman/deploy.conf
+echo 'data_repo = ~/infra-podman-data' >> ~/.config/infra-podman/deploy.conf
 cat ~/.config/infra-podman/deploy.conf               # una sola línea data_repo
 ```
 
@@ -337,7 +337,7 @@ Qué hace cada cosa:
 - **La firma** se configura con `git config` sin `--global`: solo afecta a este repo. Usa la misma clave de firma que los tags y el mismo fichero de firmantes de confianza. Si git pide `user.name`, ponlo también con `git config user.name "<tu nombre>"`, sin `--global`.
 - **La línea `data_repo`** la ignora el `deploy.sh` de `v0.2.0`, así que puedes añadirla ya: lo desplegado sigue funcionando igual hasta que pases a la versión nueva.
 
-Si el volumen `SECURE_vc` no está montado, `deploy.sh` se niega con `no existe el repo de datos … ¿Está montado el volumen cifrado?`.
+Si ese volumen no está montado, `deploy.sh` se niega con `no existe el repo de datos … ¿Está montado el volumen cifrado?`.
 
 La copia de seguridad del repo de datos la harán los backups de la fase 1e. Mientras tanto vive solo en el portátil: si se perdiera, se rehace con estos mismos pasos desde `v0.2.0`, pero se perderían los cambios hechos después.
 
@@ -362,7 +362,7 @@ postgres_instances:
 ```
 
 ```bash
-cd ~/Documents/SECURE_vc/ansible/infra-podman
+cd ~/infra-podman-data
 $EDITOR inventory/dev/group_vars/postgres_hosts.yml inventory/prod/group_vars/postgres_hosts.yml
 git diff                                       # solo las dos líneas superuser
 git commit -am "pg-main: superuser (infra-podman phase 1d)"
@@ -374,14 +374,14 @@ git verify-commit HEAD                         # Good "git" signature
 **a. Comprueba que la protección funciona.** Con la instancia antigua aún en marcha, `plan` tiene que pararse:
 
 ```bash
-./deploy.sh plan postgres --env dev --limit vmiadev
+./deploy.sh plan postgres --env dev --limit vm
 # … FAILED … dev-pg-main was not created with the platform's parameters … docs/SETUP.md, section 15
 ```
 
-**b. Comprueba que está vacía y bórrala.** En `vmiadev`, con la función `svc` del paso 12. La instancia antigua tiene el superusuario `postgres`:
+**b. Comprueba que está vacía y bórrala.** En `vm`, con la función `svc` del paso 12. La instancia antigua tiene el superusuario `postgres`:
 
 ```bash
-ssh vmiadev
+ssh vm
 svc podman exec dev-pg-main psql -XAt -U postgres -c "SELECT datname FROM pg_database ORDER BY 1"
 #   postgres, template0 y template1. Si sale otra base, PARA y avísame.
 svc podman exec dev-pg-main psql -XAt -U postgres -d postgres \
@@ -398,12 +398,12 @@ exit
 **c. Créala de nuevo**, desde el portátil:
 
 ```bash
-./deploy.sh plan  postgres --env dev --limit vmiadev
-./deploy.sh apply postgres --env dev --limit vmiadev
-./deploy.sh apply postgres --env dev --limit vmiadev       # changed=0
+./deploy.sh plan  postgres --env dev --limit vm
+./deploy.sh apply postgres --env dev --limit vm
+./deploy.sh apply postgres --env dev --limit vm       # changed=0
 ```
 
-**d. Comprueba**, en `vmiadev`:
+**d. Comprueba**, en `vm`:
 
 ```bash
 svc podman healthcheck run dev-pg-main && echo sano
@@ -443,7 +443,7 @@ Desde ahora, la consola es `svc podman exec -it prod-pg-main psql -U laperl -d p
 Cada instalación de esta plataforma tiene un **nombre propio**: la tuya, `laperl`; la de un cliente, el nombre del cliente. Es obligatorio y se escribe una sola vez, en el repo de datos. De él salen:
 
 - **el grupo de KeePassXC** donde están sus secretos: `laperl/pg-main-superuser-password`, `laperl/backup-restic-password`…;
-- más adelante, la identificación de sus backups (fase 1e1) y su carpeta en el GX10 (fase 1e2).
+- más adelante, la identificación de sus backups (fase 1e1) y su carpeta en el servidor principal (fase 1e2).
 
 Sin él, `deploy.sh secrets` se para antes de leer nada. Con él, nunca puede leer el secreto de otra instalación, y si en el grupo hay **dos entradas con el mismo título** se para en vez de elegir una (R42).
 
@@ -463,7 +463,7 @@ infra_site: laperl
 ```
 
 ```bash
-cd ~/Documents/SECURE_vc/ansible/infra-podman
+cd ~/infra-podman-data
 git diff                                   # solo esas dos líneas
 git commit -am "infra_site: laperl (infra-podman R42)"
 git verify-commit HEAD                     # Good "git" signature
@@ -474,7 +474,7 @@ git verify-commit HEAD                     # Good "git" signature
 Desde tu copia del código, en la rama del PR para DEV y en el tag para producción:
 
 ```bash
-./deploy.sh secrets --env dev --limit vmiadev   # tiene que salir «1 check-only secret(s) readable from KeePassXC for dev»
+./deploy.sh secrets --env dev --limit vm   # tiene que salir «1 check-only secret(s) readable from KeePassXC for dev»
 ./deploy.sh secrets --limit laptop              # no crea nada: los secretos ya existen
 ```
 
@@ -488,7 +488,7 @@ Cambias `infra_site` en el repo de datos y renombras el grupo en KeePassXC con e
 
 ## 17. Backups locales (fase 1e1)
 
-Una copia diaria, a las 13:00, de todas las bases de cada instancia y, en el portátil, de tu repo de datos (SPEC 4.11). Se guarda cifrada con restic en el volumen `<entorno>-backup-repo`. Si a esa hora la máquina estaba apagada, la copia se hace al encenderla. La copia al GX10 está en el paso 18.
+Una copia diaria, a las 13:00, de todas las bases de cada instancia y, en el portátil, de tu repo de datos (SPEC 4.11). Se guarda cifrada con restic en el volumen `<entorno>-backup-repo`. Si a esa hora la máquina estaba apagada, la copia se hace al encenderla. La copia al servidor principal está en el paso 18.
 
 ### 17.1 La clave de restic en KeePassXC
 
@@ -500,13 +500,13 @@ En **`infra-pro.kdbx`**, la misma entrada con una contraseña generada por KeePa
 
 ### 17.2 El repo de datos
 
-En `~/Documents/SECURE_vc/ansible/infra-podman` (con `vmiadev` y `laptop`, tus alias):
+En `~/infra-podman-data` (con `vm` y `laptop`, tus alias):
 
 1. `inventory/dev/hosts.yml` y `inventory/prod/hosts.yml`: un grupo nuevo, `backup_clients`, con la máquina que hace copias:
    ```yaml
        backup_clients:
          hosts:
-           vmiadev: {}      # en prod: laptop: {}
+           vm: {}      # en prod: laptop: {}
    ```
 2. `inventory/dev/group_vars/all.yml` y `inventory/prod/group_vars/all.yml`: en `infra_secrets`, debajo de `pg-main-superuser-password`:
    ```yaml
@@ -525,13 +525,13 @@ Hay un ejemplo de cada fichero en [`inventory.example/`](../inventory.example/RE
 ### 17.3 En DEV, desde la rama del PR
 
 ```bash
-./deploy.sh secrets       --env dev --limit vmiadev    # crea dev-backup-restic-password
-./deploy.sh plan  backup  --env dev --limit vmiadev
-./deploy.sh apply backup  --env dev --limit vmiadev
-./deploy.sh apply backup  --env dev --limit vmiadev    # changed=0
+./deploy.sh secrets       --env dev --limit vm    # crea dev-backup-restic-password
+./deploy.sh plan  backup  --env dev --limit vm
+./deploy.sh apply backup  --env dev --limit vm
+./deploy.sh apply backup  --env dev --limit vm    # changed=0
 ```
 
-En `vmiadev`, con la función `svc` del paso 12, lanza una copia sin esperar a las 13:00 y mira el resultado:
+En `vm`, con la función `svc` del paso 12, lanza una copia sin esperar a las 13:00 y mira el resultado:
 
 ```bash
 svc systemctl --user start dev-backup.service           # tarda unos segundos; sin salida si va bien
@@ -593,18 +593,18 @@ systemctl --user daemon-reload
 
 Y pon `backup_notify: false` en `host_vars/laptop.yml` del repo de datos, o el siguiente `apply backup` lo volverá a instalar.
 
-## 18. Copia de los backups al GX10 (fase 1e2)
+## 18. Copia de los backups al servidor principal (fase 1e2)
 
-Cada hora, si el GX10 responde, el portátil le manda las copias que le falten (SPEC 4.11, R44).
+Cada hora, si el servidor principal responde, el portátil le manda las copias que le falten (SPEC 4.11, R44).
 
 | Pieza | Dónde | Qué hace |
 | --- | --- | --- |
-| `prod-backup-server` | GX10 | Guarda las copias en el volumen `prod-backup-server-data`. Solo deja **añadir**: nadie puede borrar ni cambiar nada a través de él. Pide usuario (`laperl`) y contraseña, y cada instalación solo ve su carpeta (`laperl/prod-laptop`). Tope: 30 GB |
-| Puerto 18000 | GX10 | Solo en `127.0.0.1`. Desde fuera, solo por Tailscale (`tailscale serve`), nunca por la red de casa |
-| `prod-backup-copy` | Portátil | Cada hora, a y media. Solo ve el repositorio local, cifrado y en solo lectura. Si el GX10 no responde, no pasa nada: lo intenta a la hora siguiente |
-| Aviso de escritorio | Portátil | El del paso 17. Salta si una copia falla, si pasan **7 días** sin una copia buena en el GX10 o si el GX10 pasa del **80 %** del tope |
+| `prod-backup-server` | Servidor principal | Guarda las copias en el volumen `prod-backup-server-data`. Solo deja **añadir**: nadie puede borrar ni cambiar nada a través de él. Pide usuario (`laperl`) y contraseña, y cada instalación solo ve su carpeta (`laperl/prod-laptop`). Tope: 30 GB |
+| Puerto 18000 | Servidor principal | Solo en `127.0.0.1`. Desde fuera, solo por Tailscale (`tailscale serve`), nunca por la red de casa |
+| `prod-backup-copy` | Portátil | Cada hora, a y media. Solo ve el repositorio local, cifrado y en solo lectura. Si el servidor principal no responde, no pasa nada: lo intenta a la hora siguiente |
+| Aviso de escritorio | Portátil | El del paso 17. Salta si una copia falla, si pasan **7 días** sin una copia buena en el servidor principal o si el servidor principal pasa del **80 %** del tope |
 
-**Lo más importante:** para recuperar tus datos solo hace falta la clave de restic (`backup-restic-password`). La contraseña del servidor solo sirve para que nadie más use el servidor. Si un día el servidor falla o pierdes esa contraseña, las copias se leen directamente del volumen del GX10 ([`OPERATIONS.md`](OPERATIONS.md), 5.2).
+**Lo más importante:** para recuperar tus datos solo hace falta la clave de restic (`backup-restic-password`). La contraseña del servidor solo sirve para que nadie más use el servidor. Si un día el servidor falla o pierdes esa contraseña, las copias se leen directamente del volumen del servidor principal ([`OPERATIONS.md`](OPERATIONS.md), 5.2).
 
 ### 18.1 La contraseña del servidor en KeePassXC
 
@@ -615,13 +615,13 @@ En el grupo `laperl` de cada base, una entrada nueva, **`backup-server-password`
 
 ### 18.2 El repo de datos
 
-En `~/Documents/SECURE_vc/ansible/infra-podman`:
+En `~/infra-podman-data`:
 
 1. `inventory/dev/hosts.yml` y `inventory/prod/hosts.yml`: un grupo nuevo, `backup_servers`, con la máquina que guarda las copias:
    ```yaml
        backup_servers:
          hosts:
-           vmiadev: {}      # en prod: gx10: {}
+           vm: {}      # en prod: servidor: {}
    ```
 2. `inventory/dev/group_vars/all.yml` y `inventory/prod/group_vars/all.yml`: en `infra_secrets`, debajo de `backup-restic-password`, la contraseña nueva, que necesitan las dos puntas; y, al final del fichero, el tope:
    ```yaml
@@ -631,11 +631,11 @@ En `~/Documents/SECURE_vc/ansible/infra-podman`:
    ```yaml
    backup_server_max_size_gb: 30
    ```
-3. `inventory/prod/host_vars/laptop.yml`: adónde va la copia. Es el nombre de Tailscale del GX10, el que sale en `sudo tailscale serve status` sin `https://`, con `http://` delante y el puerto detrás:
+3. `inventory/prod/host_vars/laptop.yml`: adónde va la copia. Es el nombre de Tailscale del servidor principal, el que sale en `sudo tailscale serve status` sin `https://`, con `http://` delante y el puerto detrás:
    ```yaml
-   backup_remote_url: http://<nombre del GX10>.<tu red>.ts.net:18000
+   backup_remote_url: http://<nombre del servidor principal>.<tu red>.ts.net:18000
    ```
-4. `inventory/dev/host_vars/vmiadev.yml`, un fichero nuevo. La VM no tiene Tailscale: el servidor no se expone y la copia llega desde la propia VM.
+4. `inventory/dev/host_vars/vm.yml`, un fichero nuevo. La VM no tiene Tailscale: el servidor no se expone y la copia llega desde la propia VM.
    ```yaml
    ---
    backup_server_tailscale: false
@@ -648,16 +648,16 @@ Hay un ejemplo de cada fichero en [`inventory.example/`](../inventory.example/RE
 ### 18.3 En DEV, desde la rama del PR
 
 ```bash
-./deploy.sh secrets             --env dev --limit vmiadev   # crea dev-backup-server-password
-./deploy.sh plan  backup-server --env dev --limit vmiadev
-./deploy.sh apply backup-server --env dev --limit vmiadev
-./deploy.sh apply backup-server --env dev --limit vmiadev   # changed=0
-./deploy.sh plan  backup        --env dev --limit vmiadev   # añade dev-backup-copy y su temporizador
-./deploy.sh apply backup        --env dev --limit vmiadev
-./deploy.sh apply backup        --env dev --limit vmiadev   # changed=0
+./deploy.sh secrets             --env dev --limit vm   # crea dev-backup-server-password
+./deploy.sh plan  backup-server --env dev --limit vm
+./deploy.sh apply backup-server --env dev --limit vm
+./deploy.sh apply backup-server --env dev --limit vm   # changed=0
+./deploy.sh plan  backup        --env dev --limit vm   # añade dev-backup-copy y su temporizador
+./deploy.sh apply backup        --env dev --limit vm
+./deploy.sh apply backup        --env dev --limit vm   # changed=0
 ```
 
-En `vmiadev`, una copia y su envío sin esperar:
+En `vm`, una copia y su envío sin esperar:
 
 ```bash
 svc systemctl --user start dev-backup.service
@@ -667,16 +667,16 @@ cat /var/lib/infra-podman/backup-status/dev-backup-copy.status   # result=ok y u
 
 ### 18.4 En producción, después del merge y del tag
 
-**Primero el GX10**, con su contraseña de sudo. Si no tienes allí la función `svc`, defínela como en el paso 12.
+**Primero el servidor principal**, con su contraseña de sudo. Si no tienes allí la función `svc`, defínela como en el paso 12.
 
 ```bash
-./deploy.sh secrets             --limit gx10
-./deploy.sh plan  backup-server --limit gx10
-./deploy.sh apply backup-server --limit gx10
-./deploy.sh apply backup-server --limit gx10    # changed=0
+./deploy.sh secrets             --limit servidor
+./deploy.sh plan  backup-server --limit servidor
+./deploy.sh apply backup-server --limit servidor
+./deploy.sh apply backup-server --limit servidor    # changed=0
 ```
 
-En el GX10, comprueba:
+En el servidor principal, comprueba:
 
 ```bash
 sudo tailscale serve status        # sigue tu página de siempre y aparece el puerto 18000
@@ -697,25 +697,25 @@ svc systemctl --user start prod-backup-copy.service
 cat /var/lib/infra-podman/backup-status/prod-backup-copy.status   # result=ok
 ```
 
-**Comprueba una vez que un GX10 sin servicio no es un fallo:** en el GX10, `svc systemctl --user stop prod-backup-server.service`; en el portátil, `svc systemctl --user start prod-backup-copy.service` termina sin error y el estado dice `result=unreachable`. Vuelve a arrancarlo con `svc systemctl --user start prod-backup-server.service`.
+**Comprueba una vez que un servidor principal sin servicio no es un fallo:** en el servidor principal, `svc systemctl --user stop prod-backup-server.service`; en el portátil, `svc systemctl --user start prod-backup-copy.service` termina sin error y el estado dice `result=unreachable`. Vuelve a arrancarlo con `svc systemctl --user start prod-backup-server.service`.
 
-### 18.5 Mirar las copias del GX10
+### 18.5 Mirar las copias del servidor principal
 
 - **Estado** de la última copia: `cat /var/lib/infra-podman/backup-status/prod-backup-copy.status`. Dice cuándo fue la última buena (`last_ok`) y cuánto ocupa (`usage`).
 - **Logs** de cada intento, en el portátil: `sudo journalctl _SYSTEMD_USER_UNIT=prod-backup-copy.service -n 100`.
-- **Logs del servidor**, en el GX10: `sudo journalctl _SYSTEMD_USER_UNIT=prod-backup-server.service -n 100`.
-- **Copias del GX10:** se leen directamente de su volumen, solo con la clave de restic: [`OPERATIONS.md`](OPERATIONS.md), 5.2.
+- **Logs del servidor**, en el servidor principal: `sudo journalctl _SYSTEMD_USER_UNIT=prod-backup-server.service -n 100`.
+- **Copias del servidor principal:** se leen directamente de su volumen, solo con la clave de restic: [`OPERATIONS.md`](OPERATIONS.md), 5.2.
 
 ### 18.6 Si algo falla
 
-Cada aviso de la copia al GX10, con su causa y qué hacer: [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md), apartados 7 (copia al GX10) y 8 (Tailscale).
+Cada aviso de la copia al servidor principal, con su causa y qué hacer: [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md), apartados 7 (copia al servidor principal) y 8 (Tailscale).
 
-La restauración paso a paso, desde la copia local y desde la del GX10 (también sin su servidor), está en [`OPERATIONS.md`](OPERATIONS.md), apartado 5.
+La restauración paso a paso, desde la copia local y desde la del servidor principal (también sin su servidor), está en [`OPERATIONS.md`](OPERATIONS.md), apartado 5.
 
 ### 18.7 Lo que se instala
 
 **No tienes que hacer nada aquí.** Solo es para que sepas qué hay en cada máquina.
 
-- **GX10**, en `svc_runner`: el contenedor `prod-backup-server`, su volumen `prod-backup-server-data` y el hash de la contraseña en `~/.config/infra-podman/prod-backup-server/htpasswd`. Con sudo: la entrada del puerto 18000 en `tailscale serve`. Ansible no toca nada más de `tailscale serve`.
-- **Portátil**, en `svc_runner`: el contenedor `prod-backup-copy`, su temporizador `prod-backup-copy.timer` y la carpeta `~/.local/state/infra-podman/backup-copy`. En tu cuenta, el script del aviso del paso 17 cambia: ahora también entiende el estado de la copia al GX10.
-- **Para dejar de copiar al GX10:** quita `backup_remote_url` de `host_vars/laptop.yml` y `apply backup --limit laptop`: borra el contenedor de copia y su temporizador. En el GX10 no se toca nada.
+- **Servidor principal**, en `svc_runner`: el contenedor `prod-backup-server`, su volumen `prod-backup-server-data` y el hash de la contraseña en `~/.config/infra-podman/prod-backup-server/htpasswd`. Con sudo: la entrada del puerto 18000 en `tailscale serve`. Ansible no toca nada más de `tailscale serve`.
+- **Portátil**, en `svc_runner`: el contenedor `prod-backup-copy`, su temporizador `prod-backup-copy.timer` y la carpeta `~/.local/state/infra-podman/backup-copy`. En tu cuenta, el script del aviso del paso 17 cambia: ahora también entiende el estado de la copia al servidor principal.
+- **Para dejar de copiar al servidor principal:** quita `backup_remote_url` de `host_vars/laptop.yml` y `apply backup --limit laptop`: borra el contenedor de copia y su temporizador. En el servidor principal no se toca nada.

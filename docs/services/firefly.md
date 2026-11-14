@@ -81,8 +81,8 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
 ## 5. Copias y restauración
 
 - **La base de cada instancia** (`ff_<instancia>`) entra sola en el backup diario: se vuelcan todas las bases, cada una en sus propias copias.
-- **El volumen de justificantes** entra en el backup y en la copia al GX10. Es el pendiente «Copia de los volúmenes de las aplicaciones» del ROADMAP.
-- **Restaurar**, probado en `lifecycle` y escrito en [`OPERATIONS.md`](../OPERATIONS.md): la base y los justificantes, desde la copia local y desde la del GX10. Con los permisos de la base repuestos por Ansible (pendiente «Restaurar bases de aplicaciones»).
+- **El volumen de justificantes** entra en el backup y en la copia al servidor principal. Es el pendiente «Copia de los volúmenes de las aplicaciones» del ROADMAP.
+- **Restaurar**, probado en `lifecycle` y escrito en [`OPERATIONS.md`](../OPERATIONS.md): la base y los justificantes, desde la copia local y desde la del servidor principal. Con los permisos de la base repuestos por Ansible (pendiente «Restaurar bases de aplicaciones»).
 - **Conservación:** 7 diarias, 12 mensuales y 5 anuales. Hacienda puede revisar 4 años, así que da para los justificantes de la declaración.
 
 ## 6. Lo que importa para las cuentas
@@ -97,12 +97,12 @@ En la fase 2 solo se deja listo el grupo `ff_<instancia>_reader` y se prueba que
 
 - **Solo lectura, garantizada por la base y no por la IA.** Entra con un usuario propio del grupo `ff_<instancia>_reader`, nunca con el usuario `ff_<instancia>` ni con un token de su API, que da acceso a todo 🔍.
 - **Que vea solo lo necesario:** unas vistas preparadas (movimientos, categorías, saldos), no toda la base, que tiene usuarios, tokens y sesiones.
-- **Nunca un modelo externo.** LiteLLM, en el GX10, apunta también a IAs de fuera. Lo que lea datos de Firefly solo puede llegar a vLLM local:
+- **Nunca un modelo externo.** LiteLLM, en el servidor principal, apunta también a IAs de fuera. Lo que lea datos de Firefly solo puede llegar a vLLM local:
   - con su propia ruta o clave, limitada a los modelos locales 🔍;
   - y sin salida a internet en su red.
 
   Un nombre de modelo equivocado no puede acabar en un proveedor externo.
-- **Nada guardado en el GX10.** Su disco no está cifrado. Por Tailscale los datos viajan cifrados, pero ni vLLM ni LiteLLM pueden guardar en logs lo que preguntes ni lo que responda 🔍.
+- **Nada guardado en el servidor principal.** Se trata como no fiable. Por Tailscale los datos viajan cifrados, pero ni vLLM ni LiteLLM pueden guardar en logs lo que preguntes ni lo que responda 🔍.
 
 ## 8. El móvil, si algún día lo quieres
 

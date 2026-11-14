@@ -32,7 +32,7 @@ problem() { echo "::error title=image-updates::$*" >&3; exit 2; }
 command -v "$skopeo" >/dev/null || problem "skopeo not found"
 
 # Reads the index (manifest list) a tag points to. Prints its digest, the same digest
-# images.yml pins, and its platforms (D6: the GX10 needs linux/arm64).
+# images.yml pins, and its platforms (D6: the main server needs linux/arm64).
 index_of() {
   local raw platforms
   # A file, not $(…): the digest is over the exact bytes, and $(…) drops a final newline.

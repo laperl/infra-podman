@@ -70,7 +70,7 @@ El nombre de cada entrada es el **título** y el valor va en el campo **contrase
 
 ## 5. El repo de datos
 
-En `~/Documents/SECURE_vc/ansible/infra-podman/inventory/prod/`. Son los ficheros enteros para un portátil `laptop` y un GX10 `gx10`: son los alias de tu `~/.ssh/config`, así que si los tuyos son otros, usa los tuyos. Lo que va entre `<…>` es tuyo. Si ya tienes alguno de estos ficheros con más cosas, conserva lo tuyo y añade solo lo que falta.
+En `~/infra-podman-data/inventory/prod/`. Son los ficheros enteros para un portátil `laptop` y un servidor principal `servidor`: son los alias de tu `~/.ssh/config`, así que si los tuyos son otros, usa los tuyos. Lo que va entre `<…>` es tuyo. Si ya tienes alguno de estos ficheros con más cosas, conserva lo tuyo y añade solo lo que falta.
 
 ### `hosts.yml`
 
@@ -86,13 +86,13 @@ all:
     servers:
       hosts:
         laptop: {}
-        gx10: {}
+        servidor: {}
     backup_clients:
       hosts:
         laptop: {}
     backup_servers:
       hosts:
-        gx10: {}
+        servidor: {}
     postgres_hosts:
       hosts:
         laptop: {}
@@ -161,7 +161,7 @@ firefly_instances:
 
 Después, commit firmado:
 ```bash
-cd ~/Documents/SECURE_vc/ansible/infra-podman
+cd ~/infra-podman-data
 git diff
 git add -A && git commit -m "prod: Postgres laptop and Firefly laptop"
 git verify-commit HEAD
@@ -283,7 +283,7 @@ Para Firefly y quita su contenedor, sus tareas diarias y su lanzador. Las demás
 ```
 El `apply` hace esto, en orden ([`POSTGRES.md`](../POSTGRES.md), apartado 7):
 1. comprueba que nadie está conectado a la base;
-2. hace una copia completa antes de borrar (`reason=pre-drop`), que llega también al GX10;
+2. hace una copia completa antes de borrar (`reason=pre-drop`), que llega también al servidor principal;
 3. borra la base `ff_<instancia>` y sus tres grupos;
 4. borra el usuario `ff_<instancia>` y su secreto de Podman, y quita su red. Para eso Postgres se reinicia una vez, y las otras aplicaciones de esa Postgres pierden la conexión unos segundos;
 5. al final, te recuerda borrar su entrada de KeePassXC.
@@ -341,7 +341,7 @@ La copia diaria vuelca todas las instancias declaradas. Hasta este `apply` sigue
 
 **4. Borrar sus datos, su configuración y su secreto en la máquina, y su entrada de KeePassXC.** Son las órdenes de [`POSTGRES.md`](../POSTGRES.md), apartado 7, «Borrar del todo una instancia retirada», pasos 2 y 3. **Sin vuelta atrás.**
 
-**5. Sus copias, si las quieres borrar** (opcional): el paso 4 de esa misma sección, en el portátil y en el GX10. Primero con `--dry-run`.
+**5. Sus copias, si las quieres borrar** (opcional): el paso 4 de esa misma sección, en el portátil y en el servidor principal. Primero con `--dry-run`.
 
 **Comprobar:**
 - `svc podman ps -a --filter name=<entorno>-pg-<postgres>` y `svc podman volume ls --filter name=<entorno>-pg-<postgres>` no sacan nada;

@@ -17,7 +17,7 @@ concurrency:
 jobs:
   lint:
     # Syntax checks do not depend on the CPU architecture; x86 keeps ARM minutes for `lifecycle`.
-    # Ubuntu 24.04 ships Podman 4.9, the same version as the GX10.
+    # Ubuntu 24.04 ships Podman 4.9, the same version as the main server.
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -69,7 +69,7 @@ jobs:
 
   quadlet-forward:
     # Same Quadlet checks with a newer Podman, to see early what would break when the
-    # GX10 is upgraded. It does not change the templates: they stay 4.9-only (D5).
+    # main server is upgraded. It does not change the templates: they stay 4.9-only (D5).
     # Today: Fedora 44 (Podman 5). For Podman 6, switch the digest to fedora:45.
     runs-on: ubuntu-24.04
     timeout-minutes: 15

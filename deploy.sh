@@ -259,7 +259,7 @@ run_secrets() {
   echo >&2
   [[ -n $password ]] || refuse "contraseña vacía"
   # Installing the secrets on a machine needs sudo there, to become the service user.
-  # The sudo passwords of the laptop and the GX10 differ: use --limit (R24).
+  # The sudo passwords of the laptop and the main server differ: use --limit (R24).
   IFS= read -rs -p "Contraseña de sudo de ${limit:-las máquinas} (Intro si no hace falta): " become_password
   echo >&2
   # printf is a bash builtin: the passwords never appear in the process list, and they
