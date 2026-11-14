@@ -169,6 +169,43 @@ SERVICE_RESULT=success EXIT_STATUS=0 copy_status "usage=1.0 GB de 30.0 GB (3 %)"
 notify "$(($(cfield last_ok_epoch) + 3600))"
 check "the warning goes away with the next good copy" '[[ ! -s $notified ]]'
 
+# --- backup-prepare.sh: the items an application declares (backup.d) ----------------------
+# A fake podman: `volume export` prints the volume, `exec` prints the command it got.
+bin=$work/bin
+mkdir -p "$bin" "$HOME/.config/infra-podman/backup/backup.d"
+cat >"$bin/podman" <<'FAKE'
+#!/usr/bin/env bash
+case "$1 $2" in
+  "volume export") [[ $3 == dev-gone ]] && exit 125; echo "tar of $3" ;;
+  "container inspect") [[ ${*: -1} == dev-stopped ]] && echo false || echo true ;;
+  "exec "*) shift; echo "ran: $*" ;;
+  *) exit 1 ;;
+esac
+FAKE
+chmod +x "$bin/podman"
+conf=$HOME/.config/infra-podman/backup
+# shellcheck disable=SC2034  # used by the checks below, evaluated later
+staging=$state/staging
+prepare() { PATH=$bin:$PATH "$src/backup-prepare.sh" >"$work/prepare.log" 2>&1; }
+printf 'file infra-podman data-repo %s\n' "$work/bundle" >"$conf/backup.conf"
+echo bundle >"$work/bundle"
+printf 'volume ff-casa uploads dev-ff-casa-uploads\n' >"$conf/backup.d/ff-casa.conf"
+printf '# a comment\nexec myapp export dev-myapp tool export --stdout\n' >"$conf/backup.d/myapp.conf"
+prepare || true
+check "backup.conf and every file of backup.d are read" '[[ -f $staging/infra-podman/files/data-repo/bundle ]]'
+check "a volume item is the tar of podman volume export" '[[ $(cat "$staging/ff-casa/volume/uploads/uploads.tar") == "tar of dev-ff-casa-uploads" ]]'
+check "an exec item is what the command prints, word by word" '[[ $(cat "$staging/myapp/exec/export/export.out") == "ran: dev-myapp tool export --stdout" ]]'
+rm "$conf/backup.d/"*.conf
+prepare || true
+check "with no application items the backup still runs" '[[ -f $staging/infra-podman/files/data-repo/bundle && ! -e $staging/ff-casa ]]'
+printf 'volume ff-casa uploads dev-gone\n' >"$conf/backup.d/ff-casa.conf"
+if prepare; then fail "a volume that cannot be exported stops the backup"; else pass "a volume that cannot be exported stops the backup"; fi
+check "and the reason is kept for the notifier" 'grep -q "dev-gone" "$state/prepare-error"'
+printf 'exec myapp export dev-stopped tool\n' >"$conf/backup.d/ff-casa.conf"
+if prepare; then fail "an exec item on a stopped container stops the backup"; else pass "an exec item on a stopped container stops the backup"; fi
+printf 'unknown a b c\n' >"$conf/backup.d/ff-casa.conf"
+if prepare; then fail "an unknown kind of item stops the backup"; else pass "an unknown kind of item stops the backup"; fi
+
 if [[ $failures -gt 0 ]]; then
   echo "$failures backup test(s) failed"
   exit 1

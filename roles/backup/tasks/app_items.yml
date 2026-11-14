@@ -1,0 +1,86 @@
+---
+# For the roles of the applications, not for this one's main.yml: what an application adds
+# to the daily backup of its machine (SPEC 4.11). It writes one file of items,
+# ~/.config/infra-podman/backup/backup.d/<app>.conf, that files/backup-prepare.sh reads on
+# every run. Ansible only writes it: the backup itself is the systemd service.
+# An application with nothing to copy has no file.
+#
+# Parameters:
+#   backup_items_app    who they belong to, without the environment: ff-laptop
+#   backup_items        a list, empty for no copy. Each item is one of:
+#                         {type: volume, name: uploads, volume: prod-ff-laptop-uploads}
+#                           the whole volume
+#                         {type: exec, name: export, container: prod-myapp-laptop,
+#                          command: [myapp, export, --stdout]}
+#                           what that command prints inside the running container: the
+#                           application's own tool, or [tar, -C, /data, -cf, "-", dir1, dir2]
+#                           for some directories. Words only: no quotes and no shell
+#   backup_items_state  present (default) or absent, when the instance is retired
+#
+# Use it like this, from any role:
+#   - name: Declare what the daily backup copies
+#     ansible.builtin.include_role:
+#       name: backup
+#       tasks_from: app_items.yml
+#     vars:
+#       backup_items_app: "{{ myapp_consumer }}"
+#       backup_items: "{{ myapp_backup_items }}"
+- name: Check the items
+  ansible.builtin.assert:
+    that:
+      - backup_items_app is match('^[a-z0-9][a-z0-9-]*$')
+      - backup_items is sequence and backup_items is not string
+      - backup_items | rejectattr('type', 'in', ['volume', 'exec']) | list | length == 0
+      - backup_items | map(attribute='name') | map('string') | select('match', '^[a-z0-9][a-z0-9-]*$') | list | length == backup_items | length
+      - backup_items | map(attribute='name') | unique | list | length == backup_items | length
+      - backup_items | selectattr('type', 'equalto', 'volume') | map(attribute='volume') | map('string')
+        | reject('match', '^[a-z0-9][a-z0-9-]*$') | list | length == 0
+      - backup_items | selectattr('type', 'equalto', 'exec') | map(attribute='container') | map('string')
+        | reject('match', '^[a-z0-9][a-z0-9-]*$') | list | length == 0
+      - backup_items | selectattr('type', 'equalto', 'exec') | map(attribute='command') | map('length') | select('equalto', 0) | list | length == 0
+      - backup_items | selectattr('type', 'equalto', 'exec') | map(attribute='command') | flatten | map('string')
+        | reject('match', '^[A-Za-z0-9._/:=@+,-]+$') | list | length == 0
+    fail_msg: >-
+      Backup items of {{ backup_items_app }} (roles/backup/tasks/app_items.yml): each one with a
+      name of lower case letters, digits and hyphens, not repeated, and type volume (with
+      volume:) or exec (with container: and command:, a list of words with only letters,
+      digits and ._/:=@+,-).
+    quiet: true
+
+- name: Read the service user
+  ansible.builtin.include_role:
+    name: service_user
+
+- name: Create the directory of the items
+  ansible.builtin.file:
+    path: "{{ service_user_home }}/.config/infra-podman/backup/backup.d"
+    state: directory
+    mode: "0700"
+  become: true
+  become_user: "{{ service_user }}"
+  when: backup_items | length > 0 and backup_items_state | default('present') == 'present'
+
+- name: Write the items of the application
+  ansible.builtin.copy:
+    content: |
+      # Managed by infra-podman: what {{ backup_items_app }} adds to the daily backup.
+      {% for backup_item in backup_items %}
+      {% if backup_item.type == 'volume' %}
+      volume {{ backup_items_app }} {{ backup_item.name }} {{ backup_item.volume }}
+      {% else %}
+      exec {{ backup_items_app }} {{ backup_item.name }} {{ backup_item.container }} {{ backup_item.command | join(' ') }}
+      {% endif %}
+      {% endfor %}
+    dest: "{{ service_user_home }}/.config/infra-podman/backup/backup.d/{{ backup_items_app }}.conf"
+    mode: "0600"
+  become: true
+  become_user: "{{ service_user }}"
+  when: backup_items | length > 0 and backup_items_state | default('present') == 'present'
+
+- name: Remove the items of an application with nothing to copy
+  ansible.builtin.file:
+    path: "{{ service_user_home }}/.config/infra-podman/backup/backup.d/{{ backup_items_app }}.conf"
+    state: absent
+  become: true
+  become_user: "{{ service_user }}"
+  when: backup_items | length == 0 or backup_items_state | default('present') == 'absent'

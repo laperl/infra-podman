@@ -81,8 +81,8 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
 ## 5. Copias y restauración
 
 - **La base de cada instancia** (`ff_<instancia>`) entra sola en el backup diario: se vuelcan todas las bases, cada una en sus propias copias.
-- **El volumen de justificantes** entra en el backup y en la copia al servidor principal. Es el pendiente «Copia de los volúmenes de las aplicaciones» del ROADMAP.
-- **Restaurar**, probado en `lifecycle` y escrito en [`OPERATIONS.md`](../OPERATIONS.md): la base y los justificantes, desde la copia local y desde la del servidor principal. Con los permisos de la base repuestos por Ansible (pendiente «Restaurar bases de aplicaciones»).
+- **El volumen de justificantes no entra en el backup salvo que lo pidas:** `backup: [uploads]` en la instancia ([`README.md`](README.md), apartado 8). Por defecto no se copia, porque el operador ya copia sus justificantes por otra vía.
+- **Restaurar la base**, probado en `lifecycle` y escrito en [`OPERATIONS.md`](../OPERATIONS.md), desde la copia local y desde la del servidor principal. Con los permisos de la base repuestos por Ansible (pendiente «Restaurar bases de aplicaciones»). El volumen, si lo copias: [`README.md`](README.md), apartado 8.
 - **Conservación:** 7 diarias, 12 mensuales y 5 anuales. Hacienda puede revisar 4 años, así que da para los justificantes de la declaración.
 
 ## 6. Lo que importa para las cuentas

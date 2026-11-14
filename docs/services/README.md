@@ -89,3 +89,19 @@ Lo que una instancia no dice lo toma del valor por defecto del rol (`roles/<app>
 - **Borrar sus datos y su base** son pasos aparte, a mano y sin vuelta atrás salvo restaurar una copia.
 
 El procedimiento completo, orden por orden, está en [`INSTALL.md`](INSTALL.md), apartado 10.
+
+## 8. Copias
+
+- **La base de una instancia** ya está en el backup diario de su Postgres: no hay que declarar nada.
+- **Lo demás lo declara el rol y lo activas tú**, por instancia, con `backup:`, una lista de nombres. Sin `backup:`, no se copia nada más. La página de cada aplicación dice qué nombres ofrece (Firefly: `uploads`).
+  ```yaml
+  firefly_instances:
+    - name: casa
+      backup: [uploads]
+  ```
+- **Dos clases de elemento**, que escribe el rol de la aplicación (`roles/backup/tasks/app_items.yml`):
+  - `volume`: un volumen entero, con `podman volume export`. Conserva dueños y permisos, y funciona con el contenedor parado.
+  - `exec`: lo que imprime una orden dentro del contenedor en marcha. Sirve para la herramienta propia de la aplicación que saca sus datos, o para copiar solo algunos directorios con `tar`.
+- **Cómo funciona:** el rol deja un fichero en `~/.config/infra-podman/backup/backup.d/` del usuario de servicio, y el backup diario de la máquina lo lee en cada ejecución. Ansible solo escribe ese fichero. Al retirar la instancia, se borra.
+- **Hace falta el backup en esa máquina** (`./deploy.sh apply backup`): sin él, el fichero queda escrito y no se copia nada.
+- **Restaurar un volumen:** saca la copia como cualquier otra ([`OPERATIONS.md`](../OPERATIONS.md), apartado 5; su ruta es `<app>/volume/<nombre>/<nombre>.tar`), para el contenedor y, como usuario de servicio, `podman volume import <volumen> <fichero>.tar`.
