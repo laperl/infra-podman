@@ -89,7 +89,7 @@ Lo que una instancia no dice lo toma del valor por defecto del rol (`roles/<app>
 - **Purgarla**, mientras sigue declarada: `./deploy.sh apply <app> --purge <instancia>`. La retira y después **borra** sus volúmenes y sus secretos propios. Antes copia los volúmenes en el backup de la máquina (`reason=pre-purge`, que la retención diaria no borra); si esa copia no se puede hacer, no borra nada y la instancia queda solo retirada. Escribir el nombre es la única confirmación.
 - **Su base se borra aparte**, por el camino de Postgres, con su propia copia previa.
 
-El procedimiento completo, orden por orden, está en [`INSTALL.md`](INSTALL.md), apartado 10.
+El procedimiento completo, orden por orden, está en [`INSTALL.md`](INSTALL.md), apartado 10. `<instancia>` es siempre su `name:` en el inventario ([`NAMING.md`](../NAMING.md), «De dónde sale `<instancia>`»).
 
 ## 8. Copias
 

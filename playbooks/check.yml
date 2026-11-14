@@ -1,6 +1,6 @@
 ---
-# Read-only connectivity and version check (phase 0). Safe in plan and apply:
-# it changes nothing on the servers.
+# Read-only: connectivity, versions and what is left on each machine that the inventory no
+# longer declares. Safe in plan and apply: it changes nothing on the servers.
 - name: Check that servers are reachable and run Podman 4.9 or newer
   hosts: servers
   gather_facts: false
@@ -32,3 +32,106 @@
         msg: >-
           {{ inventory_hostname }}: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }},
           {{ check_podman.stdout }}, connected as {{ ansible_facts['user_id'] | default(ansible_user | default('?')) }}
+
+# What is on each machine and the inventory does not declare any more: left after retiring
+# an instance, or after removing it from the inventory without purging it. Only reported:
+# nothing is stopped or deleted here (docs/services/INSTALL.md, sections 10 and 11).
+- name: Report what is on each machine and nobody declares
+  hosts: servers
+  gather_facts: false
+  vars:
+    # Short name of each role deployed by instances (docs/NAMING.md, section 2): the
+    # instances of <role>_instances are <short>-<name>. A new application adds its line.
+    check_shorts:
+      postgres: pg
+      firefly: ff
+    # Every instance declared for this machine, as <short>-<name>, and the backup.
+    check_declared: >-
+      {%- set found = ['backup'] -%}
+      {%- for role, short in check_shorts.items() -%}
+      {%- for instance in hostvars[inventory_hostname][role ~ '_instances'] | default([]) -%}
+      {%- set _ = found.append(short ~ '-' ~ instance.name) -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ found }}
+  tasks:
+    - name: Find the service user
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ service_user | default('') }}"
+        fail_key: false
+      when: service_user is defined
+
+    - name: Report on a machine that has the service user
+      when:
+        - service_user is defined
+        - ansible_facts['getent_passwd'][service_user] is not none
+      vars:
+        check_home: "{{ ansible_facts['getent_passwd'][service_user][4] }}"
+        check_env:
+          HOME: "{{ check_home }}"
+          XDG_RUNTIME_DIR: /run/user/{{ ansible_facts['getent_passwd'][service_user][1] }}
+      block:
+        # One line per object: <kind> <name> <its infra.app label>. podman network ls only
+        # gives all the labels together, as text: infra.app is taken out of it below.
+        - name: Read the containers, volumes and networks of the platform
+          ansible.builtin.shell:
+            cmd: |
+              set -e
+              podman ps --all --filter label=infra.managed-by=infra-podman --format '{% raw %}container {{.Names}} {{index .Labels "infra.app"}}{% endraw %}'
+              podman volume ls --filter label=infra.managed-by=infra-podman --format '{% raw %}volume {{.Name}} {{index .Labels "infra.app"}}{% endraw %}'
+              podman network ls --filter label=infra.managed-by=infra-podman --format '{% raw %}network {{.Name}} {{.Labels}}{% endraw %}'
+          environment: "{{ check_env }}"
+          become: true
+          become_user: "{{ service_user }}"
+          register: check_objects
+          changed_when: false
+          check_mode: false
+
+        - name: Read the Podman secrets
+          ansible.builtin.command:
+            cmd: podman secret ls --format '{% raw %}{{.Name}}{% endraw %}'
+          environment: "{{ check_env }}"
+          become: true
+          become_user: "{{ service_user }}"
+          register: check_secrets
+          changed_when: false
+          check_mode: false
+
+        - name: Read what the applications add to the daily backup
+          ansible.builtin.find:
+            paths: "{{ check_home }}/.config/infra-podman/backup/backup.d"
+            patterns: "*.conf"
+          become: true
+          become_user: "{{ service_user }}"
+          register: check_backup_items
+
+        - name: Report
+          ansible.builtin.debug:
+            msg: >-
+              {{ ([inventory_hostname ~ ': on the machine and not declared in the inventory (nothing is touched):']
+                  + check_undeclared)
+                 if check_undeclared | length > 0
+                 else inventory_hostname ~ ': nothing on the machine that the inventory does not declare.' }}
+          vars:
+            check_undeclared: >-
+              {%- set lines = [] -%}
+              {%- for line in check_objects.stdout_lines -%}
+              {%- set kind, name, labels = (line.split(' ', 2) + ['', ''])[:3] -%}
+              {%- set app = (labels | regex_search('infra\\.app=([a-z0-9-]+)', '\\1') | default([''], true) | first)
+                            if kind == 'network' else labels -%}
+              {%- if app not in check_declared -%}
+              {%- set _ = lines.append(kind ~ ' ' ~ name ~ ' (of ' ~ (app or 'no instance') ~ ')') -%}
+              {%- endif -%}
+              {%- endfor -%}
+              {%- for name in check_secrets.stdout_lines | select('match', '^' ~ infra_env ~ '-') -%}
+              {%- if name | regex_replace('^' ~ infra_env ~ '-', '') not in infra_secrets | default([]) | map(attribute='name') -%}
+              {%- set _ = lines.append('secret ' ~ name ~ ' (not in infra_secrets)') -%}
+              {%- endif -%}
+              {%- endfor -%}
+              {%- for file in check_backup_items.files | default([]) | map(attribute='path') | map('basename') -%}
+              {%- if file | regex_replace('\\.conf$', '') not in check_declared -%}
+              {%- set _ = lines.append('backup items ' ~ file ~ ' (in backup.d)') -%}
+              {%- endif -%}
+              {%- endfor -%}
+              {{ lines }}

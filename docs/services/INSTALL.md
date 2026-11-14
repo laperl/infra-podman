@@ -257,8 +257,8 @@ En este orden: primero la aplicación, luego su base. Mientras Firefly esté con
 Se usan estos nombres; cámbialos por los tuyos:
 - `<entorno>`: `dev` o `prod`;
 - `<máquina>`: el alias de la máquina en `hosts.yml` (tu VM, `laptop`…);
-- `<instancia>`: la de Firefly, por ejemplo `laptop`;
-- `<postgres>`: la instancia de Postgres donde está su base, por ejemplo `main`.
+- `<instancia>`: la de Firefly: su `name:` en `firefly_instances`, por ejemplo `laptop` ([`NAMING.md`](../NAMING.md), «De dónde sale `<instancia>`»);
+- `<postgres>`: la instancia de Postgres donde está su base: su `name:` en `postgres_instances`, por ejemplo `main`.
 
 En DEV, `--env dev` y `infra-dev.kdbx`; en producción, desde un tag ([`WORKFLOW.md`](../WORKFLOW.md)).
 
@@ -306,6 +306,8 @@ Si era la **última** base de esa Postgres, se para y te pide confirmarlo. Repit
 --path /backup/pg-<postgres>/pgdump/ff_<instancia>
 ```
 Así solo se borran las copias de esa base, no las de otras bases de la misma Postgres.
+
+**Comprobar que no queda nada:** `./deploy.sh plan check --env <entorno> --limit <máquina>`. Solo lee, y al final lista lo que hay en la máquina y el inventario ya no declara: contenedores, volúmenes, redes, secretos y ficheros de copia. Después de una baja completa no debe listar nada de esa instancia.
 
 **Comprobar:**
 - `svc podman ps -a --filter name=<entorno>-ff-<instancia>` no saca ninguna línea, y `svc podman volume ls` ya no lista `<entorno>-ff-<instancia>-uploads`;

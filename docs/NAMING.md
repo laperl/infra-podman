@@ -35,6 +35,31 @@ Cada aplicación tiene un nombre **de código**, que se usa en el repositorio y 
 | Entrada de una instancia | `inbound.publish:` | lista de `<dirección>:<puerto>:<puerto interno>`; puertos desde 18100, uno por instancia | `["127.0.0.1:18100:8080"]` |
 | Instalación | `infra_site` | `^[a-z][a-z0-9-]{1,30}$`, igual en dev y prod | tu nombre de instalación |
 
+### De dónde sale `<instancia>`
+
+**La instancia es siempre el `name:` que tú escribiste en el inventario**, y nada más. No lleva entorno, ni nombre corto, ni guiones.
+
+| Para | El `name:` está en | Fichero del repo de datos |
+| --- | --- | --- |
+| Postgres | `postgres_instances` | `inventory/<entorno>/group_vars/postgres_hosts.yml` |
+| Una aplicación | `<app>_instances`, por ejemplo `firefly_instances` | `inventory/<entorno>/group_vars/<app>_hosts.yml` |
+
+```yaml
+firefly_instances:
+  - name: laptop        # <- esta es la instancia
+```
+
+Ese mismo `name:`, tal cual, es lo que se escribe en todas partes donde la documentación dice `<instancia>`:
+
+| Dónde | Ejemplo con `name: laptop` |
+| --- | --- |
+| `deploy.sh`: `--retire`, `--purge` y `--confirm-drop` | `./deploy.sh apply firefly --purge laptop` |
+| `pg_instance:` de una aplicación (la instancia de Postgres donde está su base) | `pg_instance: laptop` |
+| Los nombres que compone el código (apartado 4) | `prod-ff-laptop`, `ff_laptop`, `ff-laptop-app-key` |
+| `readers:` de `infra_secrets` y `consumer:` de un usuario de Postgres, con el nombre corto delante | `ff-laptop`, `pg-laptop` |
+
+Si dudas de cuál es, mira el fichero: `deploy.sh` rechaza una instancia que no esté declarada ahí. Las otras tres palabras que usa la documentación: `<entorno>` es `dev` o `prod`; `<máquina>` es el nombre de la máquina en `inventory/<entorno>/hosts.yml`; `<corto>` es el nombre corto de la aplicación (apartado 2).
+
 ## 4. Lo que compone el código
 
 Ejemplo: Firefly `laptop` en la Postgres `laptop`, en producción.
