@@ -26,19 +26,31 @@ STATUS_DIR = os.environ.get("INFRA_BACKUP_STATUS_DIR", "/var/lib/infra-podman/ba
 MANAGED = "label=infra.managed-by=infra-podman"
 
 
+# What could not be read. A report that says "none" because a command failed would be a
+# lie: every failure ends here and report() shows it as a problem.
+ERRORS: list[str] = []
+
+
 def run(*argv: str) -> str:
-    """Output of a command, or an empty string when it fails or does not exist."""
+    """Output of a command. A failure is noted in ERRORS and gives an empty string."""
     try:
         done = subprocess.run(argv, capture_output=True, text=True, check=False, timeout=60)
-    except (OSError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired) as error:
+        ERRORS.append(f"«{' '.join(argv[:3])}» no se pudo ejecutar: {error}")
         return ""
-    return done.stdout if done.returncode == 0 else ""
+    if done.returncode != 0:
+        reason = (done.stderr.strip().splitlines() or ["sin mensaje"])[-1]
+        ERRORS.append(f"«{' '.join(argv[:3])}» falló ({done.returncode}): {reason}")
+        return ""
+    return done.stdout
 
 
 def run_json(*argv: str) -> list:
+    out = run(*argv)
     try:
-        return json.loads(run(*argv) or "[]") or []
+        return json.loads(out or "[]") or []
     except ValueError:
+        ERRORS.append(f"«{' '.join(argv[:3])}» no devolvió JSON")
         return []
 
 
@@ -60,6 +72,9 @@ def read_lines(path: str) -> list[str]:
 def collect() -> dict:
     """Everything the report needs, as plain data: what report() takes."""
     home = os.path.expanduser("~")
+    # Ansible starts the script in a folder of the user it connects as, and rootless Podman
+    # refuses to run from a folder its user cannot enter.
+    os.chdir(home)
     quadlets = os.path.join(home, ".config/containers/systemd")
     units = os.path.join(home, ".config/systemd/user")
     backup = os.path.join(home, ".config/infra-podman/backup")
@@ -73,7 +88,7 @@ def collect() -> dict:
     for path in sorted(glob.glob(os.path.join(STATUS_DIR, "*.status"))):
         status[os.path.basename(path)[: -len(".status")]] = dict(
             line.split("=", 1) for line in read_lines(path) if "=" in line)
-    return {
+    data = {
         "containers": run_json("podman", "ps", "--all", "--filter", MANAGED, "--format", "json"),
         "volumes": run_json("podman", "volume", "ls", "--filter", MANAGED, "--format", "json"),
         "networks": run_json("podman", "network", "ls", "--filter", MANAGED, "--format", "json"),
@@ -87,6 +102,8 @@ def collect() -> dict:
                          for path in sorted(glob.glob(os.path.join(backup, "backup.d", "*.conf")))],
         "backup_status": status,
     }
+    data["errors"] = list(ERRORS)
+    return data
 
 
 def label(item: dict, name: str) -> str:
@@ -142,6 +159,10 @@ def report(data: dict, host: str, env: str, declared: list[str], secrets: list[s
     lines: list[str] = [f"=== {host} ({env}) ==="]
     problems: list[str] = []
     containers = sorted(data["containers"], key=lambda item: (item.get("Names") or [""])[0])
+    if data.get("errors"):
+        lines.append("NO SE HA PODIDO LEER (lo que sigue está incompleto: no te fíes de un «ninguno»)")
+        lines.extend(f"  {error}" for error in data["errors"])
+        problems.extend(f"no se pudo leer: {error}" for error in data["errors"])
 
     lines.append("SERVICIOS (contenedores de la plataforma)")
     for container in containers:
