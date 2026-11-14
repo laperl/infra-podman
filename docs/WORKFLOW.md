@@ -125,7 +125,7 @@ Y después, desde tu copia del código, `plan` y `apply` como siempre (paso 6).
 | --- | --- |
 | `./deploy.sh plan <playbook> [--env dev\|prod] [--limit HOSTS]` | Simula (`--check --diff`) y enseña qué cambiaría |
 | `./deploy.sh apply <playbook> [--env dev\|prod] [--limit HOSTS]` | Aplica |
-| `./deploy.sh apply postgres … --retire INSTANCIA` y `./deploy.sh apply firefly … --retire INSTANCIA` | Retira esa instancia conservando sus datos ([`services/INSTALL.md`](services/INSTALL.md), apartados 10 y 11) |
+| `./deploy.sh apply <playbook> … --retire INSTANCIA` | Con cualquier playbook por instancias (hoy `postgres` y `firefly`), retira esa instancia conservando sus datos ([`services/INSTALL.md`](services/INSTALL.md), apartados 10 y 11) |
 | `./deploy.sh apply postgres … --confirm-drop INSTANCIA` | Confirma que se borran todas las bases de esa instancia ([`POSTGRES.md`](POSTGRES.md), apartado 7) |
 | `./deploy.sh secrets [--env dev\|prod] [--limit HOSTS] [--rotate NOMBRE]` | Pide la contraseña de KeePassXC y la de sudo, y crea en las máquinas los secretos que faltan (o rota uno) |
 

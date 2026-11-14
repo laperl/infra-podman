@@ -132,7 +132,7 @@ if tail -1 "$log" | cut -f6 | grep -q '^data@[0-9a-f]*$'; then pass "the log rec
 expect ok "dev apply runs without --check" apply check --env dev --limit example-vm
 called_with "dev apply passes --diff, --ask-become-pass and --limit, not --check" \
   "^navigator run playbooks/check.yml -i $data/inventory/dev/hosts.yml -- --diff --ask-become-pass --limit example-vm\$"
-# --- --confirm-drop (apply postgres) and --retire (apply postgres or firefly) -----------
+# --- --confirm-drop (apply postgres) and --retire (apply, any playbook by instances) ----
 expect ok "apply postgres --confirm-drop passes the confirmation" apply postgres --env dev --confirm-drop main
 called_with "--confirm-drop becomes -e postgres_confirm_drop" \
   "^navigator run playbooks/postgres.yml -i $data/inventory/dev/hosts.yml -- --diff --ask-become-pass -e postgres_confirm_drop=main\$"
@@ -145,7 +145,16 @@ expect ok "apply firefly --retire passes the instance" apply firefly --env dev -
 called_with "--retire becomes -e firefly_retire" \
   "^navigator run playbooks/firefly.yml -i $data/inventory/dev/hosts.yml -- --diff --ask-become-pass --limit example-vm -e firefly_retire=laptop\$"
 expect refused "--confirm-drop is refused with apply firefly" apply firefly --env dev --confirm-drop main
-expect refused "--retire is refused with another playbook" apply check --env dev --retire main
+expect refused "--retire is refused with a playbook that does not deploy by instances" apply check --env dev --retire main
+expect refused "--retire is refused with plan" plan firefly --env dev --retire laptop
+# No list of applications in deploy.sh: any playbook that reads <playbook>_retire is accepted.
+printf '%s\n' '---' '- name: Example application by instances' '  hosts: all' '  gather_facts: false' '  tasks:' \
+  '    - name: Show the instance to retire' '      ansible.builtin.debug:' '        msg: "{{ exampleapp_retire }}"' \
+  > "$repo/playbooks/exampleapp.yml"
+expect ok "apply --retire is accepted with a new playbook by instances" apply exampleapp --env dev --retire one
+called_with "--retire becomes -e <playbook>_retire" \
+  "^navigator run playbooks/exampleapp.yml -i $data/inventory/dev/hosts.yml -- --diff --ask-become-pass -e exampleapp_retire=one\$"
+rm "$repo/playbooks/exampleapp.yml"
 expect refused "--confirm-drop and --retire do not go together" apply postgres --env dev --confirm-drop main --retire main
 expect refused "an invalid instance name is refused" apply postgres --env dev --retire 'main;x'
 expect refused "--retire without a name is refused" apply postgres --env dev --retire
