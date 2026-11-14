@@ -19,7 +19,7 @@ LABELS = {"infra.managed-by": "infra-podman", "infra.env": "prod"}
 HEALTHY = {
     "containers": [
         {"Names": ["prod-pg-main"], "State": "running", "Status": "Up 2 hours (healthy)", "Networks": ["prod-ff-casa-pg-main-net"],
-         "Ports": [], "Image": "docker.io/library/postgres@sha256:" + "a" * 64, "Labels": {**LABELS, "infra.app": "pg-main"}},
+         "NetworkMode": "bridge", "Ports": [], "Image": "docker.io/library/postgres@sha256:" + "a" * 64, "Labels": {**LABELS, "infra.app": "pg-main"}},
         {"Names": ["prod-ff-casa"], "State": "running", "Status": "Up 2 hours (healthy)", "Networks": ["prod-ff-casa-pg-main-net"],
          "Ports": [{"host_ip": "127.0.0.1", "host_port": 18100, "container_port": 8080}],
          "Image": "docker.io/fireflyiii/core@sha256:" + "b" * 64, "Labels": {**LABELS, "infra.app": "ff-casa"}},
@@ -122,6 +122,25 @@ class MachineReport(unittest.TestCase):
         data = copy.deepcopy(HEALTHY)
         data["networks"][0]["internal"] = False
         self.assertIn("prod-ff-casa-pg-main-net: CON SALIDA", report(data)[0])
+
+    def test_network_and_health_are_said_as_they_are(self) -> None:
+        data = copy.deepcopy(HEALTHY)
+        data["containers"][0].update(Networks=[], NetworkMode="none", Status="Up 2 hours")
+        data["containers"][1].update(Networks=[], NetworkMode="pasta")
+        text, problems = report(data)
+        self.assertEqual(problems, [])
+        self.assertIn("prod-pg-main: en marcha (sin comprobación de salud). Entrada: ninguna. Redes: ninguna (sin red).", text)
+        self.assertIn("Redes: la de Podman por defecto, CON SALIDA (pasta).", text)
+
+    def test_a_volume_out_of_the_backup_is_said(self) -> None:
+        text, _ = report(HEALTHY)
+        self.assertNotIn("FUERA DE LA COPIA", text)
+        data = copy.deepcopy(HEALTHY)
+        data["backup_items"].remove("volume ff-casa uploads prod-ff-casa-uploads")
+        text, problems = report(data)
+        self.assertEqual(problems, [])
+        self.assertEqual(text.count("FUERA DE LA COPIA"), 1)
+        self.assertIn("FUERA DE LA COPIA: el volumen prod-ff-casa-uploads (de ff-casa)", text)
 
     def test_what_could_not_be_read_is_a_problem(self) -> None:
         data = copy.deepcopy(HEALTHY)
