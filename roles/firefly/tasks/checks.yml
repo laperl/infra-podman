@@ -40,33 +40,13 @@
       (docs/POSTGRES.md, section 6).
     quiet: true
 
-- name: Check that its secrets exist
-  ansible.builtin.command:
-    cmd: podman secret exists {{ item }}
-  loop:
-    - "{{ firefly_app_key_secret }}"
-    - "{{ firefly_db_secret }}"
-  environment: "{{ firefly_env }}"
-  become: true
-  become_user: "{{ service_user }}"
-  register: firefly_secrets
-  changed_when: false
-  failed_when: firefly_secrets.rc not in [0, 1]
-  check_mode: false
-
-- name: Require them (deploy.sh secrets creates them from KeePassXC)
-  ansible.builtin.assert:
-    that: firefly_missing | length == 0
-    fail_msg: >-
-      Missing Podman secrets on {{ inventory_hostname }}: {{ firefly_missing | join(', ') }}.
-      Declare them in infra_secrets ({{ firefly_app_key_secret_entry }} in the group firefly_hosts,
-      {{ firefly_db_secret_entry }} in postgres_hosts), with their KeePassXC entries
-      {{ infra_site | default('<infra_site>') }}/<name>, and create them:
-      ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
-    quiet: true
+- name: Require its secrets
+  ansible.builtin.include_role:
+    name: podman_secrets
   vars:
-    firefly_missing: >-
-      {{ firefly_secrets.results | rejectattr('rc', 'equalto', 0) | map(attribute='item') | list }}
+    podman_secrets_required:
+      - "{{ firefly_app_key_secret }}"
+      - "{{ firefly_db_secret }}"
 
 # Only its length is read, never its value.
 - name: Read the length of the application key

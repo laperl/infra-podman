@@ -1,0 +1,41 @@
+---
+# One place to require the Podman secrets a role needs before it changes anything
+# (SPEC 4.5). Only whether each one exists is read, never its value. Nothing is created
+# here: deploy.sh secrets does that, from KeePassXC.
+#
+# Use it like this:
+#   - name: Require its secrets
+#     ansible.builtin.include_role:
+#       name: podman_secrets
+#     vars:
+#       podman_secrets_required:
+#         - "{{ myapp_app_key_secret }}"
+#         - "{{ myapp_db_secret }}"
+- name: Read the service user
+  ansible.builtin.include_role:
+    name: service_user
+
+- name: Check that each secret exists
+  ansible.builtin.command:
+    cmd: podman secret exists {{ item }}
+  loop: "{{ podman_secrets_required }}"
+  environment: "{{ service_user_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: podman_secrets_found
+  changed_when: false
+  failed_when: podman_secrets_found.rc not in [0, 1]
+  check_mode: false
+
+- name: Require them (deploy.sh secrets creates them from KeePassXC)
+  ansible.builtin.assert:
+    that: podman_secrets_missing | length == 0
+    fail_msg: >-
+      Missing Podman secrets on {{ inventory_hostname }}: {{ podman_secrets_missing | join(', ') }}.
+      Each one needs its entry in KeePassXC ({{ infra_site | default('<infra_site>') }}/<its name
+      without {{ infra_env }}->) and its line in infra_secrets of the data repository. Then create
+      them: ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
+    quiet: true
+  vars:
+    podman_secrets_missing: >-
+      {{ podman_secrets_found.results | rejectattr('rc', 'equalto', 0) | map(attribute='item') | list }}

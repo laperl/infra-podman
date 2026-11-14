@@ -61,56 +61,14 @@
     postgres_service_home: "{{ service_user_home }}"
     postgres_env: "{{ service_user_env }}"
 
-- name: Check that the superuser password exists as a Podman secret
-  ansible.builtin.command:
-    cmd: podman secret exists {{ postgres_secret }}
-  environment: "{{ postgres_env }}"
-  become: true
-  become_user: "{{ service_user }}"
-  register: postgres_secret_exists
-  changed_when: false
-  failed_when: postgres_secret_exists.rc not in [0, 1]
-  check_mode: false
-  when: postgres_state == 'present'
-
-- name: Require the secret (deploy.sh secrets creates it from KeePassXC)
-  ansible.builtin.assert:
-    that: postgres_secret_exists.rc == 0
-    fail_msg: >-
-      The Podman secret {{ postgres_secret }} does not exist on {{ inventory_hostname }}.
-      Create it first: ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
-      (KeePassXC entry {{ infra_site | default('<infra_site>') }}/{{ postgres_secret_entry }}).
-    quiet: true
-  when: postgres_state == 'present'
-
-- name: Check that the password of each user exists as a Podman secret
-  ansible.builtin.command:
-    cmd: podman secret exists {{ infra_env }}-{{ item | replace('_', '-') }}-db-password
-  loop: "{{ postgres_user_names }}"
-  environment: "{{ postgres_env }}"
-  become: true
-  become_user: "{{ service_user }}"
-  register: postgres_user_secrets
-  changed_when: false
-  failed_when: postgres_user_secrets.rc not in [0, 1]
-  check_mode: false
-  when: postgres_state == 'present'
-
-- name: Require them (deploy.sh secrets creates them from KeePassXC)
-  ansible.builtin.assert:
-    that: postgres_missing | length == 0
-    fail_msg: >-
-      Missing Podman secrets on {{ inventory_hostname }}: {{ postgres_missing | join(', ') }}.
-      Declare each one in infra_secrets (group postgres_hosts), with its KeePassXC entry
-      {{ infra_site | default('<infra_site>') }}/<user, with - for _>-db-password (ff_laptop: ff-laptop-db-password),
-      and create them:
-      ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
-    quiet: true
+# The superuser's password and one per application user (docs/POSTGRES.md, section 4).
+- name: Require its secrets
+  ansible.builtin.include_role:
+    name: podman_secrets
   vars:
-    postgres_missing: >-
-      {{ postgres_user_secrets.results | selectattr('rc', 'defined') | rejectattr('rc', 'equalto', 0)
-         | map(attribute='item') | map('replace', '_', '-') | map('regex_replace', '^(.*)$', infra_env ~ '-\1-db-password')
-         | list }}
+    podman_secrets_required: >-
+      {{ [postgres_secret] + (postgres_user_names | map('replace', '_', '-')
+         | map('regex_replace', '^(.*)$', infra_env ~ '-\1-db-password') | list) }}
   when: postgres_state == 'present'
 
 # Written before the container starts: it is mounted read-only into it. A change is

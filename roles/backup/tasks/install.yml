@@ -1,46 +1,11 @@
 ---
-- name: Check that the restic password exists as a Podman secret
-  ansible.builtin.command:
-    cmd: podman secret exists {{ backup_secret }}
-  environment: "{{ backup_env }}"
-  become: true
-  become_user: "{{ service_user }}"
-  register: backup_secret_exists
-  changed_when: false
-  failed_when: backup_secret_exists.rc not in [0, 1]
-  check_mode: false
-
-- name: Require the secret (deploy.sh secrets creates it from KeePassXC)
-  ansible.builtin.assert:
-    that: backup_secret_exists.rc == 0
-    fail_msg: >-
-      The Podman secret {{ backup_secret }} does not exist on {{ inventory_hostname }}.
-      Create it first: ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
-      (KeePassXC entry {{ infra_site | default('<infra_site>') }}/{{ backup_secret_entry }}).
-    quiet: true
-
-- name: Check that the backup server password exists as a Podman secret
-  ansible.builtin.command:
-    cmd: podman secret exists {{ backup_copy_secret }}
-  environment: "{{ backup_env }}"
-  become: true
-  become_user: "{{ service_user }}"
-  register: backup_copy_secret_exists
-  changed_when: false
-  failed_when: backup_copy_secret_exists.rc not in [0, 1]
-  check_mode: false
-  when: backup_remote_url | length > 0
-
-- name: Require it for the copy (deploy.sh secrets creates it from KeePassXC)
-  ansible.builtin.assert:
-    that: backup_copy_secret_exists.rc == 0
-    fail_msg: >-
-      The Podman secret {{ backup_copy_secret }} does not exist on {{ inventory_hostname }}, and
-      backup_remote_url asks for a copy to the backup server. Create it first:
-      ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
-      (KeePassXC entry {{ infra_site | default('<infra_site>') }}/{{ backup_copy_secret_entry }}).
-    quiet: true
-  when: backup_remote_url | length > 0
+# The restic password and, with backup_remote_url, the password of the backup server.
+- name: Require its secrets
+  ansible.builtin.include_role:
+    name: podman_secrets
+  vars:
+    podman_secrets_required: >-
+      {{ [backup_secret] + ([backup_copy_secret] if backup_remote_url | length > 0 else []) }}
 
 # Shared with deploy.sh and the operator's notifier, outside every home directory.
 - name: Create the shared directory
