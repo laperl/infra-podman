@@ -77,5 +77,15 @@ class AppContract(unittest.TestCase):
                                 f"{role} has no row in the table of docs/services/README.md, section 9")
 
 
+    def test_every_application_is_known_to_the_check_playbook(self) -> None:
+        check = yaml.safe_load((REPO / "playbooks/check.yml").read_text())
+        shorts = next(play["vars"]["check_shorts"] for play in check if "check_shorts" in play.get("vars", {}))
+        for role in application_roles():
+            with self.subTest(role=role):
+                defaults = yaml.safe_load((REPO / "roles" / role / "defaults/main.yml").read_text())
+                self.assertEqual(shorts.get(role), defaults[f"{role}_short"],
+                                 f"{role} is missing in check_shorts of playbooks/check.yml: its instances would be reported as undeclared")
+
+
 if __name__ == "__main__":
     unittest.main()

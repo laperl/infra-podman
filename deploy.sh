@@ -15,6 +15,7 @@
 # --purge, the same way (-e <playbook>_purge=INSTANCE): retires the instance and then DELETES
 # its volumes and its own secrets, after a backup of them. Naming the instance is the
 # confirmation. Its database is dropped apart, with apply postgres.
+# INSTANCE is always the name: of the instance in the inventory (docs/NAMING.md, section 3).
 # --env defaults to prod. In prod the checkout must be clean and HEAD must carry a tag
 # signed by a key listed in ~/.config/infra-podman/allowed_signers, a file that lives
 # OUTSIDE the repository (R4 in docs/DECISIONS.md).
