@@ -1,0 +1,5 @@
+---
+# Interface of tailscale_serve: the ports of this machine to forward from its Tailscale
+# address to 127.0.0.1, the same port on both sides. The calling role sets it with
+# include_role, from inbound.tailscale_serve of the inventory.
+tailscale_serve_ports: []

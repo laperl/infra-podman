@@ -43,6 +43,7 @@ La norma completa está en [`NAMING.md`](../NAMING.md); incluye la tabla de nomb
 - **Lo habitual: `127.0.0.1` y puertos desde 18100**, uno por instancia: `18100`, `18101`… Con `127.0.0.1` solo se entra desde la propia máquina. Cualquier otra dirección abre la aplicación a esa red: lo decides tú, nada lo impide.
 - **La primera de la lista** es la que abre el lanzador y la que la aplicación da en sus enlaces.
 - El rol se para si dos instancias de la misma máquina repiten nombre, o dirección y puerto.
+- **Desde otra máquina, por Tailscale:** `inbound.tailscale_serve`, una lista de puertos, por ejemplo `[18000]`. Ansible ejecuta `tailscale serve` como root para cada uno (rol `tailscale_serve`); ese puerto tiene que estar publicado en `127.0.0.1`. Hoy lo usa el servidor de copias (`backup_server_inbound`); una aplicación lo tendrá cuando su rol lo incluya.
 - Los puertos que ya usa la plataforma están en [`ARCHITECTURE.md`](../ARCHITECTURE.md), apartado 4.
 
 ## 5. Cómo se declara

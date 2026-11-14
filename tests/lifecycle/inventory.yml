@@ -24,7 +24,8 @@ all:
       hosts:
         localhost: {}
       vars:
-        backup_server_tailscale: false  # no Tailscale on the runner, as in DEV
+        # No tailscale_serve: no Tailscale on the runner, as in DEV.
+        backup_server_inbound: {publish: ["127.0.0.1:18000:8000"]}
     postgres_hosts:
       hosts:
         localhost: {}

@@ -1,7 +1,7 @@
 ---
 # Phase 1e2: the server that keeps the copy of the backups (SPEC 4.11, R44), on every
 # machine in backup_servers (the main server in prod, the VM in dev). Needs the base playbook and
-# the secret backup-server-password. Asks for sudo: tailscale serve runs as root (R25).
+# the secret backup-server-password. Asks for sudo: tailscale serve runs as root (R55).
 #   ./deploy.sh plan backup-server --limit servidor
 # Remove keeping the copies: -e backup_server_state=absent (not through deploy.sh yet).
 - name: Backup server

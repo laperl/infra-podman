@@ -12,5 +12,5 @@
   ansible.builtin.debug:
     msg: >-
       {{ backup_server_name }} is stopped and removed. The copies stay in the volume
-      {{ backup_server_volume }}.{% if backup_server_tailscale %} The Tailscale forwarder stays too; to
-      remove it by hand: sudo tailscale serve --tcp={{ backup_server_port }} tcp://localhost:{{ backup_server_port }} off{% endif %}
+      {{ backup_server_volume }}.{% for backup_server_served in backup_server_tailscale_serve %} The Tailscale forwarder stays too; to
+      remove it by hand: sudo tailscale serve --tcp={{ backup_server_served }} tcp://localhost:{{ backup_server_served }} off{% endfor %}

@@ -4,7 +4,8 @@
 #   --private-repos  each user only reaches its own folder: user <installation>,
 #                    repositories <installation>/<env>-<machine> (at most two levels)
 #   --max-size       limit of everything it stores, in bytes
-# Only on 127.0.0.1; other machines reach it through `tailscale serve` (R25).
+# Published where backup_server_inbound says (R55): by default on 127.0.0.1, and other
+# machines reach it through `tailscale serve`.
 # The image's entrypoint passes OPTIONS and PASSWORD_FILE to rest-server.
 [Unit]
 Description=Backup server, restic rest-server ({{ infra_env }})
@@ -21,7 +22,9 @@ Volume={{ backup_server_volume }}.volume:/data:Z
 Volume={{ backup_server_auth_dir }}:/auth:ro,Z
 Environment=PASSWORD_FILE=/auth/htpasswd
 Environment="OPTIONS=--append-only --private-repos --max-size {{ ((backup_server_max_size_gb | float) * 1073741824) | int }}"
-PublishPort=127.0.0.1:{{ backup_server_port }}:8000
+{% for backup_server_published in backup_server_publish %}
+PublishPort={{ backup_server_published }}
+{% endfor %}
 
 # Resource limits (R46): the only place they are written.
 PodmanArgs=--memory={{ backup_server_memory }} --cpus={{ backup_server_cpus }}

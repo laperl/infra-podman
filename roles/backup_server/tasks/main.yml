@@ -7,13 +7,17 @@
       - backup_server_state in ['present', 'absent']
       - rest_server_image is match('^[^ ]+@sha256:[0-9a-f]{64}$')
       - infra_site is defined and infra_site is match('^[a-z][a-z0-9-]{1,30}$')
-      - backup_server_port | int > 1024 and backup_server_port | int < 65536
+      - backup_server_port is not defined and backup_server_tailscale is not defined
+      - backup_server_publish is sequence and backup_server_publish is not string and backup_server_publish | length > 0
+      - backup_server_publish | map('string') | select('match', '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{1,5}:[0-9]{1,5}$') | list | length
+        == backup_server_publish | length
       - backup_server_max_size_gb | float > 0
-      - backup_server_tailscale is boolean
     fail_msg: >-
       rest_server_image pinned by digest (D6), infra_site declared in the data repository (R42),
-      backup_server_port between 1025 and 65535, backup_server_max_size_gb above 0 and
-      backup_server_tailscale true or false.
+      backup_server_max_size_gb above 0 and backup_server_inbound.publish a list like
+      ["127.0.0.1:18000:8000"], each one <address>:<host port>:<container port>.
+      backup_server_port and backup_server_tailscale are no longer read: write
+      backup_server_inbound instead (roles/backup_server/defaults/main.yml).
     quiet: true
 
 # Its home, ids and environment, read in one place (roles/service_user).

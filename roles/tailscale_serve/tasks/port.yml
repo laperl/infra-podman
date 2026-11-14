@@ -1,0 +1,30 @@
+---
+# One port (tailscale_serve_port), included by main.yml. Only this port is added; whatever
+# else `tailscale serve` already does on the machine (for example a web page on 443) is
+# never changed or reset. --bg keeps it across reboots.
+# The JSON lists TCP handlers by port; a forwarder has TCPForward (host:port).
+- name: Find this port in the serve configuration
+  ansible.builtin.set_fact:
+    tailscale_serve_found: >-
+      {{ (((tailscale_serve_status.stdout | default('', true) | trim or '{}') | from_json).get('TCP') or {})
+         .get(tailscale_serve_port | string) or {} }}
+
+- name: Refuse a port that tailscale serve already uses for something else
+  ansible.builtin.assert:
+    that: >-
+      tailscale_serve_found | length == 0
+      or (tailscale_serve_found.TCPForward | default('')) in
+         ['localhost:' ~ tailscale_serve_port, '127.0.0.1:' ~ tailscale_serve_port]
+    fail_msg: >-
+      tailscale serve already uses port {{ tailscale_serve_port }} on {{ inventory_hostname }} for
+      something else: {{ tailscale_serve_found }}. Choose another port in inbound of the data
+      repository, or free it by hand (sudo tailscale serve status).
+    quiet: true
+
+- name: Add the TCP forwarder
+  ansible.builtin.command:
+    cmd: tailscale serve --bg --tcp={{ tailscale_serve_port }} tcp://localhost:{{ tailscale_serve_port }}
+  become: true
+  timeout: 60
+  changed_when: true
+  when: tailscale_serve_found | length == 0

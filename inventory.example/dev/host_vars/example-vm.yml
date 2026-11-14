@@ -3,7 +3,8 @@
 # repository. Variables of this machine only.
 
 # The VM has no Tailscale: the backup server is not exposed (R44)...
-backup_server_tailscale: false
+backup_server_inbound:
+  publish: ["127.0.0.1:18000:8000"]
 # ...and the copy reaches it from the same VM, sharing the server's network. Port 8000 is
 # the one inside the server container.
 backup_remote_url: http://127.0.0.1:8000

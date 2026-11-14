@@ -498,6 +498,6 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Lo que se pierde, a sabiendas:** antes un error en el inventario no podía abrir una aplicación a la red de casa (R25). Ahora `0.0.0.0` o la IP de la red local se aceptan: es responsabilidad del operador. El CI solo exige que la dirección y el puerto estén escritos.
 - **Sigue valiendo de R25:** `tailscale serve` es la forma recomendada de llegar desde otra máquina, y el motivo: publicar en la IP de Tailscale puede fallar al arrancar si la interfaz aún no tiene dirección.
 - **Sustituye a:** R25 en lo que decía de «solo en `127.0.0.1`».
-- **Pendiente (siguiente orden):** el mismo formato para el servidor de copias, y `inbound.tailscale_serve` como pieza común.
+- **También el servidor de copias:** `backup_server_inbound`, con `publish` y `tailscale_serve` (una lista de puertos). `tailscale serve` es una pieza común, el rol `tailscale_serve`. Desaparecen `backup_server_port` y `backup_server_tailscale`.
 - **Aprobada por:** el operador, el 2026-11-14.
 - **SPEC:** 2 y 4.4.

@@ -4,7 +4,8 @@
 #   --private-repos  each user only reaches its own folder: user <installation>,
 #                    repositories <installation>/<env>-<machine> (at most two levels)
 #   --max-size       limit of everything it stores, in bytes
-# Only on 127.0.0.1; other machines reach it through `tailscale serve` (R25).
+# Published where backup_server_inbound says (R55): by default on 127.0.0.1, and other
+# machines reach it through `tailscale serve`.
 # The image's entrypoint passes OPTIONS and PASSWORD_FILE to rest-server.
 [Unit]
 Description=Backup server, restic rest-server (dev)
