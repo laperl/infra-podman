@@ -83,7 +83,7 @@ Qué hacer cuando algo falla, ordenado por pieza. Busca el mensaje que ves (Ctrl
 
 | Lo que ves | Por qué | Qué hacer |
 | --- | --- | --- |
-| `The Podman secret prod-pg-main-superuser-password does not exist on …` | Falta el secreto en esa máquina | `./deploy.sh secrets --limit laptop` (entrada `pg-main-superuser-password` en KeePassXC) |
+| `Missing Podman secrets on …: prod-pg-main-superuser-password` | Falta el secreto en esa máquina | `./deploy.sh secrets --limit laptop` (entrada `pg-main-superuser-password` en KeePassXC) |
 | `Each instance needs its superuser in the data repository` | Falta `superuser:` en la instancia, o su nombre no es válido | En el repo de datos, `superuser:` en `postgres_instances` ([`SETUP.md`](SETUP.md), paso 15.1) |
 | `prod-pg-main was not created with the platform's parameters` | La instancia se creó antes del estándar o con otros parámetros. Ansible no toca nada (D11) | [`SETUP.md`](SETUP.md), paso 15. Borra datos: solo si está vacía |
 | `prod-pg-main would restart on a new image, and there is no backup service on …` | Cambia la imagen de Postgres y no hay backup con el que hacer antes una copia | `./deploy.sh apply backup --limit laptop` y repite |
@@ -110,7 +110,7 @@ Los mensajes que empiezan por «La copia de … ha fallado» salen en el aviso d
 
 | Lo que ves | Por qué | Qué hacer |
 | --- | --- | --- |
-| `The Podman secret prod-backup-restic-password does not exist on …` | Falta la clave de restic en esa máquina | `./deploy.sh secrets --limit laptop` (entrada `backup-restic-password`) |
+| `Missing Podman secrets on …: prod-backup-restic-password` | Falta la clave de restic en esa máquina | `./deploy.sh secrets --limit laptop` (entrada `backup-restic-password`) |
 | `prod-pg-main no está en marcha: no se pueden volcar sus bases.` | Postgres estaba parado a la hora de la copia | `svc systemctl --user start prod-pg-main.service` y `svc systemctl --user start prod-backup.service` |
 | `el rol backup no puede leer la lista de bases de …` | Al rol `backup` le falta algo en Postgres | `./deploy.sh apply postgres --limit laptop` (lo repone) y repite la copia |
 | `no existe o no se puede leer …/infra-podman-data.bundle` | No está la copia del repo de datos que deja `deploy.sh` | Haz un `./deploy.sh plan` correcto cualquiera: al terminar la deja. Después repite la copia |
@@ -134,8 +134,8 @@ Los mensajes salen en el aviso de escritorio y en `cat /var/lib/infra-podman/bac
 | `la clave de restic no abre el repositorio del servidor.` | `backup-restic-password` no es la clave con la que se creó la copia del servidor principal | **No borres nada.** La buena está en el historial de esa entrada de KeePassXC. Nunca se crea un repositorio nuevo encima |
 | `el servidor de copias está al … % de su tope` o `el servidor de copias está lleno` | Las copias del servidor principal se acercan a su tope (30 GB) o lo han alcanzado. Lleno, no copia nada nuevo | En el servidor principal, `df -h /`. Sube `backup_server_max_size_gb` en `group_vars/all.yml` del repo de datos, commit firmado, `./deploy.sh apply backup-server --limit servidor` y `./deploy.sh apply backup --limit laptop`. En el servidor principal no se borra nada solo (R26) |
 | `el servidor de copias no deja escribir en …` | La carpeta no empieza por el nombre de la instalación | `infra_site` tiene que ser el mismo en el repo de datos que en la carpeta del mensaje |
-| `The Podman secret prod-backup-server-password does not exist on …, and backup_remote_url asks for a copy` | Falta la contraseña del servidor en esa máquina | `./deploy.sh secrets --limit laptop` (o `servidor`; entrada `backup-server-password`) |
-| `The Podman secret prod-backup-server-password does not exist on servidor` | Lo mismo, en el servidor principal, al desplegar el servidor | `./deploy.sh secrets --limit servidor` |
+| `Missing Podman secrets on …: prod-backup-server-password` (al aplicar `backup`, con `backup_remote_url`) | Falta la contraseña del servidor en esa máquina | `./deploy.sh secrets --limit laptop` (o `servidor`; entrada `backup-server-password`) |
+| `Missing Podman secrets on servidor: prod-backup-server-password` | Lo mismo, en el servidor principal, al desplegar el servidor | `./deploy.sh secrets --limit servidor` |
 | El servidor no arranca o has perdido su contraseña | — | Las copias siguen en su volumen y se leen solo con la clave de restic: [`OPERATIONS.md`](OPERATIONS.md), 5.2. Para una contraseña nueva: cámbiala en KeePassXC y sigue la fila «no acepta el usuario o la contraseña» |
 
 ## 8. Tailscale

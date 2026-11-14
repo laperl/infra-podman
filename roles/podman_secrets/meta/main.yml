@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  author: laperl
+  description: Stop with a clear message when a Podman secret the calling role needs is missing
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.18"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+    - name: Fedora
+      versions:
+        - "44"
+dependencies: []

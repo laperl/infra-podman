@@ -1,23 +1,9 @@
 ---
-- name: Check that the server password exists as a Podman secret
-  ansible.builtin.command:
-    cmd: podman secret exists {{ backup_server_secret }}
-  environment: "{{ backup_server_env }}"
-  become: true
-  become_user: "{{ service_user }}"
-  register: backup_server_secret_exists
-  changed_when: false
-  failed_when: backup_server_secret_exists.rc not in [0, 1]
-  check_mode: false
-
-- name: Require the secret (deploy.sh secrets creates it from KeePassXC)
-  ansible.builtin.assert:
-    that: backup_server_secret_exists.rc == 0
-    fail_msg: >-
-      The Podman secret {{ backup_server_secret }} does not exist on {{ inventory_hostname }}.
-      Create it first: ./deploy.sh secrets --env {{ infra_env }} --limit {{ inventory_hostname }}
-      (KeePassXC entry {{ infra_site | default('<infra_site>') }}/{{ backup_server_secret_entry }}).
-    quiet: true
+- name: Require its secret
+  ansible.builtin.include_role:
+    name: podman_secrets
+  vars:
+    podman_secrets_required: ["{{ backup_server_secret }}"]
 
 - name: Create the directory for the password hash
   ansible.builtin.file:
