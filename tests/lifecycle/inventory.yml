@@ -6,6 +6,20 @@ all:
     infra_env: dev
     infra_site: ci-site  # fictitious installation name (R42)
     service_user: svc_runner
+    # Who reads each secret of these jobs (roles/podman_secrets). The values are made in CI.
+    infra_secrets:
+      - {name: pg-main-superuser-password, group: postgres_hosts, readers: [pg-main]}
+      - {name: demo-app-db-password, group: postgres_hosts, readers: [pg-main, demo]}
+      - {name: demo-rw-db-password, group: postgres_hosts, readers: [pg-main, demo]}
+      - {name: demo-ro-db-password, group: postgres_hosts, readers: [pg-main, demo]}
+      - {name: demo-ai-db-password, group: postgres_hosts, readers: [pg-main, ai]}
+      - {name: ff-ro-db-password, group: postgres_hosts, readers: [pg-main, ai]}
+      - {name: ff-casa-db-password, group: postgres_hosts, readers: [pg-main, ff-casa]}
+      - {name: ff-canary-db-password, group: postgres_hosts, readers: [pg-main, ff-canary]}
+      - {name: ff-casa-app-key, group: firefly_hosts, readers: [ff-casa]}
+      - {name: ff-canary-app-key, group: firefly_hosts, readers: [ff-canary]}
+      - {name: backup-restic-password, group: backup_clients, readers: [backup]}
+      - {name: backup-server-password, group: [backup_clients, backup_servers], readers: [backup, backup-server]}
   children:
     servers:
       hosts:

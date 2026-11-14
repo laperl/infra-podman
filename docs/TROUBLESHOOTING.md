@@ -83,6 +83,7 @@ Qué hacer cuando algo falla, ordenado por pieza. Busca el mensaje que ves (Ctrl
 
 | Lo que ves | Por qué | Qué hacer |
 | --- | --- | --- |
+| `<lector> is not a reader of: <secretos>` (cualquier playbook) | A ese secreto le falta ese lector en `readers:`, o no está en `infra_secrets` | En `inventory/<entorno>/group_vars/all.yml` del repo de datos, añade el lector a `readers:` de su línea ([`SECRETS_INVENTORY.md`](SECRETS_INVENTORY.md)) |
 | `Missing Podman secrets on …: prod-pg-main-superuser-password` | Falta el secreto en esa máquina | `./deploy.sh secrets --limit laptop` (entrada `pg-main-superuser-password` en KeePassXC) |
 | `Each instance needs its superuser in the data repository` | Falta `superuser:` en la instancia, o su nombre no es válido | En el repo de datos, `superuser:` en `postgres_instances` ([`SETUP.md`](SETUP.md), paso 15.1) |
 | `prod-pg-main was not created with the platform's parameters` | La instancia se creó antes del estándar o con otros parámetros. Ansible no toca nada (D11) | [`SETUP.md`](SETUP.md), paso 15. Borra datos: solo si está vacía |

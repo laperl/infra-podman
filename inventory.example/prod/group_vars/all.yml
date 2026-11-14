@@ -17,19 +17,25 @@ service_user: svc_runner
 infra_secrets:
   - name: pg-main-superuser-password
     group: postgres_hosts
+    readers: [pg-main]           # who reads it: the only place where this is written
   # One per application user of postgres_hosts.yml (docs/POSTGRES.md, section 4):
   # - name: app1-db-password
   #   group: postgres_hosts
+  #   readers: [pg-main, app1]   # PostgreSQL and the application that uses it
   # Firefly III, two per instance (docs/services/README.md): its user's password and its
   # application key (exactly 32 letters and digits). For the instance casa:
   # - name: ff-casa-db-password
   #   group: postgres_hosts
+  #   readers: [pg-main, ff-casa]
   # - name: ff-casa-app-key
   #   group: firefly_hosts
+  #   readers: [ff-casa]
   - name: backup-restic-password  # key of the restic repositories: lose it, lose the backups
     group: backup_clients
+    readers: [backup]
   - name: backup-server-password  # user <infra_site> of the backup server: both ends need it
     group: [backup_clients, backup_servers]
+    readers: [backup, backup-server]
 
 # Size limit of the backup server, in GB: the server enforces it and the clients warn at
 # 80 % (R44). Here because both ends use it.
