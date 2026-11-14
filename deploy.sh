@@ -4,13 +4,14 @@
 #   deploy.sh plan    <playbook> [--env dev|prod] [--limit PATTERN]
 #   deploy.sh apply   <playbook> [--env dev|prod] [--limit PATTERN]
 #   deploy.sh secrets            [--env dev|prod] [--limit PATTERN] [--rotate NAME]
-#   deploy.sh apply   postgres   ... --confirm-drop INSTANCE | --retire INSTANCE
-#   deploy.sh apply   firefly    ... --retire INSTANCE
+#   deploy.sh apply   postgres   ... --confirm-drop INSTANCE
+#   deploy.sh apply   <playbook> ... --retire INSTANCE
 #
 # --confirm-drop, only with apply postgres (docs/POSTGRES.md, section 7): confirms dropping
 # every database of an instance that has none left in the inventory. --retire, with apply
-# postgres or apply firefly: stops one instance and removes its service, keeping its data
-# (docs/services/README.md, section 7). It becomes -e <playbook>_retire=INSTANCE.
+# and any playbook that deploys by instances: stops one instance and removes its service,
+# keeping its data (docs/services/README.md, section 7). It becomes
+# -e <playbook>_retire=INSTANCE, so it is only accepted when the playbook reads that variable.
 # --env defaults to prod. In prod the checkout must be clean and HEAD must carry a tag
 # signed by a key listed in ~/.config/infra-podman/allowed_signers, a file that lives
 # OUTSIDE the repository (R4 in docs/DECISIONS.md).
@@ -93,8 +94,7 @@ parse_args() {
   if [[ -n $confirm_drop || -n $retire ]]; then
     [[ -z $confirm_drop || ($action == apply && $target == postgres) ]] \
       || refuse "--confirm-drop solo vale con apply postgres"
-    [[ -z $retire || ($action == apply && $target =~ ^(postgres|firefly)$) ]] \
-      || refuse "--retire solo vale con apply postgres o apply firefly"
+    [[ -z $retire || $action == apply ]] || refuse "--retire solo vale con apply"
     [[ -z $confirm_drop || -z $retire ]] || refuse "--confirm-drop y --retire no van juntos"
     [[ $confirm_drop$retire =~ ^[a-z0-9]+$ ]] \
       || refuse "nombre de instancia no válido: $confirm_drop$retire (letras minúsculas y números)"
@@ -103,6 +103,10 @@ parse_args() {
     [[ $target =~ ^[a-z0-9_-]+$ && -f $REPO_DIR/playbooks/$target.yml ]] \
       || refuse "playbook desconocido '$target' (se espera playbooks/<nombre>.yml)"
   fi
+  # No list of applications here: a playbook by instances reads <playbook>_retire. One that
+  # does not would ignore it, and the operator would believe the instance was retired.
+  [[ -z $retire ]] || grep -q -- "${target}_retire" "$REPO_DIR/playbooks/$target.yml" \
+    || refuse "--retire no vale con '$target': su playbook no despliega por instancias (no usa ${target}_retire)"
 }
 
 describe_checkout() {

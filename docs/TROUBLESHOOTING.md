@@ -23,7 +23,7 @@ Qué hacer cuando algo falla, ordenado por pieza. Busca el mensaje que ves (Ctrl
 | --- | --- | --- |
 | `deploy.sh: no existe el repo de datos …. ¿Está montado el volumen cifrado?` | El volumen `SECURE_vc` no está montado | Móntalo en VeraCrypt y repite |
 | `deploy.sh: --confirm-drop solo vale con apply postgres` | La usaste con `plan` o con otro playbook | Solo `./deploy.sh apply postgres … --confirm-drop <instancia>` |
-| `deploy.sh: --retire solo vale con apply postgres o apply firefly` | La usaste con `plan` o con otro playbook | `./deploy.sh apply postgres … --retire <instancia>` o `./deploy.sh apply firefly … --retire <instancia>` |
+| `deploy.sh: --retire solo vale con apply` o `--retire no vale con '<playbook>': su playbook no despliega por instancias` | La usaste con `plan`, o con un playbook que no tiene instancias que retirar | `./deploy.sh apply postgres … --retire <instancia>` o `./deploy.sh apply firefly … --retire <instancia>` |
 | `deploy.sh: nombre de instancia no válido: …` | El nombre no es solo letras minúsculas y números | El de `name:` en `postgres_instances` |
 | `deploy.sh: define data_repo = <ruta del repo de datos> en …` | Falta la línea `data_repo` en `~/.config/infra-podman/deploy.conf` | Añádela ([`SETUP.md`](SETUP.md), paso 7) |
 | `deploy.sh: falta inventory/prod/hosts.yml en el repo de datos …` | El repo de datos no tiene el inventario de ese entorno | Revisa su estructura con [`inventory.example/`](../inventory.example/README.md) |
