@@ -36,7 +36,7 @@ No leas todo el repo: lee lo que pide la tarea. Cada cosa se explica en un solo 
 
 ## Dónde va cada cosa nueva
 
-- **Un servicio nuevo:** siempre por instancias y con un nombre corto (añádelo a la tabla de `docs/NAMING.md`, apartado 2, y sigue su lista del apartado 9), con lo común de [`docs/services/README.md`](docs/services/README.md) (R48): una base de datos por instancia, nunca un esquema compartido. Su rol en `roles/<servicio>/`, su página en `docs/services/<servicio>.md` (solo lo propio de ese servicio) y un `CLAUDE.md` corto en su rol: qué no se toca, qué tests tiene y qué leer.
+- **Un servicio nuevo:** siempre por instancias y con un nombre corto (añádelo a la tabla de `docs/NAMING.md`, apartado 2, y sigue su lista del apartado 9), con lo común de [`docs/services/README.md`](docs/services/README.md) (R48) y su contrato declarado en el rol (apartado 9 de esa página, R56): una base de datos por instancia, nunca un esquema compartido. Su rol en `roles/<servicio>/`, su página en `docs/services/<servicio>.md` (solo lo propio de ese servicio) y un `CLAUDE.md` corto en su rol: qué no se toca, qué tests tiene y qué leer.
 - **Al añadirlo, al día:** las tablas de `docs/ARCHITECTURE.md`, `docs/OPERATIONS.md` (apartados 1 y 4) y `docs/TROUBLESHOOTING.md` (una sección), y `docs/SECRETS_INVENTORY.md`. No se copian textos entre ellos.
 - **Software propio** (por ejemplo `rag`): en su propio repo, que publica su imagen (SPEC 5.5). Aquí solo su despliegue.
 

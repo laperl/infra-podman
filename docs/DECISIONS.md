@@ -501,3 +501,12 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **También el servidor de copias:** `backup_server_inbound`, con `publish` y `tailscale_serve` (una lista de puertos). `tailscale serve` es una pieza común, el rol `tailscale_serve`. Desaparecen `backup_server_port` y `backup_server_tailscale`.
 - **Aprobada por:** el operador, el 2026-11-14.
 - **SPEC:** 2 y 4.4.
+
+### R56. El contrato de una aplicación: base propia, proveedores y salida
+
+- **Decisión:** cada rol de aplicación declara en `<app>_contract` tres cosas: si guarda sus datos en Postgres (`database`), con qué otros contenedores habla (`providers`) y si sale a internet (`egress`). Las fija el rol, no el inventario. De ahí sale su red: una red interna por proveedor, `Network=none` si no hay nada, y una red con salida solo si la declara. La entrada la escribe el operador (R55). Sustituye a los tres perfiles `none`, `internal` y `egress` que se propusieron al abrir la subfase 2b.
+- **Motivo:** los tres perfiles mezclaban cosas independientes: una aplicación puede hablar con Postgres sin tener base propia, o salir a internet sin publicar ningún puerto. Con tres respuestas separadas, todos los casos del operador (sin red, solo entra, entra y sale, solo sale) tienen una traducción única, hecha con lo que Podman 4.9 ya trae: `Network=none`, redes con `Internal=true` y una red normal.
+- **Lo que no se hace:** limitar a qué destinos sale un contenedor. Podman no tiene una clave para ello; lo habitual es un proxy de salida con lista de destinos, que aquí sería un proveedor más. Queda para una fase posterior, como decidió el operador.
+- **Hoy:** el único proveedor es Postgres y la única aplicación, Firefly III (`database: postgres`, `providers: [postgres]`, `egress: false`). La plantilla de la red con salida se escribe con la primera aplicación que la declare.
+- **Aprobada por:** el operador, el 2026-11-14.
+- **SPEC:** 4.4.

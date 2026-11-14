@@ -38,6 +38,13 @@ firefly_retire: ""
 
 firefly_state: present
 
+# What kind of application this is (docs/services/README.md, section 9; R56). Fixed here,
+# never a setting of the inventory. tests/unit/test_app_contract.py checks it.
+firefly_contract:
+  database: postgres     # none | postgres: its own database, user and password
+  providers: [postgres]  # the containers it calls: one internal network with each
+  egress: false          # true: it also needs a way out to the internet
+
 # What each instance gets when it does not say otherwise.
 firefly_instance: "{{ firefly_item.name }}"
 firefly_publish: "{{ (firefly_item.inbound | default({})).publish | default([]) }}"
