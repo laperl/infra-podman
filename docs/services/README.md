@@ -11,7 +11,7 @@ Cómo es **cualquier** aplicación de la plataforma (Firefly III, pgAdmin y las 
 | Pieza | De cada instancia | Ejemplo, Firefly `casa` |
 | --- | --- | --- |
 | Contenedor y servicio | El suyo | `prod-ff-casa` |
-| Puerto, solo en `127.0.0.1` | El suyo, si la aplicación lo necesita | `127.0.0.1:18100` |
+| Entrada (`inbound.publish`) | La suya, si la aplicación la necesita | `127.0.0.1:18100` |
 | Red e IPs | Su red interna, con su propia subred | `prod-ff-casa-pg-main-net` |
 | Postgres | **Su propia base de datos**, con un único esquema del mismo nombre, y su usuario | base, esquema y usuario `ff_casa` |
 | Imagen | La que elijas de `images.yml` | `firefly_image` |
@@ -105,3 +105,32 @@ El procedimiento completo, orden por orden, está en [`INSTALL.md`](INSTALL.md),
 - **Cómo funciona:** el rol deja un fichero en `~/.config/infra-podman/backup/backup.d/` del usuario de servicio, y el backup diario de la máquina lo lee en cada ejecución. Ansible solo escribe ese fichero. Al retirar la instancia, se borra.
 - **Hace falta el backup en esa máquina** (`./deploy.sh apply backup`): sin él, el fichero queda escrito y no se copia nada.
 - **Restaurar un volumen:** saca la copia como cualquier otra ([`OPERATIONS.md`](../OPERATIONS.md), apartado 5; su ruta es `<app>/volume/<nombre>/<nombre>.tar`), para el contenedor y, como usuario de servicio, `podman volume import <volumen> <fichero>.tar`.
+
+## 9. El contrato: qué es cada aplicación
+
+Tres cosas dependen de cómo está hecha la aplicación. Las fija **su rol**, en `<app>_contract` de `roles/<app>/defaults/main.yml`, y no se cambian desde el inventario (R56). La cuarta, por dónde se entra, la escribes tú (apartado 4).
+
+| Pregunta | En el rol | Lo que monta la plataforma |
+| --- | --- | --- |
+| ¿Guarda sus datos en Postgres? | `database: postgres` o `none` | Con `postgres`: su base, su usuario y su contraseña, en la instancia que elijas (`pg_instance`) |
+| ¿Con qué otros contenedores habla? | `providers:`, una lista. Hoy solo existe `postgres` | Una red **interna** por cada uno, solo para los dos: sin salida a internet, a la red de casa ni al host |
+| ¿Necesita salir a internet? | `egress: true` o `false` | Con `true`, además, una red con salida. Es todo o nada: limitar a qué destinos sale queda para una fase posterior |
+
+Lo que resulta de combinarlas con la entrada:
+
+| Caso | Base propia | Proveedores | Salida | Entrada | Red del contenedor |
+| --- | --- | --- | --- | --- | --- |
+| Sin red | no | ninguno | no | ninguna | `Network=none` |
+| Solo entra | sí o no | los que tenga | no | uno o más puertos | Solo redes internas, con los puertos publicados desde ellas |
+| Entra y sale | sí o no | los que tenga | sí | uno o más puertos | Redes internas y una con salida |
+| Solo sale | sí o no | los que tenga | sí | ninguna | Redes internas y una con salida, sin puertos |
+
+Las aplicaciones de hoy:
+
+| Aplicación | Rol | Base propia | Proveedores | Salida | Caso |
+| --- | --- | --- | --- | --- | --- |
+| Firefly III | `firefly` | sí | Postgres | no | Solo entra |
+
+- **Añadir una aplicación** es añadir su fila aquí y su `<app>_contract`; `tests/unit/test_app_contract.py` comprueba que los dos existen y que las unidades del rol cuadran con lo declarado.
+- **La red con salida todavía no tiene plantilla:** se escribe con la primera aplicación que declare `egress: true`. Lo mismo un proveedor nuevo (un proxy, Tor, LiteLLM): entra como Postgres, con una red interna por pareja.
+- **Fuera de este contrato:** la red del host (prohibida), la salida limitada a ciertos destinos, la GPU y los dispositivos, y las aplicaciones con ventana ([`ROADMAP.md`](../ROADMAP.md)).
