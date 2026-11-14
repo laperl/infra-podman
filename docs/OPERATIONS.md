@@ -108,6 +108,20 @@ Otras:
 
 Repásalo tras un reinicio, tras un `apply` o cuando quieras quedarte tranquilo.
 
+**De un vistazo:** `./deploy.sh plan check --env <entorno>` (añade `--limit <máquina>` para una sola). Solo lee. Por cada máquina dice:
+
+| Bloque | Qué dice |
+| --- | --- |
+| `SERVICIOS` | Cada contenedor: en marcha o parado, sano o no, por dónde se entra, sus redes y su imagen. `FALTA` si una instancia del inventario no tiene contenedor |
+| `TAREAS PROGRAMADAS` | Cada temporizador: activo o no, cuándo salta, cuándo saltó y cómo terminó |
+| `REDES` y `VOLÚMENES` | Los que hay, de qué instancia son y si la red tiene salida |
+| `COPIAS` | Qué copia el backup de esa máquina, línea a línea, y el resultado de la última copia y del último envío (apartado 2) |
+| `SECRETOS` | Cuántos pide el inventario y cuáles faltan |
+| `SOBRA` | Lo que hay en la máquina y el inventario ya no declara. No es un fallo |
+| `RESUMEN` | `todo correcto`, o la lista de problemas |
+
+Vale igual para cualquier aplicación: las encuentra por sus etiquetas ([`NAMING.md`](NAMING.md), apartado 6). Lo que sigue es lo mismo a mano, pieza a pieza.
+
 **En el portátil:**
 
 <!-- test: healthy -->

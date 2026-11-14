@@ -158,7 +158,7 @@ Y después, desde tu copia del código, `plan` y `apply` como siempre (paso 6).
 
 | Playbook | Qué hace | Máquinas |
 | --- | --- | --- |
-| `check` | Solo lee: comprueba que llega a cada máquina y su versión de Podman, y lista lo que hay en ella y el inventario ya no declara (contenedores, volúmenes, redes, secretos y ficheros de copia). No borra ni para nada | Todas |
+| `check` | Solo lee: comprueba que llega a cada máquina y su versión de Podman, y da el estado de cada una: servicios, tareas programadas, redes, volúmenes, copias, secretos y lo que sobra ([`OPERATIONS.md`](OPERATIONS.md), apartado 4). No borra ni para nada | Todas |
 | `base` | Usuario de servicio `svc_runner` con linger (fase 1) | `laptop`, `servidor` (DEV: `vm`) |
 | `secrets` | Solo con `./deploy.sh secrets`: crea en cada máquina los secretos que le faltan, leyéndolos de KeePassXC. Pide la contraseña maestra y la de sudo | Una cada vez, con `--limit` |
 | `postgres` | Las instancias de Postgres (`pg-main`). Necesita antes `base` y `secrets`. Si cambia la imagen, hace antes un backup y se para si falla | `laptop` (DEV: `vm`) |
