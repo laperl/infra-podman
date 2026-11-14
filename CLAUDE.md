@@ -24,6 +24,7 @@ No leas todo el repo: lee lo que pide la tarea. Cada cosa se explica en un solo 
 | Cualquiera | `docs/SPEC.md` (secciones 3, 4, 6 a 8) y la fila de la fase en `docs/ROADMAP.md` |
 | Cualquier nombre nuevo (contenedor, red, volumen, secreto, variable, base) | `docs/NAMING.md`: es obligatoria |
 | Un servicio (Firefly, pgAdmin…) | `docs/services/README.md` (lo común e instancias), `docs/services/INSTALL.md` (instalar, paso a paso), `docs/services/<servicio>.md`, `roles/<servicio>/` y su `CLAUDE.md`, si lo tiene |
+| Añadir una aplicación nueva | `docs/services/ADD_APP.md`: la lista ordenada, de la ficha a la entrega |
 | Postgres, bases o usuarios | `docs/POSTGRES.md` y `roles/postgres/` |
 | Backups o restaurar | SPEC 4.11, `roles/backup/`, `roles/backup_server/` y `docs/OPERATIONS.md`, apartado 5 |
 | Secretos | SPEC 4.5, `docs/SECRETS_INVENTORY.md` y `playbooks/secrets.yml` |
