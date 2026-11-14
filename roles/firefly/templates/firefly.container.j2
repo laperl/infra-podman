@@ -18,10 +18,12 @@ Label=infra.managed-by=infra-podman
 Volume={{ firefly_volume }}.volume:/var/www/html/storage/upload:Z
 
 # Only its own network to PostgreSQL: internal, no way out, and no other instance in it
-# (SPEC 4.4, R45, R48). The port is published on 127.0.0.1 of the machine only (R25): the
-# address is not a setting.
+# (SPEC 4.4, R45, R48). It is published where the operator wrote in inbound.publish of the
+# inventory (R55), from that same internal network.
 Network={{ firefly_network }}.network
-PublishPort=127.0.0.1:{{ firefly_port }}:8080
+{% for firefly_published in firefly_publish %}
+PublishPort={{ firefly_published }}
+{% endfor %}
 
 # Secrets as files (SPEC 4.5), read by the image through the *_FILE variables. The
 # image runs as www-data (uid 33), which must be able to read them.
@@ -33,7 +35,7 @@ Environment=DB_PASSWORD_FILE=/run/secrets/db-password
 # The image's variables, as documented in Firefly's .env.example (v6.7.9).
 Environment=APP_ENV=production
 Environment=APP_DEBUG=false
-Environment=APP_URL=http://127.0.0.1:{{ firefly_port }}
+Environment=APP_URL={{ firefly_url }}
 Environment=DEFAULT_LANGUAGE={{ firefly_language }}
 Environment=DEFAULT_LOCALE=equal
 Environment=TZ={{ firefly_timezone }}

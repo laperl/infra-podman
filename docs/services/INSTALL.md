@@ -150,7 +150,8 @@ postgres_instances:
 ---
 firefly_instances:
   - name: laptop                    # → prod-ff-laptop
-    port: 18100                     # 127.0.0.1:18100; desde 18100, uno distinto por instancia
+    inbound:
+      publish: ["127.0.0.1:18100:8080"]   # dirección:puerto:puerto interno; desde 18100, uno distinto por instancia
     pg_instance: laptop             # su Postgres: prod-pg-laptop
     language: es_ES
     timezone: Europe/Madrid
@@ -174,7 +175,7 @@ git verify-commit HEAD
 | Parámetro | Por defecto | Para qué |
 | --- | --- | --- |
 | `name` | obligatorio | La instancia, sin guiones |
-| `port` | obligatorio | Su puerto en `127.0.0.1`, desde 18100 |
+| `inbound.publish` | obligatorio | Lista de `<dirección>:<puerto>:<puerto interno>` ([`README.md`](README.md), apartado 4). Para Firefly, `127.0.0.1`, un puerto desde 18100 y `8080` |
 | `pg_instance` | `main` | En qué Postgres está su base |
 | `image` | `firefly_image` | Qué imagen de `images.yml` usa (por ejemplo, una canary) |
 | `language` | `en_US` | Idioma de la pantalla de entrada y de los usuarios nuevos |

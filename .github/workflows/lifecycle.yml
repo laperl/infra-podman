@@ -383,17 +383,18 @@ jobs:
           done
           tests/lifecycle/playbook.sh -i "$INV" $PG playbooks/postgres.yml 2>&1 | tee -a all.log
 
-      - name: Repeated names or ports are refused
+      - name: Repeated names or addresses are refused
         run: |
-          printf 'firefly_instances: [{name: a, port: 18100}, {name: b, port: 18100}]\n' > dup.yml
+          printf 'firefly_instances:\n' > dup.yml
+          printf '  - {name: %s, inbound: {publish: ["127.0.0.1:18100:8080"]}}\n' a b >> dup.yml
           if ansible-playbook -i "$INV" -e @dup.yml playbooks/firefly.yml --check > refusal.log 2>&1; then
-            echo "::error::two instances with the same port were accepted"; exit 1
+            echo "::error::two instances with the same address and port were accepted"; exit 1
           fi
-          grep -q 'neither repeated on the same machine' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+          grep -q 'repeated on the same machine' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
 
       - name: A launcher command that would need quoting is refused
         run: |
-          printf 'firefly_instances: [{name: a, port: 18100, launcher_command: ["firefox; rm"]}]\n' > bad.yml
+          printf 'firefly_instances: [{name: a, inbound: {publish: ["127.0.0.1:18100:8080"]}, launcher_command: ["firefox; rm"]}]\n' > bad.yml
           if ansible-playbook -i "$INV" -e @bad.yml playbooks/firefly.yml --check > refusal.log 2>&1; then
             echo "::error::a launcher command with a space and ; was accepted"; exit 1
           fi
@@ -402,7 +403,7 @@ jobs:
       # Only the instance is written: a whole name would end up as dev-ff-dev-ff-casa (R49).
       - name: A whole name instead of the instance is refused
         run: |
-          printf 'firefly_instances: [{name: dev-ff-casa, port: 18100}]\n' > whole.yml
+          printf 'firefly_instances: [{name: dev-ff-casa, inbound: {publish: ["127.0.0.1:18100:8080"]}}]\n' > whole.yml
           if ansible-playbook -i "$INV" -e @whole.yml playbooks/firefly.yml --check > refusal.log 2>&1; then
             echo "::error::a name with hyphens was accepted"; exit 1
           fi

@@ -17,7 +17,7 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
 | Tema | Decisión |
 | --- | --- |
 | Usuarios | Uno: el operador |
-| Desde dónde | Solo desde el navegador del portátil (`127.0.0.1`). El móvil queda para más adelante (apartado 8) |
+| Desde dónde | Solo desde el navegador del portátil (`inbound.publish` en `127.0.0.1`). El móvil queda para más adelante (apartado 8) |
 | Cómo entran los datos | A mano y con extractos del banco en CSV. Sin conexión con el banco. El Data Importer de Firefly queda para más adelante (ROADMAP) |
 | Monedas | Euros y dólares. Los tipos de cambio se meten a mano, porque los automáticos van por internet |
 | Criptomonedas | Solo si es fácil y estándar: crearla como una moneda más (por ejemplo, `BTC`) y anotar los saldos a mano, sin cotizaciones automáticas. Bitcoin cabe: cada moneda admite de 0 a 12 decimales y las cantidades se guardan con 12 (código de Firefly 6.7.9) |

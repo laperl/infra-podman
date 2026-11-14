@@ -42,11 +42,11 @@ all:
         firefly_ci_image: "{{ firefly_image }}"
         firefly_instances:
           - name: casa
-            port: 18100
+            inbound: {publish: ["127.0.0.1:18100:8080"]}
             timezone: Europe/Madrid   # any valid zone; not UTC, to see it applied
             start_timeout: 60         # the wait test takes this long; the default is 300
           - name: canary
-            port: 18101
+            inbound: {publish: ["127.0.0.1:18101:8080"]}
             image: firefly_ci_image
             memory: 768m
             launcher_command: [flatpak, run, org.mozilla.firefox, --new-window]

@@ -115,7 +115,7 @@ Solo los de la infraestructura; los de cada aplicación se añadirán con ella.
 | --- | --- | --- | --- |
 | Portátil | `127.0.0.1:22` | sshd, solo con clave (R23) | El contenedor de Ansible, desde el propio portátil |
 | Servidor principal | `:22` | sshd | Ansible desde el portátil, por Tailscale. Lo que escucha hoy fuera de Tailscale lo revisa la fase 1b (cortafuegos) |
-| Portátil | `127.0.0.1:<puerto>`, desde el 18100, uno por instancia (los eliges tú) | `prod-ff-<instancia>` (dentro del contenedor, el 8080) | Tu navegador, en el portátil |
+| Portátil | Lo que diga `inbound.publish` de cada instancia; lo habitual, `127.0.0.1:<puerto>` desde el 18100 (R55) | `prod-ff-<instancia>` (dentro del contenedor, el 8080) | Tu navegador, en el portátil |
 | Servidor principal | `127.0.0.1:18000` | `prod-backup-server` (dentro del contenedor, el 8000) | Solo `tailscale serve` |
 | Servidor principal | `:18000` en la red de Tailscale | `tailscale serve --tcp=18000` | `prod-backup-copy`, desde el portátil |
 | VM DEV | `:22` en la red de la VM | sshd | Ansible desde el portátil |

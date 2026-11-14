@@ -10,8 +10,8 @@
       - firefly_instance is match('^[a-z0-9]{1,14}$')
       - firefly_image_var is match('^firefly[a-z0-9_]*_image$')
       - lookup('ansible.builtin.vars', firefly_image_var, default='') is match('^[^ ]+@sha256:[0-9a-f]{64}$')
-      - firefly_port | string is match('^[0-9]+$')
-      - firefly_port | int >= 1024 and firefly_port | int <= 65535
+      - firefly_publish is sequence and firefly_publish is not string and firefly_publish | length > 0
+      - firefly_publish | map('string') | select('match', '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{1,5}:[0-9]{1,5}$') | list | length == firefly_publish | length
       - firefly_language is match('^[a-z]{2}_[A-Z]{2}$')
       - firefly_timezone is match('^[A-Za-z0-9_+/-]+$')
       - firefly_log_level in ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency']
@@ -28,7 +28,8 @@
     fail_msg: >-
       Instance {{ firefly_item.name | default('?') }} of firefly_instances (roles/firefly/defaults/main.yml):
       name ^[a-z0-9]{1,14}$; image the name of a variable of images.yml (firefly_..._image)
-      pinned by digest (D6); port between 1024 and 65535 (18100 and up, by convention);
+      pinned by digest (D6); inbound.publish a list like ["127.0.0.1:18100:8080"], each one
+      <address>:<host port>:<container port> (port: is no longer read);
       language like en_US; timezone like Europe/Madrid; log_level one of Laravel's levels;
       memory like 512m; cpus a number; pids_limit and start_timeout above 0; cron_time as
       HH:MM; pg_instance lower case letters and digits; launcher_name without [ ] or =;

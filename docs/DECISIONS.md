@@ -490,3 +490,14 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Sustituye a:** D12 en lo que decía de «repos privados».
 - **Aprobada por:** el operador, el 2026-11-14.
 - **SPEC:** 2, 3 (D12), 5.2 y 5.4.
+
+### R55. La entrada de una aplicación: una lista de dirección y puerto que escribe el operador
+
+- **Decisión:** cada instancia declara por dónde se entra a ella en `inbound.publish`, una lista con el formato de Podman y Docker: `<dirección>:<puerto>:<puerto interno>`, los tres obligatorios. Va tal cual a `PublishPort=`. La dirección la decide el operador: ya no está fijada a `127.0.0.1`. Desaparece `port:`. Lo único que se comprueba es el formato y que dos instancias de una máquina no repitan dirección y puerto.
+- **Motivo:** el operador quiere un formato estándar, sin nombres propios ni listas de direcciones permitidas, y poder publicar en otra dirección de la máquina cuando lo decida. Una sola forma de escribirlo para todas las aplicaciones, con uno o con varios puertos.
+- **Lo que se pierde, a sabiendas:** antes un error en el inventario no podía abrir una aplicación a la red de casa (R25). Ahora `0.0.0.0` o la IP de la red local se aceptan: es responsabilidad del operador. El CI solo exige que la dirección y el puerto estén escritos.
+- **Sigue valiendo de R25:** `tailscale serve` es la forma recomendada de llegar desde otra máquina, y el motivo: publicar en la IP de Tailscale puede fallar al arrancar si la interfaz aún no tiene dirección.
+- **Sustituye a:** R25 en lo que decía de «solo en `127.0.0.1`».
+- **Pendiente (siguiente orden):** el mismo formato para el servidor de copias, y `inbound.tailscale_serve` como pieza común.
+- **Aprobada por:** el operador, el 2026-11-14.
+- **SPEC:** 2 y 4.4.

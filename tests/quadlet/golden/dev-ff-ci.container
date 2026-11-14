@@ -18,8 +18,8 @@ Label=infra.managed-by=infra-podman
 Volume=dev-ff-ci-uploads.volume:/var/www/html/storage/upload:Z
 
 # Only its own network to PostgreSQL: internal, no way out, and no other instance in it
-# (SPEC 4.4, R45, R48). The port is published on 127.0.0.1 of the machine only (R25): the
-# address is not a setting.
+# (SPEC 4.4, R45, R48). It is published where the operator wrote in inbound.publish of the
+# inventory (R55), from that same internal network.
 Network=dev-ff-ci-pg-main-net.network
 PublishPort=127.0.0.1:18100:8080
 
