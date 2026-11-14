@@ -8,7 +8,11 @@
 # Each item:
 #   name:     ^[a-z0-9]{1,14}$, only the instance, for example laptop, casa, canary, test
 #             (required). The role adds the rest: prod-ff-<name> (ff = Firefly III)
-#   port:     its port on 127.0.0.1, from 18100 up, chosen by the operator (required)
+#   inbound:  where it listens (required; docs/services/README.md, section 4):
+#               publish: ["127.0.0.1:18100:8080"]
+#             a list of <address>:<host port>:<container port>, as Podman and Docker write
+#             them; Firefly listens on 8080 inside. The first one is the address the
+#             launcher opens and the one Firefly gives in its links (APP_URL)
 #   pg_instance:  the PostgreSQL instance of this machine with its database (default main)
 #   image:    the variable of playbooks/group_vars/all/images.yml with its image (default
 #             firefly_image; for example firefly_canary_image for a canary)
@@ -24,7 +28,7 @@ firefly_instances: []
 
 # The instance of this call (set by the playbook). The value here only serves to render the
 # templates in CI.
-firefly_item: {name: ci, port: 18100}
+firefly_item: {name: ci, inbound: {publish: ["127.0.0.1:18100:8080"]}}
 
 # --retire <name>: the instance to stop and remove, keeping its data (playbook).
 firefly_retire: ""
@@ -33,7 +37,9 @@ firefly_state: present
 
 # What each instance gets when it does not say otherwise.
 firefly_instance: "{{ firefly_item.name }}"
-firefly_port: "{{ firefly_item.port | default('') }}"
+firefly_publish: "{{ (firefly_item.inbound | default({})).publish | default([]) }}"
+# Address and host port of the first one: http://127.0.0.1:18100
+firefly_url: "http://{{ firefly_publish[0] | regex_replace(':[0-9]+$', '') }}"
 firefly_pg_instance: "{{ firefly_item.pg_instance | default('main') }}"
 firefly_image_var: "{{ firefly_item.image | default('firefly_image') }}"
 firefly_container_image: "{{ lookup('ansible.builtin.vars', firefly_image_var) }}"

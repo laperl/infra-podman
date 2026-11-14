@@ -51,10 +51,10 @@ NAME_HINTS = {
 REQUIRED_LABELS = ("infra.env", "infra.app", "infra.component", "infra.managed-by")
 MANAGED_BY = "infra-podman"
 
-# R25, SPEC 4.4: a container publishes only on the loopback address, and on a host port
-# chosen in the inventory. Without the address Podman listens on every interface; without
-# the host port it picks a different one on each start.
-PUBLISH_RE = re.compile(r"^127\.0\.0\.1:\d{1,5}:\d{1,5}(?:/(?:tcp|udp))?$")
+# R55, SPEC 4.4: a container publishes on the address and host port the operator chose in
+# the inventory, both written. Without the address Podman listens on every interface;
+# without the host port it picks a different one on each start.
+PUBLISH_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}:\d{1,5}:\d{1,5}(?:/(?:tcp|udp))?$")
 
 # R46, SPEC 4.14: every container limits memory, CPU and number of processes. Podman 4.9
 # has no Quadlet key for the first two, so they are flags in PodmanArgs=, written
@@ -114,7 +114,7 @@ def check_exposure_and_limits(path: Path, values: dict[str, list[str]]) -> list[
     for port in values.get("PublishPort", []):
         if not PUBLISH_RE.match(port):
             errors.append(f"{path}: PublishPort={port} must be "
-                          f"127.0.0.1:<host port>:<container port> (R25, SPEC 4.4)")
+                          f"<address>:<host port>:<container port> (R55, SPEC 4.4)")
     args: list[str] = []
     for value in values.get("PodmanArgs", []):
         try:

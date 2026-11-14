@@ -17,15 +17,21 @@
         that:
           - firefly_instances is sequence and firefly_instances is not string
           - firefly_instances | rejectattr('name', 'defined') | list | length == 0
-          - firefly_instances | rejectattr('port', 'defined') | list | length == 0
           - firefly_instances | map(attribute='name') | unique | list | length == firefly_instances | length
-          - firefly_instances | map(attribute='port') | map('int') | unique | list | length == firefly_instances | length
+          - firefly_listening | unique | list | length == firefly_listening | length
           - firefly_retire | default('') | length == 0 or firefly_retire in firefly_instances | map(attribute='name')
         fail_msg: >-
           firefly_instances of {{ inventory_hostname }} (group_vars/firefly_hosts.yml of the data
-          repository): each instance with a name and a port, neither repeated on the same machine
-          (docs/services/README.md). --retire only for an instance that is still declared.
+          repository): each instance with a name, and neither a name nor an address and port of
+          inbound.publish repeated on the same machine (docs/services/README.md). --retire only
+          for an instance that is still declared.
         quiet: true
+      vars:
+        # <address>:<host port> of every instance, without the container port.
+        firefly_listening: >-
+          {{ firefly_instances | selectattr('inbound', 'defined') | map(attribute='inbound')
+             | selectattr('publish', 'defined') | map(attribute='publish') | flatten
+             | map('regex_replace', ':[0-9]+$', '') | list }}
 
     - name: Deploy each instance
       ansible.builtin.include_role:

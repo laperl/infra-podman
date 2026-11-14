@@ -4,10 +4,10 @@
 Type=Application
 Version=1.5
 Name={{ firefly_launcher_name }}
-Comment=Firefly III {{ firefly_instance }} ({{ infra_env }}), http://127.0.0.1:{{ firefly_port }}
+Comment=Firefly III {{ firefly_instance }} ({{ infra_env }}), {{ firefly_url }}
 # The browser of the inventory (launcher_command), then the address. Each word is checked by
 # the role (tasks/main.yml): nothing that needs quoting in a Desktop Entry.
-Exec={{ (firefly_launcher_command + ['http://127.0.0.1:' ~ firefly_port]) | join(' ') }}
+Exec={{ (firefly_launcher_command + [firefly_url]) | join(' ') }}
 Icon=applications-office
 Terminal=false
 Categories=Office;Finance;

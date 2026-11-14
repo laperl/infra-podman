@@ -32,7 +32,7 @@ Cada aplicación tiene un nombre **de código**, que se usa en el repositorio y 
 | Instancia de una aplicación | `name:` de `<app>_instances` | `^[a-z0-9]{1,14}$` | `laptop`, `casa`, `canary` |
 | Superusuario de Postgres | `superuser:` | `^[a-z_][a-z0-9_]{0,62}$`; ni `backup`, ni `public`, ni `pg_*`. Mejor uno tuyo que `postgres` | el tuyo |
 | Base y usuario de otra cosa que no es una aplicación de aquí | `databases:` | `^[a-z][a-z0-9_]*$` | `ai_reader` |
-| Puerto de una instancia | `port:` | desde 18100, uno por instancia | `18100` |
+| Entrada de una instancia | `inbound.publish:` | lista de `<dirección>:<puerto>:<puerto interno>`; puertos desde 18100, uno por instancia | `["127.0.0.1:18100:8080"]` |
 | Instalación | `infra_site` | `^[a-z][a-z0-9-]{1,30}$`, igual en dev y prod | tu nombre de instalación |
 
 ## 4. Lo que compone el código

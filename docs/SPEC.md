@@ -41,7 +41,7 @@ Eres el ingeniero que implementa esta plataforma para un operador único. Eres e
 
 **Excepción Docker en el servidor principal:** vLLM corre en Docker porque Podman 4.9 no ve la GPU con CUDA 13 (comprobado por el operador). Fuera de alcance de migrar.
 
-**Red:** todo va por Tailscale. Ningún puerto expuesto a internet. Los servicios publican solo en `127.0.0.1`; lo que haya que alcanzar desde otra máquina se expone con `tailscale serve` (R25).
+**Red:** todo va por Tailscale. Ningún puerto expuesto a internet. Cada servicio publica en las direcciones y puertos que el operador escribe en el inventario (R55); lo habitual es `127.0.0.1`, y lo que haya que alcanzar desde otra máquina, con `tailscale serve`.
 
 **Prioridad de servicio:** best effort. Lo primero es la integridad de los datos y la sencillez de recuperación, por delante de la alta disponibilidad.
 
@@ -124,7 +124,7 @@ Esta sección debe copiarse a `docs/COMPATIBILITY.md`.
 - Con varias instancias en la misma máquina, cada red de consumidor se une solo a la instancia que usa ese consumidor. No hay una red común para todos los Postgres.
 - En Postgres, el modelo de [`POSTGRES.md`](POSTGRES.md): una base y tres grupos por aplicación y usuarios a demanda. En `pg_hba.conf`, generado desde el inventario, cada usuario solo se admite en su base y desde la subred de su red. El superusuario y `backup` nunca entran por TCP, salvo el superusuario desde la red de pgAdmin (R37).
 - Postgres **no publica puertos** en el host.
-- **Exposición (R25):** los contenedores publican solo en `127.0.0.1`. Las aplicaciones, en los puertos que elige el operador en el inventario, desde el 18100 ([`services/README.md`](services/README.md), apartado 4). Si hay que alcanzar un servicio desde otra máquina, se expone por Tailscale con `tailscale serve --bg --tcp=<puerto> tcp://localhost:<puerto>`, que aplica Ansible. No se publica en la IP de Tailscale: un servicio de usuario no puede esperar limpiamente a que esa interfaz tenga dirección.
+- **Exposición (R55):** cada aplicación publica donde diga su lista `inbound.publish` del inventario, con el formato de Podman y Docker, `<dirección>:<puerto>:<puerto interno>`, los tres obligatorios ([`services/README.md`](services/README.md), apartado 4). La dirección y el puerto los decide el operador; lo habitual es `127.0.0.1` y puertos desde el 18100. Para alcanzar un servicio desde otra máquina se recomienda `tailscale serve --bg --tcp=<puerto> tcp://localhost:<puerto>`, que aplica Ansible, antes que publicar en la IP de Tailscale: un servicio de usuario no puede esperar limpiamente a que esa interfaz tenga dirección, y puede fallar al arrancar.
 
 ### 4.5 Secretos
 
@@ -385,6 +385,3 @@ Verificadas en noviembre de 2026. Para cualquier detalle técnico, manda la docu
 - [Ramas protegidas en GitHub](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches): en repos privados requieren Pro, Team o Enterprise; en los públicos, no.
 - [Facturación de GitHub Actions](https://docs.github.com/en/actions/concepts/billing-and-usage): los runners estándar son gratuitos en repos públicos.
 - [LiteLLM virtual keys](https://docs.litellm.ai/docs/proxy/virtual_keys): requieren Postgres.
-
-**Fuente no oficial usada**
-
