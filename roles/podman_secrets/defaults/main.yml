@@ -1,0 +1,5 @@
+---
+# Interface of podman_secrets: the Podman secrets the calling role needs on this machine,
+# by the name they have there (<env>-<name in infra_secrets>). The calling role sets it
+# with include_role.
+podman_secrets_required: []
