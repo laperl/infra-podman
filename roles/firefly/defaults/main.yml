@@ -36,6 +36,11 @@ firefly_item: {name: ci, inbound: {publish: ["127.0.0.1:18100:8080"]}}
 # --retire <name>: the instance to stop and remove, keeping its data (playbook).
 firefly_retire: ""
 
+# --purge <name>: the instance to retire and then delete, with its volumes and its own
+# secrets, after a backup of the volumes (playbook, tasks/purge.yml).
+firefly_purge: ""
+firefly_purging: false
+
 firefly_state: present
 
 # What kind of application this is (docs/services/README.md, section 9; R56). Fixed here,

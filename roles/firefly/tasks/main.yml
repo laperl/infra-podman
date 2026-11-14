@@ -101,3 +101,8 @@
 
 - name: Install or remove the launcher
   ansible.builtin.include_tasks: launcher.yml
+
+# --purge: the instance is retired by now. Last, so that a failure leaves it only retired.
+- name: Purge the instance
+  ansible.builtin.include_tasks: purge.yml
+  when: firefly_purging | bool and firefly_state == 'absent'
