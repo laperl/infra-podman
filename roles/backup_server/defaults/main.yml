@@ -39,6 +39,7 @@ backup_server_home: /home/svc_runner
 # Names (SPEC 4.12). Derived; do not override.
 backup_server_name: "{{ infra_env }}-backup-server"
 backup_server_volume: "{{ backup_server_name }}-data"
+backup_server_network: "{{ backup_server_name }}-net"
 # backup_server_secret_entry is the title of the KeePassXC entry (<infra_site>/<entry>) and
 # its name in infra_secrets; backup_server_secret is the Podman secret on the machine.
 backup_server_secret_entry: backup-server-password
@@ -52,3 +53,5 @@ backup_server_quadlet_units:
     name: "{{ backup_server_name }}.container"
   - template: backup-server-data.volume.j2
     name: "{{ backup_server_volume }}.volume"
+  - template: backup-server.network.j2
+    name: "{{ backup_server_network }}.network"

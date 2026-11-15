@@ -53,6 +53,10 @@ case $1 in
     "$as" systemctl --user is-active "$server.service" >/dev/null || fail "$server is not running"
     ports=$("$as" podman port "$server")
     [[ $ports == "8000/tcp -> 127.0.0.1:$port" ]] || fail "published ports: $ports (only 127.0.0.1:$port expected)"
+    # No way out (R58): only its own internal network.
+    nets=$("$as" podman inspect --format '{{json .NetworkSettings.Networks}}' "$server" | jq -r 'keys | join(" ")')
+    [[ $nets == "$server-net" ]] || fail "networks of the server: $nets (only $server-net expected)"
+    [[ $("$as" podman network inspect --format '{{.Internal}}' "$server-net") == true ]] || fail "$server-net is not internal"
     gen=$("$as" systemctl --user cat "$server.service")
     for want in --append-only --private-repos '--max-size 32212254720' --read-only --cap-drop=all; do
       grep -q -- "$want" <<<"$gen" || fail "the server unit lacks $want"
