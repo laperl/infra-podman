@@ -1,7 +1,7 @@
 ---
 # Daily local backup of one machine (SPEC 4.11, R19): every database of every PostgreSQL
-# instance of the machine and, on the laptop, the operator's data repository. Copy to the
-# main server arrives in phase 1e2. The image lives in playbooks/group_vars/all/images.yml.
+# instance of the machine and, on the laptop, the operator's data repository. How it all
+# works: docs/BACKUPS.md. The image lives in playbooks/group_vars/all/images.yml.
 
 backup_state: present
 

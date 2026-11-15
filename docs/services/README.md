@@ -100,7 +100,7 @@ El procedimiento completo, orden por orden, está en [`INSTALL.md`](INSTALL.md),
     - name: casa
       backup: [uploads]
   ```
-- **Dos clases de elemento**, que escribe el rol de la aplicación (`roles/backup/tasks/app_items.yml`):
+- **Las dos formas de copiar** ([`BACKUPS.md`](../BACKUPS.md), apartado 4), que escribe el rol de la aplicación (`roles/backup/tasks/app_items.yml`):
   - `volume`: un volumen entero, con `podman volume export`. Conserva dueños y permisos, y funciona con el contenedor parado.
   - `exec`: lo que imprime una orden dentro del contenedor en marcha. Sirve para la herramienta propia de la aplicación que saca sus datos, o para copiar solo algunos directorios con `tar`.
 - **Cómo funciona:** el rol deja un fichero en `~/.config/infra-podman/backup/backup.d/` del usuario de servicio, y el backup diario de la máquina lo lee en cada ejecución. Ansible solo escribe ese fichero. Al retirar la instancia, se borra.
