@@ -519,3 +519,11 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Repetirla es seguro:** si los volúmenes ya no existen, no se lanza ninguna copia y solo se termina la limpieza.
 - **Aprobada por:** el operador, el 2026-11-14.
 - **SPEC:** 4.10.
+
+### R58. El servidor de copias no tiene salida
+
+- **Decisión:** `<entorno>-backup-server` vive en una red propia e interna, `<entorno>-backup-server-net`, como las de Postgres (R45): sin salida a internet, a la red local ni al host, y sin DNS. Solo se llega a él por su puerto publicado.
+- **Motivo:** no declaraba red, así que usaba la de Podman por defecto, que tiene salida. Lo destapó el informe de `check`. Un servidor que solo recibe copias no necesita salir a ningún sitio.
+- **No cambia:** por dónde se entra (`backup_server_inbound`, R55), `tailscale serve`, ni el cliente que comparte su red en DEV y en el CI (`Network=container:…`).
+- **Aprobada por:** el operador, el 2026-11-15.
+- **SPEC:** 4.11.

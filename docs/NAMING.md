@@ -70,6 +70,7 @@ Ejemplo: Firefly `laptop` en la Postgres `laptop`, en producción.
 | Fichero Quadlet | el nombre del objeto y su tipo | `prod-ff-laptop.container` |
 | Volumen | `<entorno>-<corto>-<instancia>-<contenido>` | `prod-ff-laptop-uploads`, `prod-pg-laptop-data` |
 | Red hacia Postgres | `<entorno>-<consumidor>-pg-<instancia>-net` | `prod-ff-laptop-pg-laptop-net` |
+| Red del servidor de copias | `<entorno>-backup-server-net` | `prod-backup-server-net` |
 | `consumer:` en Postgres | el identificador de la aplicación | `ff-laptop` |
 | Base, esquema y usuario de una aplicación | `<corto>_<instancia>` | `ff_laptop` |
 | Grupos de una base | `<base>_owner`, `_writer`, `_reader` | `ff_laptop_owner` |

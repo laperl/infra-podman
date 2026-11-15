@@ -22,6 +22,8 @@ Volume={{ backup_server_volume }}.volume:/data:Z
 Volume={{ backup_server_auth_dir }}:/auth:ro,Z
 Environment=PASSWORD_FILE=/auth/htpasswd
 Environment="OPTIONS=--append-only --private-repos --max-size {{ ((backup_server_max_size_gb | float) * 1073741824) | int }}"
+# Its own internal network: no way out (R58). The ports are published from it.
+Network={{ backup_server_network }}.network
 {% for backup_server_published in backup_server_publish %}
 PublishPort={{ backup_server_published }}
 {% endfor %}
