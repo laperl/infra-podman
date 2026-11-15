@@ -132,6 +132,6 @@ Las aplicaciones de hoy:
 | --- | --- | --- | --- | --- | --- |
 | Firefly III | `firefly` | sí | Postgres | no | Solo entra |
 
-- **Añadir una aplicación** es añadir su fila aquí y su `<app>_contract`; `tests/unit/test_app_contract.py` comprueba que los dos existen y que las unidades del rol cuadran con lo declarado.
+- **Añadir una aplicación:** el paso a paso está en [`ADD_APP.md`](ADD_APP.md). Aquí, su fila y su `<app>_contract`; `tests/unit/test_app_contract.py` comprueba que los dos existen y que las unidades del rol cuadran con lo declarado.
 - **La red con salida todavía no tiene plantilla:** se escribe con la primera aplicación que declare `egress: true`. Lo mismo un proveedor nuevo (un proxy, Tor, LiteLLM): entra como Postgres, con una red interna por pareja.
 - **Fuera de este contrato:** la red del host (prohibida), la salida limitada a ciertos destinos, la GPU y los dispositivos, y las aplicaciones con ventana ([`ROADMAP.md`](../ROADMAP.md)).
