@@ -1,0 +1,73 @@
+---
+# Included once for each network of quadlet_deploy_absent_networks: one the calling role
+# no longer wants (for example, the instance has no way out any more). By now no container
+# of the role uses it: their units were installed without it and restarted. A network holds
+# no data.
+- name: Look for the network {{ quadlet_deploy_network }}
+  ansible.builtin.command:
+    cmd: podman network exists {{ quadlet_deploy_network }}
+  environment: "{{ quadlet_deploy_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_network_exists
+  changed_when: false
+  failed_when: quadlet_deploy_network_exists.rc not in [0, 1]
+  check_mode: false
+
+- name: Look for the unit of {{ quadlet_deploy_network }}
+  ansible.builtin.stat:
+    path: "{{ quadlet_deploy_dir }}/{{ quadlet_deploy_network }}.network"
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_network_unit
+
+- name: Remove the network {{ quadlet_deploy_network }}
+  when:
+    - not ansible_check_mode
+    - quadlet_deploy_network_unit.stat.exists or quadlet_deploy_network_exists.rc == 0
+  block:
+    # Stopped while systemd still knows it, so nothing "active" is left behind once the
+    # unit is gone. systemd may not know it (the network was never started): fine.
+    - name: Stop its service
+      ansible.builtin.systemd_service:
+        name: "{{ quadlet_deploy_network }}-network.service"
+        state: stopped
+        scope: user
+      environment: "{{ quadlet_deploy_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      register: quadlet_deploy_network_stop
+      failed_when:
+        - quadlet_deploy_network_stop is failed
+        - "'Could not find the requested service' not in quadlet_deploy_network_stop.msg | default('')"
+
+    - name: Remove its unit
+      ansible.builtin.file:
+        path: "{{ quadlet_deploy_dir }}/{{ quadlet_deploy_network }}.network"
+        state: absent
+      become: true
+      become_user: "{{ service_user }}"
+
+    - name: Reload the service user's systemd
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+        scope: user
+      environment: "{{ quadlet_deploy_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+
+    - name: Remove the network
+      ansible.builtin.command:
+        cmd: podman network rm {{ quadlet_deploy_network }}
+      environment: "{{ quadlet_deploy_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      when: quadlet_deploy_network_exists.rc == 0
+      changed_when: true
+
+- name: Show what would be removed, {{ quadlet_deploy_network }}
+  ansible.builtin.debug:
+    msg: "Would remove the network {{ quadlet_deploy_network }}: nothing declares it any more."
+  when:
+    - ansible_check_mode
+    - quadlet_deploy_network_unit.stat.exists or quadlet_deploy_network_exists.rc == 0

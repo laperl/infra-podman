@@ -59,6 +59,41 @@
   become: true
   become_user: "{{ service_user }}"
 
+# Before writing anything: a network whose unit is about to change and that already
+# exists will be created again, and that must be possible (network_users.yml).
+- name: See which network units are about to change
+  ansible.builtin.template:
+    src: "{{ quadlet_deploy_templates }}/{{ item.template }}"
+    dest: "{{ quadlet_deploy_dir }}/{{ item.name }}"
+    mode: "0644"
+  loop: "{{ quadlet_deploy_units | selectattr('name', 'match', '.*\\.network$') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_network_preview
+  check_mode: true
+
+- name: Check which of those networks already exist
+  ansible.builtin.command:
+    cmd: podman network exists {{ item }}
+  loop: >-
+    {{ quadlet_deploy_network_preview.results | selectattr('changed') | map(attribute='item.name')
+       | map('regex_replace', '\.network$', '') | list }}
+  environment: "{{ quadlet_deploy_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_network_exists_all
+  changed_when: false
+  failed_when: quadlet_deploy_network_exists_all.rc not in [0, 1]
+  check_mode: false
+
+- name: Check that those networks can be created again
+  ansible.builtin.include_tasks: network_users.yml
+  loop: "{{ quadlet_deploy_network_exists_all.results | selectattr('rc', 'equalto', 0) | map(attribute='item') | list }}"
+  loop_control:
+    loop_var: quadlet_deploy_network
+
 - name: Install the units
   ansible.builtin.template:
     src: "{{ quadlet_deploy_templates }}/{{ item.template }}"
@@ -76,23 +111,36 @@
 
 # Only containers are restarted, and only those that run all the time (quadlet_deploy_start).
 # Podman does not change an existing network or volume when its file changes (the
-# generated service uses --ignore): that needs a person.
+# generated service uses --ignore). A network holds no data, so it is created again
+# (recreate_network.yml); a volume holds data, and changing it needs a person.
 - name: List the containers whose units changed
   ansible.builtin.set_fact:
     quadlet_deploy_changed_services: >-
       {{ quadlet_deploy_installed.results | selectattr('changed') | map(attribute='item.name')
          | select('match', '.*\.container$') | map('regex_replace', '\.container$', '.service') | list
          if quadlet_deploy_start else [] }}
-    quadlet_deploy_changed_other: >-
+    quadlet_deploy_changed_volumes: >-
       {{ quadlet_deploy_installed.results | selectattr('changed') | map(attribute='item.name')
-         | reject('match', '.*\.container$') | list }}
+         | select('match', '.*\.volume$') | list }}
+    quadlet_deploy_changed_networks: >-
+      {{ quadlet_deploy_installed.results | selectattr('changed') | map(attribute='item.name')
+         | select('match', '.*\.network$') | map('regex_replace', '\.network$', '') | list }}
 
-- name: Warn about changed networks or volumes
+- name: Warn about changed volumes
   ansible.builtin.debug:
     msg: >-
-      Changed {{ quadlet_deploy_changed_other | join(', ') }}. If the object already exists, Podman keeps
-      it as it is: recreating a network or a volume is a manual step.
-  when: quadlet_deploy_changed_other | length > 0
+      Changed {{ quadlet_deploy_changed_volumes | join(', ') }}. If the volume already exists, Podman
+      keeps it as it is: changing a volume is a manual step, because it holds data.
+  when: quadlet_deploy_changed_volumes | length > 0
+
+# A new network needs nothing: its service creates it. One that already existed does.
+- name: Create again the networks whose unit changed
+  ansible.builtin.include_tasks: recreate_network.yml
+  loop: >-
+    {{ quadlet_deploy_network_exists_all.results | selectattr('rc', 'equalto', 0) | map(attribute='item')
+       | select('in', quadlet_deploy_changed_networks) | list }}
+  loop_control:
+    loop_var: quadlet_deploy_network
 
 - name: Check which images are already present
   ansible.builtin.command:
@@ -136,6 +184,12 @@
   become: true
   become_user: "{{ service_user }}"
   when: not ansible_check_mode or (item | regex_replace('\.container$', '.service')) not in quadlet_deploy_changed_services
+
+- name: Remove the networks the role no longer wants
+  ansible.builtin.include_tasks: absent_network.yml
+  loop: "{{ quadlet_deploy_absent_networks }}"
+  loop_control:
+    loop_var: quadlet_deploy_network
 
 # D11: no automatic rollback for services with data. If the healthcheck does not pass,
 # stop the service and tell the operator.
