@@ -14,11 +14,12 @@ backup_server_state: present
 #                    it out where there is no Tailscale (the DEV VM, CI): there the client
 #                    shares the server's network instead
 # To change it, write the whole value in the data repository.
-backup_server_inbound:
-  publish: ["127.0.0.1:18000:8000"]
-  tailscale_serve: [18000]
-backup_server_publish: "{{ backup_server_inbound.publish | default([]) }}"
-backup_server_tailscale_serve: "{{ backup_server_inbound.tailscale_serve | default([]) }}"
+backup_server_networking:
+  inbound:
+    publish: ["127.0.0.1:18000:8000"]
+    tailscale_serve: [18000]
+backup_server_publish: "{{ (backup_server_networking.inbound | default({})).publish | default([]) }}"
+backup_server_tailscale_serve: "{{ (backup_server_networking.inbound | default({})).tailscale_serve | default([]) }}"
 
 # Size limit of everything this server stores, in GB (1 GB = 1024^3 bytes; decimals
 # allowed). Data, in group_vars/all.yml of the data repository, because the clients use

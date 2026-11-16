@@ -3,6 +3,6 @@
 # reported, never stopped (playbooks/firefly.yml).
 firefly_instances:
   - name: casa
-    inbound: {publish: ["127.0.0.1:18100:8080"]}
+    networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}}
     timezone: Europe/Madrid
     start_timeout: 60

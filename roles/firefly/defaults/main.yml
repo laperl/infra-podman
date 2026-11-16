@@ -8,8 +8,9 @@
 # Each item:
 #   name:     ^[a-z0-9]{1,14}$, only the instance, for example laptop, casa, canary, test
 #             (required). The role adds the rest: prod-ff-<name> (ff = Firefly III)
-#   inbound:  where it listens (required; docs/services/README.md, section 4):
-#               publish: ["127.0.0.1:18100:8080"]
+#   networking:  its network (docs/services/README.md, section 4). Only inbound.publish is
+#             read today, and it is required: where it listens,
+#               networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}}
 #             a list of <address>:<host port>:<container port>, as Podman and Docker write
 #             them; Firefly listens on 8080 inside. The first one is the address the
 #             launcher opens and the one Firefly gives in its links (APP_URL)
@@ -31,7 +32,7 @@ firefly_instances: []
 
 # The instance of this call (set by the playbook). The value here only serves to render the
 # templates in CI.
-firefly_item: {name: ci, inbound: {publish: ["127.0.0.1:18100:8080"]}}
+firefly_item: {name: ci, networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}}}
 
 # --retire <name>: the instance to stop and remove, keeping its data (playbook).
 firefly_retire: ""
@@ -52,7 +53,8 @@ firefly_contract:
 
 # What each instance gets when it does not say otherwise.
 firefly_instance: "{{ firefly_item.name }}"
-firefly_publish: "{{ (firefly_item.inbound | default({})).publish | default([]) }}"
+firefly_networking: "{{ firefly_item.networking | default({}) }}"
+firefly_publish: "{{ (firefly_networking.inbound | default({})).publish | default([]) }}"
 # Address and host port of the first one: http://127.0.0.1:18100
 firefly_url: "http://{{ firefly_publish[0] | regex_replace(':[0-9]+$', '') }}"
 firefly_pg_instance: "{{ firefly_item.pg_instance | default('main') }}"

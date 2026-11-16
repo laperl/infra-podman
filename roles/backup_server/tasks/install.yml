@@ -117,7 +117,7 @@
   become_user: "{{ service_user }}"
   when: backup_server_hash is changed and not ansible_check_mode
 
-# On the first <address>:<host port> of backup_server_inbound.publish.
+# On the first <address>:<host port> of backup_server_networking.inbound.publish.
 - name: Wait until the server answers
   ansible.builtin.wait_for:
     host: "{{ backup_server_publish[0].split(':')[0] }}"

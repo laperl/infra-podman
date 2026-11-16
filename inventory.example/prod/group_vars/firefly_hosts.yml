@@ -5,8 +5,9 @@
 # volume. What an instance does not say comes from roles/firefly/defaults/main.yml.
 firefly_instances:
   - name: casa                   # ^[a-z0-9]{1,14}$
-    inbound:                     # where it listens: <address>:<host port>:<container port>
-      publish: ["127.0.0.1:18100:8080"]   # Firefly listens on 8080 inside the container
+    networking:
+      inbound:                     # where it listens: <address>:<host port>:<container port>
+        publish: ["127.0.0.1:18100:8080"]   # Firefly listens on 8080 inside the container
     language: es_ES
     timezone: Europe/Madrid
     # memory: 512m               # resource limits (R46)
@@ -17,6 +18,7 @@ firefly_instances:
   # A canary, to try a new image before casa: its own database ff_canary, consumer
   # ff-canary and secrets ff-canary-app-key and ff-canary-db-password.
   # - name: canary
-  #   inbound:
-  #     publish: ["127.0.0.1:18101:8080"]
+  #   networking:
+  #     inbound:
+  #       publish: ["127.0.0.1:18101:8080"]
   #   image: firefly_canary_image   # a variable of playbooks/group_vars/all/images.yml
