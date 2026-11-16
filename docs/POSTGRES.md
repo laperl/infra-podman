@@ -130,7 +130,7 @@ postgres_instances:
         users:
           - name: app1          # ^[a-z][a-z0-9_]{0,62}$
             group: owner        # owner | writer | reader: entra en app1_owner
-            consumer: app1      # la instancia de aplicación que entra con él (por ejemplo ff-laptop): su red, y solo desde ella
+            consumer: app1      # quién entra con él (por ejemplo ff-laptop): Postgres solo lo acepta desde su red
           - name: app1_ia
             group: reader       # entra en app1_reader
             consumer: ia
@@ -138,6 +138,16 @@ postgres_instances:
 
 - **`group:`** es siempre `owner`, `writer` o `reader`. El grupo real es `<base>_<grupo>`, y lo que puede hacer cada uno está en la sección 2.
 - **`users:`** es opcional. Sin usuarios, la base existe pero nadie entra salvo el administrador.
+- **`consumer:` sirve únicamente para `pg_hba.conf`:** dice desde qué red acepta Postgres a ese usuario, y solo para esa base. Aunque otra aplicación consiguiera su contraseña, desde su propia red no entraría. Varios usuarios pueden tener el mismo `consumer` (uno que escribe y otro que solo lee, por ejemplo).
+- **La conexión la escribe la aplicación,** en su instancia: `networking.connects_to: [pg-<instancia>]` ([`services/README.md`](services/README.md), apartado 4; R59). Una instancia de la plataforma necesita las dos cosas, y el `plan` lo comprueba:
+
+  | Tiene `consumer:` aquí | Dice `connects_to` | Qué pasa |
+  | --- | --- | --- |
+  | sí | sí | Correcto |
+  | sí | no | `plan postgres` se para: `… has a user here … Add to it networking.connects_to` |
+  | no | sí | El `plan` de la aplicación se para: le falta su base o su usuario |
+
+  Un `consumer` que no es una instancia de la plataforma (un contenedor tuyo, como `ia` en el ejemplo) solo lleva `consumer`.
 - **Una base por instancia de aplicación** (R48): dos Firefly son dos bases (`ff_casa`, `ff_canary`), cada una con su usuario y su consumidor (`ff-casa`, `ff-canary`). Nunca dos instancias en la misma base. Detalle en [`services/README.md`](services/README.md).
 - **Una instancia en otra máquina** va en `host_vars/<máquina>.yml` del repo de datos, con su propio nombre (por ejemplo `servidor`). Cada aplicación tiene que estar en la misma máquina que su Postgres: las redes de Podman no salen de la máquina.
 

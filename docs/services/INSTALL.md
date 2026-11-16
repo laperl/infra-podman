@@ -153,7 +153,7 @@ firefly_instances:
     networking:
       inbound:
         publish: ["127.0.0.1:18100:8080"]   # dirección:puerto:puerto interno; desde 18100, uno distinto por instancia
-    pg_instance: laptop             # su Postgres: prod-pg-laptop
+      connects_to: [pg-laptop]      # su Postgres: prod-pg-laptop
     language: es_ES
     timezone: Europe/Madrid
     launcher_command: [flatpak, run, org.mozilla.firefox, --new-window]
@@ -177,7 +177,8 @@ git verify-commit HEAD
 | --- | --- | --- |
 | `name` | obligatorio | La instancia, sin guiones |
 | `networking.inbound.publish` | obligatorio | Lista de `<dirección>:<puerto>:<puerto interno>` ([`README.md`](README.md), apartado 4). Para Firefly, `127.0.0.1`, un puerto desde 18100 y `8080` |
-| `pg_instance` | `main` | En qué Postgres está su base |
+| `networking.connects_to` | obligatorio | En qué Postgres está su base, como `[pg-<instancia>]`. Solo esa ([`README.md`](README.md), apartado 4) |
+| `networking.egress` | ninguna | A dónde puede salir, si quieres que salga ([`README.md`](README.md), apartado 4) |
 | `image` | `firefly_image` | Qué imagen de `images.yml` usa (por ejemplo, una canary) |
 | `language` | `en_US` | Idioma de la pantalla de entrada y de los usuarios nuevos |
 | `timezone` | `UTC` | Zona horaria |

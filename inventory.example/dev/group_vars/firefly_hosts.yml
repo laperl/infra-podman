@@ -8,6 +8,8 @@ firefly_instances:
     networking:
       inbound:                     # where it listens: <address>:<host port>:<container port>
         publish: ["127.0.0.1:18100:8080"]   # Firefly listens on 8080 inside the container
+      connects_to: [pg-main]       # its PostgreSQL instance of this machine, as pg-<instance>
+      # egress: ["192.168.1.20"]   # where it may go out: nothing (default), a list, or true
     language: es_ES
     timezone: Europe/Madrid
     # memory: 512m               # resource limits (R46)
@@ -21,4 +23,5 @@ firefly_instances:
   #   networking:
   #     inbound:
   #       publish: ["127.0.0.1:18101:8080"]
+  #     connects_to: [pg-main]
   #   image: firefly_canary_image   # a variable of playbooks/group_vars/all/images.yml

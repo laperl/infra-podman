@@ -409,6 +409,26 @@ jobs:
           fi
           grep -q 'name ^\[a-z0-9\]{1,14}\$' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
 
+      # R59: the connection to PostgreSQL is written in the instance, in connects_to. The
+      # old key is refused by the application, and PostgreSQL refuses to go on while an
+      # instance with a user there does not say it connects: nothing is changed.
+      - name: A connection is written by the application, in connects_to
+        run: |
+          OLD=(-e @tests/lifecycle/firefly-no-connects.yml)
+          if ansible-playbook -i "$INV" "${OLD[@]}" playbooks/firefly.yml --check > refusal.log 2>&1; then
+            echo "::error::an instance with pg_instance and without connects_to was accepted"; exit 1
+          fi
+          grep -q 'it replaces pg_instance:' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+          if ansible-playbook -i "$INV" $PG "${OLD[@]}" playbooks/postgres.yml --check > refusal.log 2>&1; then
+            echo "::error::postgres accepted ff-casa with a user and without connects_to"; exit 1
+          fi
+          grep -q 'ff-casa has a user here' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+          printf 'firefly_instances: [{name: casa, networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}, connects_to: [pg-nope]}}]\n' > nope.yml
+          if ansible-playbook -i "$INV" -e @nope.yml playbooks/firefly.yml --check > refusal.log 2>&1; then
+            echo "::error::a connection to an instance that does not exist was accepted"; exit 1
+          fi
+          grep -q 'pg-nope is not an instance of this machine' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+
       - name: Plan before the application keys exist, expecting a clear refusal
         run: |
           if ansible-playbook -i "$INV" playbooks/firefly.yml --check > refusal.log 2>&1; then

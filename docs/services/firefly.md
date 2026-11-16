@@ -6,7 +6,7 @@ Qué tiene que cumplir Firefly III antes de escribir su código. Es una propuest
 
 Ahí van tus finanzas. Por eso el principio es: **Firefly no puede enviar nada fuera del portátil**, y eso lo garantiza la red, no un ajuste de la aplicación.
 
-**Usa la Postgres de la plataforma:** una instancia de Postgres del portátil (`pg_instance`, por ejemplo `prod-pg-laptop`). Sin base dentro del contenedor ni SQLite.
+**Usa la Postgres de la plataforma:** una instancia de Postgres del portátil (`networking.connects_to: [pg-laptop]`, que es `prod-pg-laptop`). Sin base dentro del contenedor ni SQLite.
 
 Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, backups, red, Postgres) está en SPEC y en [`POSTGRES.md`](../POSTGRES.md), y aquí solo se enlaza.
 

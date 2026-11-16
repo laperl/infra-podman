@@ -11,13 +11,15 @@
 #   networking:  its network (docs/services/README.md, section 4):
 #               networking:
 #                 inbound: {publish: ["127.0.0.1:18100:8080"]}   # required: where it listens
+#                 connects_to: [pg-main]                         # required: its PostgreSQL
 #                 egress: ["192.168.1.20"]                       # optional: where it goes out
+#             connects_to: the PostgreSQL instance of this machine with its database,
+#             as pg-<instance>, and nothing else: Firefly talks to nobody else.
 #             egress: nothing (the default), no way out; a list of addresses or ranges,
 #             only there; true, everywhere (the internet and the local network).
 #             inbound.publish is a list of <address>:<host port>:<container port>, as Podman and Docker write
 #             them; Firefly listens on 8080 inside. The first one is the address the
 #             launcher opens and the one Firefly gives in its links (APP_URL)
-#   pg_instance:  the PostgreSQL instance of this machine with its database (default main)
 #   image:    the variable of playbooks/group_vars/all/images.yml with its image (default
 #             firefly_image; for example firefly_canary_image for a canary)
 #   language, timezone, log_level, memory, cpus, pids_limit, start_timeout, cron_time:
@@ -35,7 +37,7 @@ firefly_instances: []
 
 # The instance of this call (set by the playbook). The value here only serves to render the
 # templates in CI.
-firefly_item: {name: ci, networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}}}
+firefly_item: {name: ci, networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}, connects_to: [pg-main]}}
 
 # --retire <name>: the instance to stop and remove, keeping its data (playbook).
 firefly_retire: ""
@@ -47,12 +49,14 @@ firefly_purging: false
 
 firefly_state: present
 
-# What kind of application this is (docs/services/README.md, section 9; R56). Fixed here,
-# never a setting of the inventory. tests/unit/test_app_contract.py checks it.
+# What this application needs to work (docs/services/README.md, section 9; R56, R59).
+# Fixed here; the network itself is the operator's, in networking of each instance, and
+# the role refuses an instance that does not give it what is here.
+# tests/unit/test_app_contract.py checks it.
 firefly_contract:
   database: postgres     # none | postgres: its own database, user and password
-  providers: [postgres]  # the containers it calls: one internal network with each
-  egress: false          # true: it also needs a way out to the internet
+  providers: [postgres]  # what it must reach: one of each in networking.connects_to
+  egress: false          # true: it cannot work without a way out (networking.egress)
 
 # What each instance gets when it does not say otherwise.
 firefly_instance: "{{ firefly_item.name }}"
@@ -64,7 +68,9 @@ firefly_egress: "{{ firefly_networking.egress | default(false) }}"
 firefly_egress_network: "{{ firefly_name }}-egress-net"
 # Address and host port of the first one: http://127.0.0.1:18100
 firefly_url: "http://{{ firefly_publish[0] | regex_replace(':[0-9]+$', '') }}"
-firefly_pg_instance: "{{ firefly_item.pg_instance | default('main') }}"
+# With whom it talks (R59): its PostgreSQL instance, pg-<instance>, and only it.
+firefly_connects_to: "{{ firefly_networking.connects_to | default([]) }}"
+firefly_pg_instance: "{{ (firefly_connects_to | map('string') | select('match', '^pg-') | first | default('pg-'))[3:] }}"
 firefly_image_var: "{{ firefly_item.image | default('firefly_image') }}"
 firefly_container_image: "{{ lookup('ansible.builtin.vars', firefly_image_var) }}"
 # Language of new users and of the login page, and time zone (DEFAULT_LANGUAGE and TZ).

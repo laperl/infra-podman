@@ -21,7 +21,10 @@ postgres_superuser: ""
 #               <app>-<instance> (for example ff-laptop; docs/services/README.md, 3): lower
 #               case letters, digits and single hyphens. It gets the network
 #               <env>-<consumer>-pg-<instance>-net (D9) and pg_hba.conf admits the user only
-#               from there, only to its database.
+#               from there, only to its database. That is all consumer is for: pg_hba.conf.
+#               The connection itself is written by the application, in its instance:
+#               networking.connects_to: [pg-<instance>] (R59), and an instance of the
+#               platform must have both.
 # Its password: the KeePassXC entry and Podman secret named after the user, with - for _:
 # <user>-db-password, for example ff_laptop -> <env>-ff-laptop-db-password (SPEC 4.5). A
 # user name is unique on its machine, across instances (playbooks/postgres.yml).
@@ -46,6 +49,11 @@ postgres_managed_mark: managed by infra-podman
 postgres_consumers: >-
   {{ postgres_databases | selectattr('users', 'defined') | selectattr('users') | map(attribute='users') | flatten
      | map(attribute='consumer') | unique | sort }}
+
+# The instances of this machine that say networking.connects_to: [pg-<instance>] (R59).
+# Every instance of the platform in postgres_consumers must be here (tasks/main.yml). Do
+# not override.
+postgres_clients: "{{ ('pg-' ~ postgres_instance) | clients_of(infra_apps, hostvars[inventory_hostname]) }}"
 
 # Names of the users, each once, derived. Do not override.
 postgres_user_names: >-

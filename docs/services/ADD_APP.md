@@ -39,7 +39,7 @@ Rellénala **solo con la documentación oficial** de la aplicación y cita la UR
 | 5 | `roles/<app>/tasks/` | `checks.yml` (rechazos claros), `main.yml` (secretos con `podman_secrets`, unidades con `quadlet_deploy`, copias con `roles/backup/tasks/app_items.yml`, temporizadores con `user_units`), `purge.yml` | Los mismos ficheros de `roles/firefly/tasks/` |
 | 6 | `roles/<app>/meta/main.yml` y `roles/<app>/CLAUDE.md` | Licencia `GPL-3.0-or-later`. `CLAUDE.md` corto: qué leer, qué no se toca y qué tests tiene | [`CLAUDE.md`](../../CLAUDE.md), «Dónde va cada cosa nueva» |
 | 7 | `playbooks/<app>.yml` | Un despliegue por elemento de `<app>_instances`, con `<app>_retire` y `<app>_purge` (así `deploy.sh` acepta `--retire` y `--purge`) | `playbooks/firefly.yml`; SPEC 4.10 |
-| 8 | `playbooks/check.yml` | Línea `<app>: <corto>` en `check_shorts` | [`OPERATIONS.md`](../OPERATIONS.md), apartado 4 |
+| 8 | `playbooks/group_vars/all/apps.yml` | Línea `<app>: <corto>` en `infra_apps`: con ella sus instancias salen en `check` y otras pueden nombrarlas en `connects_to` | La cabecera de ese fichero |
 | 9 | `tests/quadlet/ci_vars.yml` y `tests/quadlet/golden/` | Una instancia `ci`; después `tests/quadlet/run.sh --update-golden` y **revisar el diff**: solo deben aparecer las unidades nuevas | Cabecera de `tests/quadlet/run.sh` |
 | 10 | `tests/lifecycle/` y `.github/workflows/lifecycle.yml` | `check-<app>.sh`, sus variables y su job: rechazos, plan, apply, reaplicar sin cambios, salud, aislamiento, retirar y purgar | `check-firefly.sh` y el job `firefly` |
 | 11 | `inventory.example/{dev,prod}/` | Grupo `<app>_hosts` en `hosts.yml`, `group_vars/<app>_hosts.yml` con ejemplo comentado, sus secretos en `infra_secrets` con `readers:`, y la fila de `README.md` | `README.md`, apartado 5; [`SECRETS_INVENTORY.md`](../SECRETS_INVENTORY.md) |
@@ -61,7 +61,7 @@ tests/quadlet/run.sh
 tests/deploy/run.sh && tests/images/run.sh
 ```
 
-- `tests/unit/test_app_contract.py` falla si falta el contrato, su fila en `README.md`, la línea de `check_shorts` o si las unidades no cuadran con lo declarado: es lo que dice si la aplicación está bien añadida.
+- `tests/unit/test_app_contract.py` falla si falta el contrato, su fila en `README.md`, la línea de `infra_apps` o si las unidades no cuadran con lo declarado: es lo que dice si la aplicación está bien añadida.
 - Lo que no hayas podido ejecutar (por ejemplo `lifecycle`, que necesita systemd), dilo: no lo des por probado.
 
 ## 4. Entregar

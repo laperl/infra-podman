@@ -54,7 +54,7 @@ Ese mismo `name:`, tal cual, es lo que se escribe en todas partes donde la docum
 | Dónde | Ejemplo con `name: laptop` |
 | --- | --- |
 | `deploy.sh`: `--retire`, `--purge` y `--confirm-drop` | `./deploy.sh apply firefly --purge laptop` |
-| `pg_instance:` de una aplicación (la instancia de Postgres donde está su base) | `pg_instance: laptop` |
+| `connects_to:` de una aplicación (las instancias con las que habla, por su identificador) | `connects_to: [pg-laptop]` |
 | Los nombres que compone el código (apartado 4) | `prod-ff-laptop`, `ff_laptop`, `ff-laptop-app-key` |
 | `readers:` de `infra_secrets` y `consumer:` de un usuario de Postgres, con el nombre corto delante | `ff-laptop`, `pg-laptop` |
 

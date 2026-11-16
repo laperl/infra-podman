@@ -29,7 +29,7 @@ Cómo es **cualquier** aplicación de la plataforma (Firefly III, pgAdmin y las 
   - una no puede ver ni siquiera la existencia de los datos de la otra;
   - cada una se copia y se restaura sola;
   - borrar una no toca la otra.
-- Cada instancia puede ir a la Postgres que elijas (`pg_instance`): `canary`, por ejemplo, a una instancia `pg-test` aparte.
+- Cada instancia puede ir a la Postgres que elijas (`networking.connects_to`): `canary`, por ejemplo, a una instancia `pg-test` aparte.
 
 ## 3. Nombres
 
@@ -39,7 +39,14 @@ La norma completa está en [`NAMING.md`](../NAMING.md); incluye la tabla de nomb
 
 ## 4. Puertos
 
-- **La red de una instancia va en su bloque `networking`** (R59). Hoy se leen `inbound` y `egress`; `connects_to` se rechaza hasta que exista.
+- **La red de una instancia va en su bloque `networking`** (R59), con tres partes: `inbound` (quién entra), `connects_to` (con quién habla dentro) y `egress` (a dónde sale). Lo que no escribes está cerrado.
+- **`connects_to`: con qué otras instancias de la misma máquina habla.** Una lista de identificadores `<corto>-<instancia>`, como `[pg-laptop]`.
+  - **Lo escribe solo quien inicia la conversación.** El otro lado no escribe nada: la plataforma lo lee de aquí. Una pareja, una línea; si las dos se nombran, el `plan` lo rechaza.
+  - **Cada pareja tiene su red interna**, `<entorno>-<quien conecta>-<destino>-net`, solo para los dos: sin salida y sin ver a nadie más. Se encuentran por el nombre del contenedor.
+  - **El `plan` rechaza** un destino que no es una instancia de esa máquina, uno repetido y conectarse consigo misma.
+  - **Hoy solo las instancias de Postgres admiten conexiones.** Con Postgres hace falta además su permiso: un usuario con `consumer:` en la base ([`POSTGRES.md`](../POSTGRES.md), apartado 6). `connects_to` abre el camino; `consumer` sirve únicamente para `pg_hba.conf`, es decir, desde qué red acepta Postgres a ese usuario. Si falta uno de los dos, el `plan` lo dice.
+  - **Entre máquinas distintas no es `connects_to`:** es entrada en una (`inbound`) y salida en la otra (`egress`).
+  - **Una red no impone sentido:** dentro de la pareja, los dos se alcanzan. Añadir o quitar una conexión reinicia a los dos contenedores.
 - **`egress`: a dónde sale.** Sin escribirlo, a ningún sitio. Con ella, la instancia tiene además una red propia, `<entorno>-<corto>-<instancia>-egress-net`:
 
   | Escribes | Sale a |
@@ -101,7 +108,7 @@ Lo que una instancia no dice lo toma del valor por defecto del rol (`roles/<app>
 3. `apply` de la aplicación: solo `canary` cambia de imagen, con su copia previa.
 4. Si va bien, `firefly_image` pasa a ese digest en otro PR y se aplica a todas.
 
-**`test`** es una instancia más, con datos falsos. Si quieres que ni siquiera comparta Postgres, ponle `pg_instance: test`, con su propia instancia de Postgres.
+**`test`** es una instancia más, con datos falsos. Si quieres que ni siquiera comparta Postgres, ponle `connects_to: [pg-test]`, con su propia instancia de Postgres.
 
 ## 7. Quitar una instancia
 
@@ -128,31 +135,32 @@ El procedimiento completo, orden por orden, está en [`INSTALL.md`](INSTALL.md),
 - **Hace falta el backup en esa máquina** (`./deploy.sh apply backup`): sin él, el fichero queda escrito y no se copia nada.
 - **Restaurar un volumen:** saca la copia como cualquier otra ([`OPERATIONS.md`](../OPERATIONS.md), apartado 5; su ruta es `<app>/volume/<nombre>/<nombre>.tar`), para el contenedor y, como usuario de servicio, `podman volume import <volumen> <fichero>.tar`.
 
-## 9. El contrato: qué es cada aplicación
+## 9. El contrato: qué necesita cada aplicación
 
-Tres cosas dependen de cómo está hecha la aplicación. Las fija **su rol**, en `<app>_contract` de `roles/<app>/defaults/main.yml`, y no se cambian desde el inventario (R56). La cuarta, por dónde se entra, la escribes tú (apartado 4).
+La red de una instancia la decides tú, en su bloque `networking` (apartado 4, R59). Lo que fija **el rol**, en `<app>_contract` de `roles/<app>/defaults/main.yml`, es lo que la aplicación **necesita para funcionar**: si no se lo das, el `plan` se para y dice qué falta.
 
-| Pregunta | En el rol | Lo que monta la plataforma |
+| Pregunta | En el rol | Qué te exige |
 | --- | --- | --- |
-| ¿Guarda sus datos en Postgres? | `database: postgres` o `none` | Con `postgres`: su base, su usuario y su contraseña, en la instancia que elijas (`pg_instance`) |
-| ¿Con qué otros contenedores habla? | `providers:`, una lista. Hoy solo existe `postgres` | Una red **interna** por cada uno, solo para los dos: sin salida a internet, a la red de casa ni al host |
-| ¿Necesita salir a internet? | `egress: true` o `false` | Con `true`, además, una red con salida. Es todo o nada: limitar a qué destinos sale queda para una fase posterior |
+| ¿Guarda sus datos en Postgres? | `database: postgres` o `none` | Con `postgres`: una instancia de Postgres en su `connects_to`, y allí su base y su usuario con `consumer:` |
+| ¿Con qué otros contenedores tiene que hablar? | `providers:`, una lista. Hoy solo existe `postgres` | Cada uno, en su `connects_to` |
+| ¿Tiene que salir de la máquina? | `egress: true` o `false` | Con `true`, un `egress` en la instancia. Con `false` puedes dárselo igual, si quieres |
 
-Lo que resulta de combinarlas con la entrada:
+Lo que resulta de combinar las tres partes de `networking`:
 
-| Caso | Base propia | Proveedores | Salida | Entrada | Red del contenedor |
-| --- | --- | --- | --- | --- | --- |
-| Sin red | no | ninguno | no | ninguna | `Network=none` |
-| Solo entra | sí o no | los que tenga | no | uno o más puertos | Solo redes internas, con los puertos publicados desde ellas |
-| Entra y sale | sí o no | los que tenga | sí | uno o más puertos | Redes internas y una con salida |
-| Solo sale | sí o no | los que tenga | sí | ninguna | Redes internas y una con salida, sin puertos |
+| Caso | `inbound` | `connects_to` | `egress` | Red del contenedor |
+| --- | --- | --- | --- | --- |
+| Sin red | no | no | no | `Network=none` |
+| Solo entra | sí | los que tenga | no | Solo redes internas, con los puertos publicados desde ellas |
+| Entra y sale | sí | los que tenga | sí | Redes internas y una con salida |
+| Solo sale | no | los que tenga | sí | Redes internas y una con salida, sin puertos |
 
 Las aplicaciones de hoy:
 
-| Aplicación | Rol | Base propia | Proveedores | Salida | Caso |
-| --- | --- | --- | --- | --- | --- |
-| Firefly III | `firefly` | sí | Postgres | no | Solo entra |
+| Aplicación | Rol | Corto | Necesita | Caso habitual |
+| --- | --- | --- | --- | --- |
+| Postgres | `postgres` | `pg` | Nada: no entra nadie de fuera, no sale y no inicia conexiones | Sin red, más una red interna por cada instancia que se le conecta |
+| Firefly III | `firefly` | `ff` | Una instancia de Postgres | Solo entra |
 
 - **Añadir una aplicación:** el paso a paso está en [`ADD_APP.md`](ADD_APP.md). Aquí, su fila y su `<app>_contract`; `tests/unit/test_app_contract.py` comprueba que los dos existen y que las unidades del rol cuadran con lo declarado.
-- **La red con salida todavía no tiene plantilla:** se escribe con la primera aplicación que declare `egress: true`. Lo mismo un proveedor nuevo (un proxy, Tor, LiteLLM): entra como Postgres, con una red interna por pareja.
-- **Fuera de este contrato:** la red del host (prohibida), la salida limitada a ciertos destinos, la GPU y los dispositivos, y las aplicaciones con ventana ([`ROADMAP.md`](../ROADMAP.md)).
+- **Un destino nuevo para `connects_to`** (un proxy, LiteLLM, otra aplicación): hoy solo Postgres crea la red de la pareja y se mete en ella. El primer rol que no sea Postgres y tenga que admitir conexiones lo hará igual, leyendo quién se le conecta con el filtro `clients_of` (`plugins/filter/networking.py`); la plantilla común de esa red se escribe entonces.
+- **Fuera de este contrato:** la red del host (prohibida), la salida filtrada por nombre de dominio, la GPU y los dispositivos, y las aplicaciones con ventana ([`ROADMAP.md`](../ROADMAP.md)).
