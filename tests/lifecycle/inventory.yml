@@ -9,11 +9,11 @@ all:
     # Who reads each secret of these jobs (roles/podman_secrets). The values are made in CI.
     infra_secrets:
       - {name: pg-main-superuser-password, group: postgres_hosts, readers: [pg-main]}
-      - {name: demo-app-db-password, group: postgres_hosts, readers: [pg-main, demo]}
-      - {name: demo-rw-db-password, group: postgres_hosts, readers: [pg-main, demo]}
-      - {name: demo-ro-db-password, group: postgres_hosts, readers: [pg-main, demo]}
-      - {name: demo-ai-db-password, group: postgres_hosts, readers: [pg-main, ai]}
-      - {name: ff-ro-db-password, group: postgres_hosts, readers: [pg-main, ai]}
+      - {name: demo-app-db-password, group: postgres_hosts, readers: [pg-main, ff-demo]}
+      - {name: demo-rw-db-password, group: postgres_hosts, readers: [pg-main, ff-demo]}
+      - {name: demo-ro-db-password, group: postgres_hosts, readers: [pg-main, ff-demo]}
+      - {name: demo-ai-db-password, group: postgres_hosts, readers: [pg-main, ff-ai]}
+      - {name: ff-ro-db-password, group: postgres_hosts, readers: [pg-main, ff-canary]}
       - {name: ff-casa-db-password, group: postgres_hosts, readers: [pg-main, ff-casa]}
       - {name: ff-canary-db-password, group: postgres_hosts, readers: [pg-main, ff-canary]}
       - {name: ff-casa-app-key, group: firefly_hosts, readers: [ff-casa]}
@@ -48,7 +48,9 @@ all:
           - name: main
             superuser: ci_admin  # fictitious
     # Firefly III (playbook firefly): two instances, as independent as two applications
-    # (R48). Their databases and users come from firefly-vars.yml.
+    # (R48). Their databases and users come from firefly-vars.yml; until they are declared
+    # there, PostgreSQL gives them no network (docs/NETWORK.md). canary also enters ff_casa,
+    # as an application that reads another one's data would (check-firefly.sh reader).
     firefly_hosts:
       hosts:
         localhost: {}
@@ -58,10 +60,12 @@ all:
         firefly_instances:
           - name: casa
             networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}, connects_to: [pg-main]}
+            pg_hba: [{instance: pg-main, database: ff_casa}]
             timezone: Europe/Madrid   # any valid zone; not UTC, to see it applied
             start_timeout: 60         # the wait test takes this long; the default is 300
           - name: canary
             networking: {inbound: {publish: ["127.0.0.1:18101:8080"]}, connects_to: [pg-main]}
+            pg_hba: [{instance: pg-main, database: ff_canary}, {instance: pg-main, database: ff_casa}]
             image: firefly_ci_image
             memory: 768m
             launcher_command: [flatpak, run, org.mozilla.firefox, --new-window]

@@ -1,8 +1,9 @@
 ---
 # Included by setup.yml (inside its block, with postgres_psql), after the additions. Drops
 # exactly what drop_check.yml approved before the deploy (docs/POSTGRES.md, section 7), in
-# this order: databases, users, groups, the Podman secrets of the users, the networks
-# nobody uses. Then reminds the operator of what only they can remove.
+# this order: databases, users, groups, the Podman secrets of the users. Then reminds the
+# operator of what only they can remove. The networks of pairs that are gone were removed
+# by quadlet_deploy (tasks/pair_gc.yml there, docs/NETWORK.md).
 # SQL as in the PostgreSQL manual: DROP DATABASE cannot run inside a transaction block and
 # drops everything in the database (its objects, default privileges and per-database role
 # settings); DROP ROLE revokes the memberships of the role by itself.
@@ -39,61 +40,6 @@
   register: postgres_secret_rm
   changed_when: postgres_secret_rm.rc == 0
   failed_when: postgres_secret_rm.rc not in [0, 1]
-
-# Networks of this instance whose consumer has no user left. PostgreSQL already left them:
-# the deploy restarted it without them.
-- name: Read the networks of this instance
-  ansible.builtin.command:
-    argv:
-      - podman
-      - network
-      - ls
-      - --filter
-      - label=infra.app=pg-{{ postgres_instance }}
-      - --filter
-      - label=infra.component=net
-      - --format
-      - "{% raw %}{{.Name}}{% endraw %}"
-  environment: "{{ postgres_env }}"
-  become: true
-  become_user: "{{ service_user }}"
-  register: postgres_instance_nets
-  changed_when: false
-  check_mode: false
-
-- name: Remove the networks nobody uses
-  when: postgres_unused_nets | length > 0
-  vars:
-    postgres_unused_nets: "{{ postgres_instance_nets.stdout_lines | reject('in', postgres_networks) | list }}"
-    postgres_quadlet_dir: "{{ postgres_service_home }}/.config/containers/systemd"
-  block:
-    - name: Remove their units
-      ansible.builtin.file:
-        path: "{{ postgres_quadlet_dir }}/{{ item }}.network"
-        state: absent
-      loop: "{{ postgres_unused_nets }}"
-      become: true
-      become_user: "{{ service_user }}"
-
-    - name: Reload systemd so their services go away
-      ansible.builtin.systemd_service:
-        daemon_reload: true
-        scope: user
-      environment: "{{ postgres_env }}"
-      become: true
-      become_user: "{{ service_user }}"
-      when: not ansible_check_mode
-
-    # Fails if a container still uses it (podman network rm): the application of that
-    # consumer has to be stopped or moved first.
-    - name: Remove the networks
-      ansible.builtin.command:
-        argv: [podman, network, rm, "{{ item }}"]
-      loop: "{{ postgres_unused_nets }}"
-      environment: "{{ postgres_env }}"
-      become: true
-      become_user: "{{ service_user }}"
-      changed_when: true
 
 - name: Remind what only the operator can remove
   ansible.builtin.debug:

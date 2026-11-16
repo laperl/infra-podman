@@ -13,15 +13,20 @@ host    all  {{ postgres_superuser }}  ::/0       reject
 host    all  backup  0.0.0.0/0  reject
 host    all  backup  ::/0       reject
 
+{# Each application that connects here (docs/NETWORK.md): every user of each database it
+   names in pg_hba, only to that database, only from the network of that pair. The comment
+   below keeps its old words, so that the file of an existing instance does not change. -#}
 # 4. One line per application user: only its database, only from the network of its
 #    consumer, whose subnet Podman chose. Without that network yet, no line: rejected.
 {% for db in postgres_databases %}
+{% for entry in postgres_hba | selectattr('database', 'equalto', db.name) %}
 {% for user in db.users | default([], true) %}
-{% if user.consumer in postgres_subnets %}
-host    "{{ db.name }}"  "{{ user.name }}"  {{ postgres_subnets[user.consumer] }}  scram-sha-256
+{% if entry.client in postgres_subnets %}
+host    "{{ db.name }}"  "{{ user.name }}"  {{ postgres_subnets[entry.client] }}  scram-sha-256
 {% else %}
-# {{ user.name }}: the network of {{ user.consumer }} does not exist yet
+# {{ user.name }} from {{ entry.client }}: its network does not exist yet
 {% endif %}
+{% endfor %}
 {% endfor %}
 {% endfor %}
 

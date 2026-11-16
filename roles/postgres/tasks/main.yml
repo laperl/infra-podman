@@ -24,14 +24,11 @@
       - postgres_databases | rejectattr('name', 'defined') | list | length == 0
       - postgres_users | rejectattr('name', 'defined') | list | length == 0
       - postgres_users | rejectattr('group', 'defined') | list | length == 0
-      - postgres_users | rejectattr('consumer', 'defined') | list | length == 0
       - postgres_databases | map(attribute='name') | select('match', '^[a-z][a-z0-9_]{0,30}$') | list | length == postgres_databases | length
       - postgres_databases | map(attribute='name') | unique | list | length == postgres_databases | length
       - postgres_databases | map(attribute='name') | intersect(['postgres', 'template0', 'template1']) | length == 0
       - postgres_users | map(attribute='name') | select('match', '^[a-z][a-z0-9_]{0,62}$') | list | length == postgres_users | length
       - postgres_users | map(attribute='group') | difference(['owner', 'writer', 'reader']) | length == 0
-      - postgres_users | map(attribute='consumer') | select('match', '^[a-z][a-z0-9]*(-[a-z0-9]+)*$') | list | length == postgres_users | length
-      - postgres_users | map(attribute='consumer') | reject('match', '^.{1,30}$') | list | length == 0
       - postgres_user_names | intersect(postgres_group_names) | length == 0
       - postgres_per_db | map('length') | list == postgres_per_db | map('unique') | map('list') | map('length') | list
       - postgres_managed_roles | intersect([postgres_superuser, 'backup', 'public', 'postgres']) | length == 0
@@ -41,8 +38,7 @@
       each database a name ^[a-z][a-z0-9_]{0,30}$, not postgres or template*; each user a name
       ^[a-z][a-z0-9_]{0,62}$, once per database (it may be in several), different from the groups
       <database>_owner, _writer and _reader, the superuser, backup, public and pg_*; group owner,
-      writer or reader; consumer the identifier of the application instance, lower case letters,
-      digits and single hyphens, up to 30 characters (for example ff-laptop).
+      writer or reader.
     quiet: true
   vars:
     postgres_users: >-
@@ -51,26 +47,52 @@
       {{ postgres_databases | selectattr('users', 'defined') | selectattr('users') | map(attribute='users')
          | map('map', attribute='name') | map('list') | list }}
 
-# A connection is written by the application, in networking.connects_to of its instance
-# (R59); consumer, here, only says from which network pg_hba.conf admits a user. An
-# instance of the platform with a user here and without that line is a mistake, and would
-# lose its network the day this role takes it from connects_to: refused. The other way
-# round, the application itself refuses to start without its user (its role checks it). A
-# consumer that is not an instance of the platform (a container of the operator's own) has
-# only consumer, as before.
-- name: Check that every instance with a user here says it connects here
+# Who connects here is written by each application, in its own instance (docs/NETWORK.md):
+# networking.connects_to: [pg-<instance>] and pg_hba: [{instance: pg-<instance>, database:
+# <name>}]. PostgreSQL writes neither, and consumer: is no longer read (R59).
+- name: Check that the instance only says what is its own
   ansible.builtin.assert:
-    that: postgres_forgotten | length == 0
+    that:
+      - postgres_users | selectattr('consumer', 'defined') | list | length == 0
+      - postgres_item | default({}) is not mapping or 'networking' not in postgres_item | default({})
+      - postgres_item | default({}) is not mapping or 'pg_hba' not in postgres_item | default({})
     fail_msg: >-
-      pg-{{ postgres_instance }} on {{ inventory_hostname }}: {{ postgres_forgotten | join(', ') }} has a user here
-      (consumer:, in databases: of this instance) and its own instance does not say that it connects
-      here. Add to it networking.connects_to: [pg-{{ postgres_instance }}] (it replaces pg_instance:; R59,
-      docs/POSTGRES.md, section 6). Nothing has been changed.
+      pg-{{ postgres_instance }} on {{ inventory_hostname }}: consumer: is no longer read, and a PostgreSQL
+      instance has no networking: or pg_hba: (it publishes nothing and does not start connections, SPEC 4.4).
+      Who enters is written by the application, in its own instance: networking.connects_to:
+      [pg-{{ postgres_instance }}] and pg_hba: [{instance: pg-{{ postgres_instance }}, database: <its database>}]
+      (docs/NETWORK.md, section 4). Nothing has been changed.
     quiet: true
   vars:
-    postgres_forgotten: >-
-      {{ postgres_consumers | intersect(infra_apps | instance_ids(hostvars[inventory_hostname]))
-         | difference(postgres_clients) }}
+    postgres_users: >-
+      {{ postgres_databases | selectattr('users', 'defined') | selectattr('users') | map(attribute='users') | flatten }}
+
+# Said, not refused: each application refuses its own mistake in its plan (docs/NETWORK.md,
+# rule H3), and an
+# unused database may be kept on purpose, for an application that is retired or not
+# installed yet.
+- name: Say what an application names here that this instance does not have
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: pg-{{ postgres_instance }} on {{ inventory_hostname }}: in pg_hba, {{ postgres_unknown_text }}:
+      not a database of this instance, so ignored, with no line in pg_hba.conf{{ (', and no network for '
+      ~ postgres_unready | join(', ')) if postgres_unready else '' }} (docs/NETWORK.md, section 5). The plan of
+      that application stops until it is declared here.
+  when: postgres_unknown | length > 0
+  vars:
+    postgres_unknown: "{{ postgres_hba_all | rejectattr('database', 'in', postgres_db_names) | list }}"
+    postgres_unknown_text: >-
+      {{ postgres_unknown | map(attribute='client') | zip(postgres_unknown | map(attribute='database')) | map('join', ' names ') | join('; ') }}
+    postgres_unready: >-
+      {{ postgres_id | clients_of(infra_apps, hostvars[inventory_hostname]) | reject('in', postgres_clients) | list }}
+
+- name: Say which databases nobody enters
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: pg-{{ postgres_instance }} on {{ inventory_hostname }}: no application names
+      {{ postgres_db_names | reject('in', postgres_hba | map(attribute='database') | list) | join(', ') }}
+      in pg_hba: they are kept, and nobody can log in to them over the network (docs/NETWORK.md, section 5).
+  when: postgres_db_names | reject('in', postgres_hba | map(attribute='database') | list) | list | length > 0
 
 # Its home, ids and environment, read in one place (roles/service_user).
 - name: Read the service user
@@ -141,6 +163,9 @@
     quadlet_deploy_wait_healthy:
       - "{{ postgres_name }}"
     quadlet_deploy_state: "{{ postgres_state }}"
+    # Its pairs (docs/NETWORK.md): one that no application names any more goes.
+    quadlet_deploy_pair_owner: "{{ postgres_id }}"
+    quadlet_deploy_pair_networks: "{{ postgres_networks }}"
 
 - name: Check and set up the instance
   ansible.builtin.include_tasks: setup.yml

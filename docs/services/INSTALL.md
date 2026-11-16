@@ -139,10 +139,9 @@ postgres_instances:
         users:
           - name: ff_laptop         # el usuario con el que entra Firefly
             group: owner            # puede crear sus tablas (Firefly las crea al arrancar)
-            consumer: ff-laptop     # el identificador de esa instancia de Firefly: solo desde su red
 ```
 
-`ff-laptop` es el identificador de la instancia de Firefly, y `ff_laptop` lo mismo con `_`, porque Postgres no admite `-` ([`NAMING.md`](../NAMING.md)). Otra aplicación sería otro bloque `- name:` dentro de `databases:`.
+`ff_laptop` es el identificador de la instancia de Firefly, `ff-laptop`, con `_`, porque Postgres no admite `-` ([`NAMING.md`](../NAMING.md)). Aquí no se dice quién entra: lo dice Firefly en su instancia, con `connects_to` y `pg_hba` (abajo; [`NETWORK.md`](../NETWORK.md)). Otra aplicación sería otro bloque `- name:` dentro de `databases:`.
 
 ### `group_vars/firefly_hosts.yml`
 
@@ -153,7 +152,9 @@ firefly_instances:
     networking:
       inbound:
         publish: ["127.0.0.1:18100:8080"]   # dirección:puerto:puerto interno; desde 18100, uno distinto por instancia
-      connects_to: [pg-laptop]      # su Postgres: prod-pg-laptop
+      connects_to: [pg-laptop]      # con quién habla en la máquina: su Postgres, prod-pg-laptop
+    pg_hba:                         # en qué bases de ese Postgres entra: la suya
+      - {instance: pg-laptop, database: ff_laptop}
     language: es_ES
     timezone: Europe/Madrid
     launcher_command: [flatpak, run, org.mozilla.firefox, --new-window]

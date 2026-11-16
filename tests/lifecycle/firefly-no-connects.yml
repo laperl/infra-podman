@@ -7,4 +7,5 @@ firefly_instances:
     pg_instance: main
   - name: canary
     networking: {inbound: {publish: ["127.0.0.1:18101:8080"]}, connects_to: [pg-main]}
+    pg_hba: [{instance: pg-main, database: ff_canary}, {instance: pg-main, database: ff_casa}]
     image: firefly_ci_image

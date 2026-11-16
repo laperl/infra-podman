@@ -23,9 +23,12 @@
       - firefly_start_timeout | int > 0
       - firefly_cron_time is match('^([01][0-9]|2[0-3]):[0-5][0-9]$')
       - firefly_item.pg_instance is not defined
-      - firefly_connects_to | connects_to_problems(firefly_consumer, infra_apps, hostvars[inventory_hostname]) | length == 0
-      - firefly_connects_to | length == 1
+      - firefly_connects_to | connects_to_problems(firefly_id, infra_apps, hostvars[inventory_hostname]) | length == 0
+      - firefly_pg_targets | length == 1
       - firefly_pg_instance is match('^[a-z0-9]+$')
+      - firefly_hba_problems | length == 0
+      - firefly_pg_hba | selectattr('instance', 'equalto', 'pg-' ~ firefly_pg_instance)
+        | selectattr('database', 'equalto', firefly_db_name) | list | length == 1
       - firefly_item.inbound is not defined
       - firefly_networking is mapping and firefly_networking.keys() | difference(['inbound', 'connects_to', 'egress']) | length == 0
       - firefly_egress | egress_problems | length == 0
@@ -46,13 +49,18 @@
       names, of [uploads];
       language like en_US; timezone like Europe/Madrid; log_level one of Laravel's levels;
       memory like 512m; cpus a number; pids_limit and start_timeout above 0; cron_time as
-      HH:MM; networking.connects_to: [pg-<instance>], its PostgreSQL instance of this machine and
-      nothing else (it replaces pg_instance:, which is no longer read; R59)
-      {{ ('(' ~ firefly_connects_to | connects_to_problems(firefly_consumer, infra_apps, hostvars[inventory_hostname]) | join('; ') ~ ')')
-         if firefly_connects_to | connects_to_problems(firefly_consumer, infra_apps, hostvars[inventory_hostname]) else '' }}; launcher_name without [ ] or =;
+      HH:MM; networking.connects_to the instances of this machine it talks to, with exactly one
+      PostgreSQL instance, like [pg-main] (it replaces pg_instance:, which is no longer read; R59)
+      {{ ('(' ~ firefly_connects_to | connects_to_problems(firefly_id, infra_apps, hostvars[inventory_hostname]) | join('; ') ~ ')')
+         if firefly_connects_to | connects_to_problems(firefly_id, infra_apps, hostvars[inventory_hostname]) else '' }};
+      pg_hba, outside networking, the databases of that PostgreSQL it enters, at least its own:
+      [{instance: pg-{{ firefly_pg_instance or '<instance>' }}, database: {{ firefly_db_name }}}] (docs/NETWORK.md)
+      {{ ('(' ~ firefly_hba_problems | join('; ') ~ ')') if firefly_hba_problems else '' }}; launcher_name without [ ] or =;
       launcher_command a list of words with only letters, digits and ._/:=@+,- (no spaces,
       quotes or %), without the address.
     quiet: true
+  vars:
+    firefly_hba_problems: "{{ firefly_pg_hba | pg_hba_problems(firefly_id, firefly_connects_to, infra_apps, hostvars[inventory_hostname]) }}"
 
 # Its home, ids and environment, read in one place (roles/service_user).
 - name: Read the service user
@@ -100,6 +108,9 @@
       - "{{ firefly_name }}"
     quadlet_deploy_health_retries: 60
     quadlet_deploy_state: "{{ firefly_state }}"
+    # Its pairs (docs/NETWORK.md): one the inventory no longer has goes, once nobody uses it.
+    quadlet_deploy_pair_owner: "{{ firefly_id }}"
+    quadlet_deploy_pair_networks: "{{ firefly_pair_networks }}"
 
 # Its database is already in the backup of its PostgreSQL instance. This is the rest, only
 # what the operator asked for in backup: of the instance; removed with the instance.
@@ -108,7 +119,7 @@
     name: backup
     tasks_from: app_items.yml
   vars:
-    backup_items_app: "{{ firefly_consumer }}"
+    backup_items_app: "{{ firefly_id }}"
     backup_items: "{{ firefly_backup | map('extract', firefly_backup_available) | list }}"
     backup_items_state: "{{ firefly_state }}"
 

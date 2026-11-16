@@ -26,6 +26,7 @@ No leas todo el repo: lee lo que pide la tarea. Cada cosa se explica en un solo 
 | Un servicio (Firefly, pgAdmin…) | `docs/services/README.md` (lo común e instancias), `docs/services/INSTALL.md` (instalar, paso a paso), `docs/services/<servicio>.md`, `roles/<servicio>/` y su `CLAUDE.md`, si lo tiene |
 | Añadir una aplicación nueva | `docs/services/ADD_APP.md`: la lista ordenada, de la ficha a la entrega |
 | Postgres, bases o usuarios | `docs/POSTGRES.md` y `roles/postgres/` |
+| La red (`connects_to`, `pg_hba`, `inbound`, `egress`) | `docs/NETWORK.md`: reglas, casos y orden de los `apply`; `plugins/filter/networking.py` |
 | Backups o restaurar | `docs/BACKUPS.md` (cómo funcionan), SPEC 4.11, `roles/backup/`, `roles/backup_server/` y `docs/OPERATIONS.md`, apartado 5 |
 | Secretos | SPEC 4.5, `docs/SECRETS_INVENTORY.md` y `playbooks/secrets.yml` |
 | Escribir o aplicar una orden (un parche de otra IA) | `docs/WORKFLOW.md`, «Si una IA escribe el cambio y otra lo aplica»: quién prueba qué y cómo se deja escrito |

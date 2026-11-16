@@ -23,7 +23,7 @@
 #       name: backup
 #       tasks_from: app_items.yml
 #     vars:
-#       backup_items_app: "{{ myapp_consumer }}"
+#       backup_items_app: "{{ myapp_id }}"
 #       backup_items: "{{ myapp_backup_items }}"
 - name: Check the items
   ansible.builtin.assert:

@@ -1,0 +1,43 @@
+---
+# Included by pair_gc.yml once for each pair network the inventory no longer has. The
+# containers of this call do not count: their units no longer name it, and in an apply they
+# were restarted without it.
+- name: List the containers on {{ quadlet_deploy_network }}
+  ansible.builtin.command:
+    cmd: podman ps --all --filter network={{ quadlet_deploy_network }} --format {% raw %}'{{.Names}}'{% endraw %}
+  environment: "{{ quadlet_deploy_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_pair_users
+  changed_when: false
+  check_mode: false
+
+- name: Find the units that still name {{ quadlet_deploy_network }}
+  ansible.builtin.find:
+    paths: "{{ quadlet_deploy_dir }}"
+    patterns: "*.container"
+    contains: "^Network={{ quadlet_deploy_network | regex_escape }}\\.network$"
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_pair_refs
+
+- name: Decide about {{ quadlet_deploy_network }}
+  ansible.builtin.set_fact:
+    quadlet_deploy_pair_others: >-
+      {{ (quadlet_deploy_pair_users.stdout_lines
+          + quadlet_deploy_pair_refs.files | map(attribute='path') | map('basename')
+            | map('regex_replace', '\.container$', '') | list)
+         | reject('in', quadlet_deploy_containers | map('regex_replace', '\.container$', '') | list)
+         | unique | sort }}
+
+- name: Say what still uses {{ quadlet_deploy_network }}
+  ansible.builtin.debug:
+    msg: >-
+      The inventory no longer has the pair of {{ quadlet_deploy_network }}, but
+      {{ quadlet_deploy_pair_others | join(', ') }} still uses it: kept. It goes with the apply of
+      that side (docs/NETWORK.md, section 6).
+  when: quadlet_deploy_pair_others | length > 0
+
+- name: Remove {{ quadlet_deploy_network }}
+  ansible.builtin.include_tasks: absent_network.yml
+  when: quadlet_deploy_pair_others | length == 0

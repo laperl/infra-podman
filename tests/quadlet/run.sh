@@ -29,7 +29,8 @@ render() { # render <fixtures|roles> <src-dir> <dest-dir>
   [[ $1 == roles ]] && mode=quadlet_roles_dir
   ansible-playbook "$repo/scripts/render-quadlets.yml" \
     -e "$mode=$2" -e "quadlet_dest_dir=$3" -e "@$here/ci_vars.yml" \
-    -e "@$repo/playbooks/group_vars/all/images.yml" >"$work/render.log" 2>&1 \
+    -e "@$repo/playbooks/group_vars/all/images.yml" -e "@$repo/playbooks/group_vars/all/apps.yml" \
+    >"$work/render.log" 2>&1 \
     || { cat "$work/render.log"; return 1; }
 }
 

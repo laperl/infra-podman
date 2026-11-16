@@ -1,18 +1,16 @@
 ---
 # Extra variables of the firefly job: the instance with one database per Firefly instance,
 # as the operator adds them to postgres_hosts.yml (docs/POSTGRES.md, section 6; R48), and a
-# second application (demo) whose network Firefly must not reach. Fictitious names only.
+# reader of ff_casa, ff_ro, that canary may use (its pg_hba names ff_casa, inventory.yml).
+# Who enters which database is said by the instances (docs/NETWORK.md). Fictitious names only.
 postgres_instances:
   - name: main
     superuser: ci_admin
     databases:
       - name: ff_casa
         users:
-          - {name: ff_casa, group: owner, consumer: ff-casa}
-          - {name: ff_ro, group: reader, consumer: ai}
+          - {name: ff_casa, group: owner}
+          - {name: ff_ro, group: reader}
       - name: ff_canary
         users:
-          - {name: ff_canary, group: owner, consumer: ff-canary}
-      - name: demo
-        users:
-          - {name: demo_app, group: owner, consumer: demo}
+          - {name: ff_canary, group: owner}

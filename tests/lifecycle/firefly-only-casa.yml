@@ -4,5 +4,6 @@
 firefly_instances:
   - name: casa
     networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}, connects_to: [pg-main]}
+    pg_hba: [{instance: pg-main, database: ff_casa}]
     timezone: Europe/Madrid
     start_timeout: 60

@@ -1,4 +1,8 @@
 # {{ ansible_managed | default('Managed by infra-podman') }}
+{# The network of one pair, application -> this instance (docs/NETWORK.md): the same as
+   roles/quadlet_deploy/templates/pair.network.j2, written by this role because
+   pg_hba.conf needs its subnet. Its output, "consumer" included, is kept word for word:
+   a changed unit would create every existing network again (SPEC 4.2). -#}
 # Network of one consumer of {{ postgres_name }} (D9, SPEC 4.4): only that consumer and this
 # instance. Internal: no way out to the internet, the LAN or the host, not even by DNS.
 # Isolated from every other isolated network. No Subnet=: Podman chooses a free one, and

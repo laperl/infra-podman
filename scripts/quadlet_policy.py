@@ -39,14 +39,14 @@ SLUG = r"[a-z0-9]+(?:-[a-z0-9]+)*"
 NAME_PATTERNS = {
     # <env>-<app>[-<piece>]
     ".container": re.compile(rf"^(?:{'|'.join(ENVIRONMENTS)})-{SLUG}$"),
-    # <env>-<consumer>-<provider>-net
+    # <env>-<client>-<receiver>-net, <env>-<instance>-egress-net, <env>-<app>-net
     ".network": re.compile(rf"^(?:{'|'.join(ENVIRONMENTS)})-[a-z0-9]+(?:-[a-z0-9]+)+-net$"),
     # <env>-<app>-<content>
     ".volume": re.compile(rf"^(?:{'|'.join(ENVIRONMENTS)})-[a-z0-9]+(?:-[a-z0-9]+)+$"),
 }
 NAME_HINTS = {
     ".container": "<env>-<app>[-<piece>]",
-    ".network": "<env>-<consumer>-<provider>-net",
+    ".network": "<env>-<client>-<receiver>-net",
     ".volume": "<env>-<app>-<content>",
 }
 REQUIRED_LABELS = ("infra.env", "infra.app", "infra.component", "infra.managed-by")

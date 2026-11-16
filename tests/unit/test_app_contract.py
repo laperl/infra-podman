@@ -69,6 +69,18 @@ class AppContract(unittest.TestCase):
                         self.assertIn("Internal=true", network.read_text(),
                                       f"{network.name}: without egress every network is internal")
 
+    def test_every_application_joins_the_networks_of_its_pairs(self) -> None:
+        # connects_to works between any two instances (docs/NETWORK.md): an application
+        # that did not join them would leave a pair without its network on one side.
+        for role in application_roles():
+            with self.subTest(role=role):
+                defaults = (REPO / "roles" / role / "defaults/main.yml").read_text()
+                self.assertIn(f"{role}_pair_networks:", defaults)
+                self.assertIn(f"{role}_pair_units:", defaults)
+                self.assertIn("pairs_of(", defaults)
+                containers = "".join(t.read_text() for t in (REPO / "roles" / role / "templates").glob("*.container.j2"))
+                self.assertIn(f"{role}_pair_networks", containers)
+
     def test_every_application_is_in_the_table_of_the_common_page(self) -> None:
         page = (REPO / "docs/services/README.md").read_text()
         for role in application_roles():

@@ -12,7 +12,7 @@
       - backup_keep_monthly | int > 0
       - backup_keep_yearly | int > 0
       - backup_remote_url | length == 0 or backup_remote_url is match('^https?://[A-Za-z0-9.:-]+$')
-      - backup_remote_network | length == 0 or backup_remote_network is match('^container:[a-z0-9-]+$')
+      - backup_remote_network | length == 0 or backup_remote_network == 'container:' ~ infra_env ~ '-backup-server'
       - not backup_copy_egress | bool or (backup_remote_host is not search('/')
         and [backup_remote_host] | egress_problems | length == 0)
       - backup_remote_max_size_gb | float > 0
@@ -24,8 +24,8 @@
       server, for example its Tailscale one, `tailscale ip -4` there: not its name, because
       the copy container reaches only that address and has no DNS, R59
       {{ ('(' ~ [backup_remote_host] | egress_problems | join('; ') ~ ')') if backup_copy_egress | bool and [backup_remote_host] | egress_problems else '' }}),
-      backup_remote_network empty or container:<name>
-      (then a name is fine), a size limit above 0 and
+      backup_remote_network empty or container:{{ infra_env }}-backup-server, only when that server runs on
+      this same machine (then a name is fine; docs/NETWORK.md, section 8), a size limit above 0 and
       backup_copy_minute between 0 and 59.
     quiet: true
 

@@ -13,7 +13,7 @@ Lista de los secretos que usa la plataforma (SPEC 4.5). **Nunca valores**: solo 
 
 - Un rol no puede usar un secreto que no lo nombre en `readers:`: el `plan` se para y dice qué línea falta.
 - Un secreto que leen dos (la contraseña de un usuario la leen Postgres y su aplicación) es **una sola línea con los dos** en `readers:`. El mismo nombre en dos líneas se rechaza.
-- Los nombres de lector van sin el entorno: `pg-<instancia>`, `ff-<instancia>`, el `consumer:` de un usuario de Postgres, `backup` y `backup-server`.
+- Los nombres de lector van sin el entorno: `pg-<instancia>`, `ff-<instancia>` (el identificador de la instancia que usa ese usuario de Postgres), `backup` y `backup-server`.
 
 | Nombre del secreto en Podman | Ruta en KeePassXC | Consumidores (lo que va en `readers:`) | Rotación |
 | --- | --- | --- | --- |

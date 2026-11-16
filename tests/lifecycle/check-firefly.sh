@@ -6,14 +6,18 @@
 #   running    healthy, published only on 127.0.0.1:<its port>, /health and the login page answer
 #   standard   hardening, limits, its one network, secrets as files, its settings
 #   schema     its tables in the schema of its database, owned by its _owner group
-#   reader     ff_ro (ff_casa_reader) reads casa's tables and cannot change them
-#   isolation  no way out: not to the internet, the host, demo's network or the other instance
+#   reader     ff_ro (ff_casa_reader), from the network of canary, whose pg_hba names ff_casa,
+#              reads casa's tables and cannot change them, nor enter ff_canary
+#   isolation  no way out: not to the internet, the host, or the other instance and its network
 #   egress <instance> <allowed ip> <forbidden ip>
 #              with networking.egress: [<allowed ip>], it reaches that address and nothing
 #              else: not the other address of the runner, not the internet (R59)
 #   told <instance> <apply log> <check log>
 #              the apply and the check playbook say whether this machine really limits
 #              that way out (it needs netavark 1.7.0 or newer)
+#   pair       with casa connecting to canary (firefly-pair.yml): their own internal,
+#              isolated network with only the two, reachable by name both ways (docs/NETWORK.md)
+#   no-pair    that line removed: the network and its unit are gone, and so is the path
 #   user       the first user, through the registration page, as the operator does it
 #   cron       the scheduled tasks run inside the container, from their service
 #   launcher   the operator's .desktop file is valid and opens 127.0.0.1:<its port>
@@ -37,8 +41,6 @@ su=ci_admin  # fictitious superuser of tests/lifecycle/inventory.yml
 net=dev-ff-$instance-pg-main-net
 other_name=dev-ff-$other
 other_net=dev-ff-$other-pg-main-net
-demo_net=dev-demo-pg-main-net
-ai_net=dev-ai-pg-main-net
 launcher=$HOME/.local/share/applications/infra-podman-$name.desktop
 state=${RUNNER_TEMP:-/tmp}/firefly-marker-$instance
 fail() { local m="$*"; echo "::error title=check-firefly $step $instance::${m//$'\n'/ | }"; exit 1; }
@@ -133,8 +135,10 @@ case $step in
     [[ $(sql "SELECT to_regclass('$db.users') IS NOT NULL") == t ]] || fail "no table $db.users"
     ;;
   reader)
-    client() { # client <query>: as ff_ro over TCP, from the network of ai
-      "$as" podman --log-level=error run --rm --network "$ai_net" \
+    # The network of canary admits the users of ff_casa (its pg_hba names it, inventory.yml).
+    canary_net=dev-ff-canary-pg-main-net
+    client() { # client <query>: as ff_ro over TCP, from the network of canary
+      "$as" podman --log-level=error run --rm --network "$canary_net" \
         --secret dev-ff-ro-db-password,type=env,target=PGPASSWORD --entrypoint psql "$(pg_image)" \
         -X -h "$pg" -U ff_ro -d ff_casa -v ON_ERROR_STOP=1 -tAq -c "$1" </dev/null
     }
@@ -143,8 +147,9 @@ case $step in
     grep -q 'permission denied' <<<"$out" || fail "the delete failed for another reason: $out"
     if out=$(client "CREATE TABLE lifecycle_t (n int)" 2>&1); then fail "ff_ro created a table"; fi
     grep -q 'permission denied' <<<"$out" || fail "the create failed for another reason: $out"
-    # Nor into the database of the other instance (pg_hba.conf and CONNECT, R48).
-    if out=$("$as" podman --log-level=error run --rm --network "$ai_net" \
+    # Nor into the database of the other instance: ff_ro is no user of ff_canary, so no
+    # line of pg_hba.conf admits it there, from any network (R48, docs/NETWORK.md).
+    if out=$("$as" podman --log-level=error run --rm --network "$canary_net" \
          --secret dev-ff-ro-db-password,type=env,target=PGPASSWORD --entrypoint psql "$(pg_image)" \
          -X -h "$pg" -U ff_ro -d ff_canary -tAq -c "SELECT 1" </dev/null 2>&1); then
       fail "ff_ro connected to the database of canary"
@@ -166,17 +171,6 @@ case $step in
     if in_ff 'getent hosts example.com' >/dev/null 2>&1; then fail "Firefly resolved example.com"; fi
     if in_ff 'curl -s -m 5 -o /dev/null https://example.com' 2>/dev/null; then fail "Firefly fetched https://example.com"; fi
     if in_ff "timeout 5 bash -c '</dev/tcp/$host_ip/18999'" 2>/dev/null; then fail "Firefly reached the host ($host_ip:18999)"; fi
-    # Another application (demo): PostgreSQL's address in its network, and a container in it.
-    "$as" podman run -d --rm --name lifecycle-demo-probe --network "$demo_net" --entrypoint sleep "$(pg_image)" 120 >/dev/null
-    pg_demo_ip=$(ip_in "$pg" "$demo_net")
-    probe_ip=$(ip_in lifecycle-demo-probe "$demo_net")
-    if in_ff "timeout 5 bash -c '</dev/tcp/$pg_demo_ip/5432'" 2>/dev/null; then
-      fail "Firefly reached PostgreSQL through the network of demo ($pg_demo_ip)"
-    fi
-    if in_ff "timeout 5 bash -c '</dev/tcp/$probe_ip/5432'; getent hosts lifecycle-demo-probe" >/dev/null 2>&1; then
-      fail "Firefly reached or resolved a container of the network of demo"
-    fi
-    "$as" podman stop -t 0 lifecycle-demo-probe >/dev/null
     # The other instance (R48): another network, another subnet, nothing reachable.
     [[ $("$as" podman network inspect "$net" --format '{{range .Subnets}}{{.Subnet}}{{end}}') != \
        $("$as" podman network inspect "$other_net" --format '{{range .Subnets}}{{.Subnet}}{{end}}') ]] \
@@ -217,6 +211,30 @@ case $step in
     if in_ff 'getent hosts example.com' >/dev/null 2>&1; then fail "Firefly resolved example.com"; fi
     ;;
   told) told "${3:?}" "${4:?}" ;;
+  pair)
+    # <instance> connects to the other one (tests/lifecycle/firefly-pair.yml): their own
+    # network, internal, isolated, without outside DNS, with only those two (docs/NETWORK.md).
+    pnet=dev-ff-$instance-ff-$other-net
+    info=$("$as" podman network inspect "$pnet") || fail "no network $pnet"
+    [[ $(jq -r '.[0].internal' <<< "$info") == true ]] || fail "$pnet is not internal"
+    [[ $(jq -r '.[0].options.isolate' <<< "$info") == true ]] || fail "$pnet is not isolated"
+    [[ $(jq -c '.[0].network_dns_servers' <<< "$info") == '["127.0.0.1"]' ]] || fail "$pnet sends DNS out: $(jq -c '.[0].network_dns_servers' <<< "$info")"
+    on=$("$as" podman ps --filter network="$pnet" --format '{{.Names}}' | sort | xargs)
+    [[ $on == "$name $other_name" || $on == "$other_name $name" ]] || fail "containers on $pnet: '$on' (expected $name and $other_name)"
+    # By name, and both ways: a network has no direction (docs/NETWORK.md, section 10).
+    in_ff "timeout 5 bash -c '</dev/tcp/$other_name/8080'" || fail "$name does not reach $other_name:8080"
+    "$as" podman exec "$other_name" bash -c "timeout 5 bash -c '</dev/tcp/$name/8080'" </dev/null \
+      || fail "$other_name does not reach $name:8080"
+    # Still nothing outside: a pair network is internal.
+    if in_ff 'getent hosts example.com' >/dev/null 2>&1; then fail "$name resolved example.com"; fi
+    ;;
+  no-pair)
+    pnet=dev-ff-$instance-ff-$other-net
+    ! "$as" podman network exists "$pnet" || fail "the network $pnet is still there"
+    svc_home=$(getent passwd svc_runner | cut -d: -f6)
+    ! "$as" test -e "$svc_home/.config/containers/systemd/$pnet.network" || fail "$pnet.network is still installed"
+    if in_ff "timeout 5 bash -c '</dev/tcp/$other_name/8080'" 2>/dev/null; then fail "$name still reaches $other_name"; fi
+    ;;
   user)
     # A fictitious user, with a random password that goes to the list of secrets the job
     # looks for in its output. Without internet: the password check against

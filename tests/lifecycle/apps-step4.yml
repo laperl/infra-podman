@@ -7,5 +7,9 @@ postgres_instances:
     databases:
       - name: demo
         users:
-          - {name: demo_app, group: owner, consumer: demo}
-          - {name: demo_rw, group: writer, consumer: demo}
+          - {name: demo_app, group: owner}
+          - {name: demo_rw, group: writer}
+firefly_instances:
+  - name: demo
+    networking: {inbound: {publish: ["127.0.0.1:18110:8080"]}, connects_to: [pg-main]}
+    pg_hba: [{instance: pg-main, database: demo}]

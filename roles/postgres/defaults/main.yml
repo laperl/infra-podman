@@ -17,14 +17,10 @@ postgres_superuser: ""
 #     name:     ^[a-z][a-z0-9_]{0,62}$; once per database, but it may be in several
 #               databases (one role, one password)
 #     group:    owner | writer | reader
-#     consumer: the application instance that connects with it, by its identifier
-#               <app>-<instance> (for example ff-laptop; docs/services/README.md, 3): lower
-#               case letters, digits and single hyphens. It gets the network
-#               <env>-<consumer>-pg-<instance>-net (D9) and pg_hba.conf admits the user only
-#               from there, only to its database. That is all consumer is for: pg_hba.conf.
-#               The connection itself is written by the application, in its instance:
-#               networking.connects_to: [pg-<instance>] (R59), and an instance of the
-#               platform must have both.
+# Who enters which database is not written here: the application writes it in its own
+# instance, networking.connects_to: [pg-<instance>] and pg_hba: [{instance: pg-<instance>,
+# database: <name>}] (docs/NETWORK.md). Every user of that database is admitted from the
+# network of that pair, only to that database. consumer: is no longer read (R59).
 # Its password: the KeePassXC entry and Podman secret named after the user, with - for _:
 # <user>-db-password, for example ff_laptop -> <env>-ff-laptop-db-password (SPEC 4.5). A
 # user name is unique on its machine, across instances (playbooks/postgres.yml).
@@ -44,16 +40,18 @@ postgres_managed_mark: managed by infra-podman
 # A database may have no users (no users: key, or an empty one): every place that reads
 # them accepts both.
 #
-# Consumers with a network of their own (D9, SPEC 4.4), derived from the users. None: the
-# container runs with Network=none, reachable only through podman exec. Do not override.
-postgres_consumers: >-
-  {{ postgres_databases | selectattr('users', 'defined') | selectattr('users') | map(attribute='users') | flatten
-     | map(attribute='consumer') | unique | sort }}
-
-# The instances of this machine that say networking.connects_to: [pg-<instance>] (R59).
-# Every instance of the platform in postgres_consumers must be here (tasks/main.yml). Do
-# not override.
-postgres_clients: "{{ ('pg-' ~ postgres_instance) | clients_of(infra_apps, hostvars[inventory_hostname]) }}"
+# Its identifier in networking.connects_to and pg_hba of the applications (docs/NETWORK.md).
+postgres_id: pg-{{ postgres_instance }}
+# What the applications of this machine that connect here write in pg_hba for this
+# instance, each item {client: ff-casa, database: ff_casa} (R59). Do not override.
+postgres_hba_all: "{{ postgres_id | hba_of(infra_apps, hostvars[inventory_hostname]) }}"
+postgres_db_names: "{{ postgres_databases | map(attribute='name') | list }}"
+# Only those of a database declared here: a network and pg_hba.conf lines only for them.
+postgres_hba: "{{ postgres_hba_all | selectattr('database', 'in', postgres_db_names) | list }}"
+# The applications with a network of their own to this instance (D9, SPEC 4.4): one per
+# client of postgres_hba. None: the container runs with Network=none, reachable only
+# through podman exec. Do not override.
+postgres_clients: "{{ postgres_hba | map(attribute='client') | unique | sort }}"
 
 # Names of the users, each once, derived. Do not override.
 postgres_user_names: >-
@@ -64,8 +62,8 @@ postgres_user_names: >-
 postgres_group_names: >-
   {{ postgres_databases | map(attribute='name') | product(['_owner', '_writer', '_reader']) | map('join') | list }}
 
-# Subnet of each consumer network, read from Podman by the role (tasks/hba.yml): Podman
-# chooses it when it creates the network. Only for CI renders; do not override.
+# Subnet of the network of each client, read from Podman by the role (tasks/hba.yml):
+# Podman chooses it when it creates the network. Only for CI renders; do not override.
 postgres_subnets: {}
 
 # Resource limits, in one place (ROADMAP). Podman 4.9 has no Memory= key, so they go
@@ -105,19 +103,19 @@ postgres_secret: "{{ infra_env }}-{{ postgres_secret_entry }}"
 postgres_config_dir: "{{ postgres_service_home }}/.config/infra-podman/{{ postgres_name }}"
 postgres_hba_file: "{{ postgres_config_dir }}/pg_hba.conf"
 
-# Network of each consumer: <env>-<consumer>-pg-<instance>-net (SPEC 4.12).
+# Network of each client: <env>-<client>-pg-<instance>-net (SPEC 4.12, docs/NETWORK.md).
 postgres_networks: >-
-  {{ postgres_consumers | map('regex_replace', '^(.*)$', infra_env ~ '-\1-pg-' ~ postgres_instance ~ '-net') | list }}
+  {{ postgres_clients | map('regex_replace', '^(.*)$', infra_env ~ '-\1-pg-' ~ postgres_instance ~ '-net') | list }}
 
 # Groups and users the role declares, in the order they are created.
 postgres_managed_roles: "{{ postgres_group_names + postgres_user_names }}"
 
 # What quadlet_deploy installs, and what CI renders (scripts/render-quadlets.yml). One
-# .network per consumer, built from the names (no per-item variables in the template).
+# .network per client, built from the names (no per-item variables in the template).
 postgres_quadlet_units: >-
   {{ [{'template': 'pg.container.j2', 'name': postgres_name ~ '.container'},
       {'template': 'pg-data.volume.j2', 'name': postgres_volume ~ '.volume'}]
-     + (postgres_networks | map('regex_replace', '^(.*)$', '{"template": "pg-consumer.network.j2", "name": "\1.network"}')
+     + (postgres_networks | map('regex_replace', '^(.*)$', '{"template": "pg-client.network.j2", "name": "\1.network"}')
         | map('from_json') | list) }}
 
 # Who got a new password (tasks/apps.yml, from files/pg_passwords.py). Over SSH, script runs

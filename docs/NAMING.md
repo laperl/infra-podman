@@ -56,7 +56,7 @@ Ese mismo `name:`, tal cual, es lo que se escribe en todas partes donde la docum
 | `deploy.sh`: `--retire`, `--purge` y `--confirm-drop` | `./deploy.sh apply firefly --purge laptop` |
 | `connects_to:` de una aplicación (las instancias con las que habla, por su identificador) | `connects_to: [pg-laptop]` |
 | Los nombres que compone el código (apartado 4) | `prod-ff-laptop`, `ff_laptop`, `ff-laptop-app-key` |
-| `readers:` de `infra_secrets` y `consumer:` de un usuario de Postgres, con el nombre corto delante | `ff-laptop`, `pg-laptop` |
+| `readers:` de `infra_secrets` y `instance:` de `pg_hba`, con el nombre corto delante | `ff-laptop`, `pg-laptop` |
 
 Si dudas de cuál es, mira el fichero: `deploy.sh` rechaza una instancia que no esté declarada ahí. Las otras tres palabras que usa la documentación: `<entorno>` es `dev` o `prod`; `<máquina>` es el nombre de la máquina en `inventory/<entorno>/hosts.yml`; `<corto>` es el nombre corto de la aplicación (apartado 2).
 
@@ -69,10 +69,9 @@ Ejemplo: Firefly `laptop` en la Postgres `laptop`, en producción.
 | Contenedor y su servicio | `<entorno>-<corto>-<instancia>` | `prod-ff-laptop`, `prod-pg-laptop` |
 | Fichero Quadlet | el nombre del objeto y su tipo | `prod-ff-laptop.container` |
 | Volumen | `<entorno>-<corto>-<instancia>-<contenido>` | `prod-ff-laptop-uploads`, `prod-pg-laptop-data` |
-| Red hacia Postgres | `<entorno>-<consumidor>-pg-<instancia>-net` | `prod-ff-laptop-pg-laptop-net` |
+| Red de una pareja de `connects_to` | `<entorno>-<quien conecta>-<destino>-net`, cada uno por su identificador ([`NETWORK.md`](NETWORK.md)) | `prod-ff-laptop-pg-laptop-net`, `prod-ff-laptop-ff-canary-net` |
 | Red del servidor de copias | `<entorno>-backup-server-net` | `prod-backup-server-net` |
 | Red de salida de un contenedor (`egress`) | `<entorno>-<contenedor sin entorno>-egress-net` | `prod-ff-laptop-egress-net`, `prod-backup-copy-egress-net` |
-| `consumer:` en Postgres | el identificador de la aplicación | `ff-laptop` |
 | Base, esquema y usuario de una aplicación | `<corto>_<instancia>` | `ff_laptop` |
 | Grupos de una base | `<base>_owner`, `_writer`, `_reader` | `ff_laptop_owner` |
 | Tareas programadas | `<entorno>-<corto>-<instancia>-<tarea>` | `prod-ff-laptop-cron.timer` |
@@ -139,5 +138,5 @@ Documentación y mensajes, en español; código, variables y commits, en inglés
 - [ ] El operador solo escribe la instancia; el rol compone los nombres a partir del identificador.
 - [ ] Nombres explícitos y las cuatro etiquetas en cada `.container`, `.network` y `.volume`.
 - [ ] Secretos `<corto>-<instancia>-<qué>`, en `infra_secrets` y en [`SECRETS_INVENTORY.md`](SECRETS_INVENTORY.md).
-- [ ] Si usa Postgres: base y usuario `<corto>_<instancia>`, y `consumer: <corto>-<instancia>`.
+- [ ] Si usa Postgres: base y usuario `<corto>_<instancia>`, y en la instancia `connects_to: [pg-<instancia>]` y `pg_hba` con esa base ([`NETWORK.md`](NETWORK.md)).
 - [ ] Ningún entorno en un título de KeePassXC.

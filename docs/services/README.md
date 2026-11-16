@@ -40,11 +40,11 @@ La norma completa está en [`NAMING.md`](../NAMING.md); incluye la tabla de nomb
 ## 4. Puertos
 
 - **La red de una instancia va en su bloque `networking`** (R59), con tres partes: `inbound` (quién entra), `connects_to` (con quién habla dentro) y `egress` (a dónde sale). Lo que no escribes está cerrado.
-- **`connects_to`: con qué otras instancias de la misma máquina habla.** Una lista de identificadores `<corto>-<instancia>`, como `[pg-laptop]`.
-  - **Lo escribe solo quien inicia la conversación.** El otro lado no escribe nada: la plataforma lo lee de aquí. Una pareja, una línea; si las dos se nombran, el `plan` lo rechaza.
+- **`connects_to`: con qué otras instancias de la misma máquina habla.** Una lista de identificadores `<corto>-<instancia>`, como `[pg-laptop]`. Las reglas completas, los casos y el orden de los `apply` están en [`NETWORK.md`](../NETWORK.md); en resumen:
+  - **Lo escribe solo quien inicia la conversación.** El otro lado no escribe nada: la plataforma lo lee de aquí. Si las dos se nombran, el `plan` lo rechaza.
   - **Cada pareja tiene su red interna**, `<entorno>-<quien conecta>-<destino>-net`, solo para los dos: sin salida y sin ver a nadie más. Se encuentran por el nombre del contenedor.
-  - **El `plan` rechaza** un destino que no es una instancia de esa máquina, uno repetido y conectarse consigo misma.
-  - **Hoy solo las instancias de Postgres admiten conexiones.** Con Postgres hace falta además su permiso: un usuario con `consumer:` en la base ([`POSTGRES.md`](../POSTGRES.md), apartado 6). `connects_to` abre el camino; `consumer` sirve únicamente para `pg_hba.conf`, es decir, desde qué red acepta Postgres a ese usuario. Si falta uno de los dos, el `plan` lo dice.
+  - **El `plan` rechaza** un destino que no es una instancia de esa máquina, uno repetido y conectarse consigo misma. Postgres no inicia conexiones: nunca lleva `connects_to`.
+  - **Hacia Postgres hace falta además `pg_hba`**, fuera de `networking`: en qué bases de ese Postgres entra, `pg_hba: [{instance: pg-laptop, database: ff_laptop}]`. Todos los usuarios de esa base pueden entrar desde la red de la pareja, y solo a esa base ([`NETWORK.md`](../NETWORK.md), apartado 4). Sin `pg_hba`, o con una base que ese Postgres no tiene, el `plan` se para.
   - **Entre máquinas distintas no es `connects_to`:** es entrada en una (`inbound`) y salida en la otra (`egress`).
   - **Una red no impone sentido:** dentro de la pareja, los dos se alcanzan. Añadir o quitar una conexión reinicia a los dos contenedores.
 - **`egress`: a dónde sale.** Sin escribirlo, a ningún sitio. Con ella, la instancia tiene además una red propia, `<entorno>-<corto>-<instancia>-egress-net`:
@@ -141,8 +141,8 @@ La red de una instancia la decides tú, en su bloque `networking` (apartado 4, R
 
 | Pregunta | En el rol | Qué te exige |
 | --- | --- | --- |
-| ¿Guarda sus datos en Postgres? | `database: postgres` o `none` | Con `postgres`: una instancia de Postgres en su `connects_to`, y allí su base y su usuario con `consumer:` |
-| ¿Con qué otros contenedores tiene que hablar? | `providers:`, una lista. Hoy solo existe `postgres` | Cada uno, en su `connects_to` |
+| ¿Guarda sus datos en Postgres? | `database: postgres` o `none` | Con `postgres`: una instancia de Postgres en su `connects_to`, allí su base y su usuario, y esa base en su `pg_hba` |
+| ¿Con qué otros contenedores tiene que hablar? | `providers:`, una lista. Hoy solo existe `postgres` | Cada uno, en su `connects_to`. Puedes añadir otras instancias de la máquina: cada una, su red ([`NETWORK.md`](../NETWORK.md)) |
 | ¿Tiene que salir de la máquina? | `egress: true` o `false` | Con `true`, un `egress` en la instancia. Con `false` puedes dárselo igual, si quieres |
 
 Lo que resulta de combinar las tres partes de `networking`:
@@ -162,5 +162,5 @@ Las aplicaciones de hoy:
 | Firefly III | `firefly` | `ff` | Una instancia de Postgres | Solo entra |
 
 - **Añadir una aplicación:** el paso a paso está en [`ADD_APP.md`](ADD_APP.md). Aquí, su fila y su `<app>_contract`; `tests/unit/test_app_contract.py` comprueba que los dos existen y que las unidades del rol cuadran con lo declarado.
-- **Un destino nuevo para `connects_to`** (un proxy, LiteLLM, otra aplicación): hoy solo Postgres crea la red de la pareja y se mete en ella. El primer rol que no sea Postgres y tenga que admitir conexiones lo hará igual, leyendo quién se le conecta con el filtro `clients_of` (`plugins/filter/networking.py`); la plantilla común de esa red se escribe entonces.
+- **Cualquier aplicación puede ser destino de `connects_to`.** Cada rol de aplicación calcula sus parejas con el filtro `pairs_of` (`plugins/filter/networking.py`), une su contenedor a sus redes y las instala con la plantilla común `roles/quadlet_deploy/templates/pair.network.j2`; `tests/unit/test_app_contract.py` lo exige a todo rol nuevo ([`ADD_APP.md`](ADD_APP.md)). La red de una pareja con Postgres la pone el rol `postgres`, porque `pg_hba.conf` necesita su subred.
 - **Fuera de este contrato:** la red del host (prohibida), la salida filtrada por nombre de dominio, la GPU y los dispositivos, y las aplicaciones con ventana ([`ROADMAP.md`](../ROADMAP.md)).
