@@ -1,0 +1,8 @@
+# A way out limited to one destination that keeps DNS: another way out.
+[Network]
+NetworkName={{ infra_env }}-demo-egress-net
+Label="infra.env={{ infra_env }}" "infra.app=demo" "infra.component=egress" "infra.managed-by=infra-podman"
+Subnet=10.90.1.16/28
+Gateway=10.90.1.17
+Options=no_default_route=true
+PodmanArgs=--route=100.64.0.7/32,10.90.1.17

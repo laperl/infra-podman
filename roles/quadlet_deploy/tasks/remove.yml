@@ -46,5 +46,20 @@
   changed_when: true
   when: quadlet_deploy_purge
 
+# A network holds no data. One that never existed is fine.
+- name: Delete the networks (explicit purge only)
+  ansible.builtin.command:
+    cmd: podman network rm {{ item | regex_replace('\.network$', '') }}
+  loop: "{{ quadlet_deploy_remove | select('match', '.*\\.network$') | list }}"
+  environment: "{{ quadlet_deploy_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_network_removed
+  changed_when: quadlet_deploy_network_removed.rc == 0
+  failed_when:
+    - quadlet_deploy_network_removed.rc != 0
+    - "'unable to find network' not in quadlet_deploy_network_removed.stderr"
+  when: quadlet_deploy_purge
+
 - name: Run the reload now
   ansible.builtin.meta: flush_handlers

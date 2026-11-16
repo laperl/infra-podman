@@ -117,7 +117,7 @@ En tu repo de datos, y después `./deploy.sh apply backup`:
 | Retención | `backup_keep_daily`, `backup_keep_monthly`, `backup_keep_yearly` | `7`, `12`, `5` |
 | Copiar también el repo de datos | `backup_data_repo` | `false` |
 | Aviso de escritorio si una copia falla o es vieja | `backup_notify` | `false` |
-| **Enviar a un servidor de copias** | `backup_remote_url` | vacío: solo copia local |
+| **Enviar a un servidor de copias** | `backup_remote_url`: `http://<IP del servidor>:<puerto>`. La IP, no el nombre | vacío: solo copia local |
 | Tope de tamaño del servidor | `backup_server_max_size_gb` | `30` |
 | Qué más copiar de una aplicación | `backup:` en su instancia | nada |
 

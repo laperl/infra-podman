@@ -71,6 +71,7 @@ Ejemplo: Firefly `laptop` en la Postgres `laptop`, en producción.
 | Volumen | `<entorno>-<corto>-<instancia>-<contenido>` | `prod-ff-laptop-uploads`, `prod-pg-laptop-data` |
 | Red hacia Postgres | `<entorno>-<consumidor>-pg-<instancia>-net` | `prod-ff-laptop-pg-laptop-net` |
 | Red del servidor de copias | `<entorno>-backup-server-net` | `prod-backup-server-net` |
+| Red de salida de un contenedor (`egress`) | `<entorno>-<contenedor sin entorno>-egress-net` | `prod-ff-laptop-egress-net`, `prod-backup-copy-egress-net` |
 | `consumer:` en Postgres | el identificador de la aplicación | `ff-laptop` |
 | Base, esquema y usuario de una aplicación | `<corto>_<instancia>` | `ff_laptop` |
 | Grupos de una base | `<base>_owner`, `_writer`, `_reader` | `ff_laptop_owner` |

@@ -15,7 +15,7 @@
   block:
     - name: Render the units into the temporary directory
       ansible.builtin.template:
-        src: "{{ quadlet_deploy_templates }}/{{ item.template }}"
+        src: "{{ quadlet_deploy_common if item.common | default(false) else quadlet_deploy_templates }}/{{ item.template }}"
         dest: "{{ quadlet_deploy_tmp.path }}/{{ item.name }}"
         mode: "0644"
       loop: "{{ quadlet_deploy_units }}"
@@ -63,7 +63,7 @@
 # exists will be created again, and that must be possible (network_users.yml).
 - name: See which network units are about to change
   ansible.builtin.template:
-    src: "{{ quadlet_deploy_templates }}/{{ item.template }}"
+    src: "{{ quadlet_deploy_common if item.common | default(false) else quadlet_deploy_templates }}/{{ item.template }}"
     dest: "{{ quadlet_deploy_dir }}/{{ item.name }}"
     mode: "0644"
   loop: "{{ quadlet_deploy_units | selectattr('name', 'match', '.*\\.network$') | list }}"
@@ -96,7 +96,7 @@
 
 - name: Install the units
   ansible.builtin.template:
-    src: "{{ quadlet_deploy_templates }}/{{ item.template }}"
+    src: "{{ quadlet_deploy_common if item.common | default(false) else quadlet_deploy_templates }}/{{ item.template }}"
     dest: "{{ quadlet_deploy_dir }}/{{ item.name }}"
     mode: "0644"
   loop: "{{ quadlet_deploy_units }}"
@@ -173,6 +173,19 @@
 
 - name: Run the reload and the restarts now
   ansible.builtin.meta: flush_handlers
+
+# A container started by a timer (quadlet_deploy_start false) would create its network
+# only on its first run: created now, the network is there to be seen and checked.
+- name: Make sure every network exists
+  ansible.builtin.systemd_service:
+    name: "{{ item | regex_replace('\\.network$', '-network.service') }}"
+    state: started
+    scope: user
+  loop: "{{ quadlet_deploy_units | map(attribute='name') | select('match', '.*\\.network$') | list }}"
+  environment: "{{ quadlet_deploy_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  when: not ansible_check_mode
 
 - name: Make sure every container is running
   ansible.builtin.systemd_service:

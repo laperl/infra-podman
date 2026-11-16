@@ -30,7 +30,7 @@ Secret=dev-backup-server-password,type=mount,target=/run/secrets/server-password
 Environment=RESTIC_PASSWORD_FILE=/run/secrets/restic-password
 Environment=RESTIC_CACHE_DIR=/tmp/restic-cache
 Environment=BACKUP_SITE=ci-site
-Environment=BACKUP_REMOTE_URL=http://unset.invalid
+Environment=BACKUP_REMOTE_URL=http://100.64.0.7:18000
 Environment=BACKUP_REMOTE_PATH=ci-site/dev-localhost
 Environment=BACKUP_REMOTE_MAX_BYTES=32212254720
 Environment=BACKUP_REMOTE_WARN_PERCENT=80
@@ -40,6 +40,9 @@ Environment=BACKUP_REMOTE_WARN_PERCENT=80
 PodmanArgs=--entrypoint=/bin/sh --memory=1g --cpus=2
 PidsLimit=500
 Exec=/scripts/backup-copy.sh
+# Its only way out (R59): to the backup server and nowhere else. In DEV and CI, where
+# the server is on the same machine, it shares the server's network instead.
+Network=dev-backup-copy-egress-net.network
 
 ReadOnly=true
 Tmpfs=/tmp

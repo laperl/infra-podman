@@ -1,0 +1,39 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+{# The one template of a network with a way out (R59), used by any role through
+   quadlet_deploy with a unit item like:
+     - template: egress.network.j2
+       common: true
+       name: <env>-<instance>-egress-net.network
+       egress: true | ["100.64.0.7", "192.168.1.0/24"]
+       app: <infra.app label>
+   The name of the network is the file name without .network (SPEC 4.12). -#}
+{% set egress_name = item.name | regex_replace('\.network$', '') %}
+{% if item.egress is sameas true %}
+# The way out of one container, to everything: the internet and the local network (R59).
+# Only that container is on it.
+{% else %}
+{# A fixed /28 inside 10.90.0.0/16, taken from the name: a route needs the gateway to be
+   known beforehand. If two names ever gave the same one, Podman refuses the second. -#}
+{% set egress_slot = (egress_name | hash('md5'))[:3] | int(base=16) %}
+{% set egress_base = '10.90.' ~ (egress_slot // 16) ~ '.' %}
+{% set egress_gateway = egress_base ~ (egress_slot % 16 * 16 + 1) %}
+# The way out of one container, only to the destinations below (R59): the network has no
+# default route, so nothing else can be reached, and no DNS, so nothing leaves that way.
+# Only that container is on it.
+{% endif %}
+[Network]
+NetworkName={{ egress_name }}
+{% if item.egress is not sameas true %}
+Subnet={{ egress_base }}{{ egress_slot % 16 * 16 }}/28
+Gateway={{ egress_gateway }}
+DisableDNS=true
+Options=no_default_route=true
+{% for egress_destination in item.egress %}
+PodmanArgs=--route={{ egress_destination if '/' in egress_destination else egress_destination ~ '/32' }},{{ egress_gateway }}
+{% endfor %}
+{% endif %}
+Options=isolate=true
+Label=infra.env={{ infra_env }}
+Label=infra.app={{ item.app }}
+Label=infra.component=egress
+Label=infra.managed-by=infra-podman

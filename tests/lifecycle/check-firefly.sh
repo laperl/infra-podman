@@ -8,6 +8,9 @@
 #   schema     its tables in the schema of its database, owned by its _owner group
 #   reader     ff_ro (ff_casa_reader) reads casa's tables and cannot change them
 #   isolation  no way out: not to the internet, the host, demo's network or the other instance
+#   egress <instance> <allowed ip> <forbidden ip>
+#              with networking.egress: [<allowed ip>], it reaches that address and nothing
+#              else: not the other address of the runner, not the internet (R59)
 #   user       the first user, through the registration page, as the operator does it
 #   cron       the scheduled tasks run inside the container, from their service
 #   launcher   the operator's .desktop file is valid and opens 127.0.0.1:<its port>
@@ -163,6 +166,29 @@ case $step in
     if in_ff "timeout 5 bash -c '</dev/tcp/$pg_other_ip/5432'" 2>/dev/null; then
       fail "Firefly reached PostgreSQL through the network of $other ($pg_other_ip)"
     fi
+    ;;
+  egress)
+    allowed=${3:?} forbidden=${4:?} egress_net=$name-egress-net
+    python3 -m http.server 18999 --bind 0.0.0.0 >/dev/null 2>&1 &
+    server=$!
+    trap 'kill $server 2>/dev/null || true' EXIT
+    sleep 1
+    # Controls from the runner: both addresses answer, so a refusal below is the network.
+    timeout 5 bash -c "</dev/tcp/$allowed/18999" || fail "control: the runner cannot reach $allowed:18999"
+    timeout 5 bash -c "</dev/tcp/$forbidden/18999" || fail "control: the runner cannot reach $forbidden:18999"
+    timeout 5 bash -c '</dev/tcp/1.1.1.1/443' || fail "control: the runner cannot reach 1.1.1.1:443"
+    # The network as Podman has it, and the container on it besides its PostgreSQL one.
+    info=$("$as" podman network inspect "$egress_net")
+    [[ $(jq -r '.[0].options.no_default_route' <<< "$info") == true ]] || fail "$egress_net has a default route"
+    [[ $(jq -r '[.[0].routes[].destination] | join(" ")' <<< "$info") == "$allowed/32" ]] || fail "routes of $egress_net: $(jq -c '.[0].routes' <<< "$info")"
+    [[ $(jq -r '.[0].dns_enabled' <<< "$info") == false ]] || fail "$egress_net has DNS"
+    nets=$("$as" podman inspect --format '{{json .NetworkSettings.Networks}}' "$name" | jq -r 'keys | sort | join(" ")')
+    [[ $nets == "$egress_net $net" ]] || fail "networks of $name: $nets (expected $egress_net and $net)"
+    in_ff "timeout 5 bash -c '</dev/tcp/$pg/5432'" || fail "Firefly no longer reaches $pg:5432"
+    in_ff "timeout 5 bash -c '</dev/tcp/$allowed/18999'" || fail "Firefly cannot reach the allowed address $allowed:18999"
+    if in_ff "timeout 5 bash -c '</dev/tcp/$forbidden/18999'" 2>/dev/null; then fail "Firefly reached $forbidden:18999, and only $allowed is allowed"; fi
+    if in_ff 'timeout 5 bash -c "</dev/tcp/1.1.1.1/443"' 2>/dev/null; then fail "Firefly reached 1.1.1.1:443, and only $allowed is allowed"; fi
+    if in_ff 'getent hosts example.com' >/dev/null 2>&1; then fail "Firefly resolved example.com"; fi
     ;;
   user)
     # A fictitious user, with a random password that goes to the list of secrets the job

@@ -10,6 +10,10 @@
 #   unreachable    last run could not reach the server: not a failure, last good kept
 #   failed <text>  last run failed and the status says <text>
 #   count          prints the number of snapshots on the server
+#   egress <allowed ip> <forbidden ip> <port>
+#                  the copy container's network lets it reach the first address and not
+#                  the second (R59), tried with a real container on that network
+#   no-egress      that network and its unit are gone
 #   destroyed      server unit gone, copies kept (SPEC 4.2)
 set -Eeuo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -130,11 +134,39 @@ case $1 in
   count)
     restic_direct snapshots --json | jq length
     ;;
+  egress)
+    allowed=$2 forbidden=$3 eport=$4 net=$copy-egress-net
+    # The network as Podman has it, not as its unit says.
+    info=$("$as" podman network inspect "$net")
+    [[ $(jq -r '.[0].options.no_default_route' <<< "$info") == true ]] || fail "$net has a default route: $info"
+    [[ $(jq -r '[.[0].routes[].destination] | join(" ")' <<< "$info") == "$allowed/32" ]] || fail "routes of $net: $(jq -c '.[0].routes' <<< "$info") (only $allowed/32 expected)"
+    [[ $(jq -r '.[0].dns_enabled' <<< "$info") == false ]] || fail "$net has DNS"
+    grep -qx "Network=$net.network" "$home/.config/containers/systemd/$copy.container" || fail "$copy is not on $net"
+    # A real container, with the image of the copy container. $1: its network, or
+    # "default" for Podman's own, which has a way out to everything.
+    reach() {
+      local network=()
+      [[ $1 == default ]] || network=(--network "$1")
+      "$as" podman run --rm "${network[@]}" --entrypoint /bin/sh "$restic_image" \
+        -c "wget -q -T 5 -O /dev/null http://$2:$eport/" > /dev/null 2>&1
+    }
+    # Without the limit both answer: otherwise the next two lines would prove nothing.
+    reach default "$allowed" || fail "control: $allowed:$eport does not answer even from Podman's default network"
+    reach default "$forbidden" || fail "control: $forbidden:$eport does not answer even from Podman's default network"
+    reach "$net" "$allowed" || fail "from $net the allowed address $allowed:$eport does not answer"
+    ! reach "$net" "$forbidden" || fail "from $net the address $forbidden:$eport answers, and only $allowed is allowed (R59)"
+    ;;
+  no-egress)
+    net=$copy-egress-net
+    ! "$as" podman network exists "$net" || fail "the network $net is still there"
+    ! "$as" test -e "$home/.config/containers/systemd/$net.network" || fail "$net.network is still installed"
+    ! grep -q "$net" "$home/.config/containers/systemd/$copy.container" || fail "$copy still uses $net"
+    ;;
   destroyed)
     ! "$as" test -e "$home/.config/containers/systemd/$server.container" || fail "$server.container is still installed"
     "$as" podman volume exists "$server-data" || fail "the copies were removed (SPEC 4.2)"
     [[ $(restic_direct snapshots --json | jq length) -gt 0 ]] || fail "the copies are gone"
     ;;
-  *) echo "usage: $0 server|installed|ok|append-only|unreachable|failed <text>|count|destroyed" >&2; exit 2 ;;
+  *) echo "usage: $0 server|installed|ok|append-only|unreachable|failed <text>|count|egress <ip> <ip> <port>|no-egress|destroyed" >&2; exit 2 ;;
 esac
 [[ $1 == count ]] || echo "ok: $1"

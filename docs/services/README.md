@@ -39,7 +39,16 @@ La norma completa está en [`NAMING.md`](../NAMING.md); incluye la tabla de nomb
 
 ## 4. Puertos
 
-- **La red de una instancia va en su bloque `networking`** (R59). Hoy solo se lee `inbound`; cualquier otra clave se rechaza hasta que exista.
+- **La red de una instancia va en su bloque `networking`** (R59). Hoy se leen `inbound` y `egress`; `connects_to` se rechaza hasta que exista.
+- **`egress`: a dónde sale.** Sin escribirlo, a ningún sitio. Con ella, la instancia tiene además una red propia, `<entorno>-<corto>-<instancia>-egress-net`:
+
+  | Escribes | Sale a |
+  | --- | --- |
+  | nada, o `egress: false` | Ningún sitio |
+  | `egress: ["192.168.1.20", "100.64.0.0/10"]` | Solo a esas direcciones o rangos IPv4. La red no tiene ruta a nada más, ni DNS. No valen nombres, ni nada dentro de `10.90.0.0/16`, que usa la plataforma para estas redes |
+  | `egress: true` | Todo: internet y tu red local. Con DNS |
+
+  Cambiar la lista vuelve a crear esa red y reinicia la instancia; quitar `egress` la borra. «Solo internet, sin red local» no se puede con Podman 4.9 ([`COMPATIBILITY.md`](../COMPATIBILITY.md)). El `plan check` enseña a dónde sale cada red, tal como la tiene Podman.
 - **Los puertos los escribes tú** en `networking.inbound.publish`, una lista con el formato de Podman y Docker: `<dirección>:<puerto>:<puerto interno>`, los tres obligatorios (R55). El puerto interno es el de la aplicación dentro del contenedor y lo dice su página (Firefly: `8080`).
 - **Lo habitual: `127.0.0.1` y puertos desde 18100**, uno por instancia: `18100`, `18101`… Con `127.0.0.1` solo se entra desde la propia máquina. Cualquier otra dirección abre la aplicación a esa red: lo decides tú, nada lo impide.
 - **La primera de la lista** es la que abre el lanzador y la que la aplicación da en sus enlaces.

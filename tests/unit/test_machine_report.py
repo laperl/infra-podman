@@ -121,7 +121,18 @@ class MachineReport(unittest.TestCase):
     def test_a_network_with_a_way_out_is_said(self) -> None:
         data = copy.deepcopy(HEALTHY)
         data["networks"][0]["internal"] = False
-        self.assertIn("prod-ff-casa-pg-main-net: CON SALIDA", report(data)[0])
+        self.assertIn("prod-ff-casa-pg-main-net: CON SALIDA A TODO (internet y red local), 10.89.0.0/24", report(data)[0])
+
+    def test_a_network_limited_to_some_destinations_says_which(self) -> None:
+        data = copy.deepcopy(HEALTHY)
+        data["networks"].append({
+            "name": "prod-backup-copy-egress-net", "internal": False, "dns_enabled": False,
+            "subnets": [{"subnet": "10.90.7.16/28", "gateway": "10.90.7.17"}],
+            "routes": [{"destination": "100.64.0.7/32", "gateway": "10.90.7.17"}],
+            "options": {"isolate": "true", "no_default_route": "true"}, "labels": {**LABELS, "infra.app": "backup"}})
+        text, problems = report(data)
+        self.assertEqual(problems, [])
+        self.assertIn("prod-backup-copy-egress-net: salida SOLO a 100.64.0.7/32, sin DNS, 10.90.7.16/28 (de backup)", text)
 
     def test_network_and_health_are_said_as_they_are(self) -> None:
         data = copy.deepcopy(HEALTHY)

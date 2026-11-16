@@ -97,7 +97,7 @@
 
         - name: Render the declared units under their real names
           ansible.builtin.template:
-            src: "{{ item.src }}{{ item.template }}"
+            src: "{{ (quadlet_roles_dir ~ '/quadlet_deploy/templates/') if item.common | default(false) else item.src }}{{ item.template }}"
             dest: "{{ quadlet_dest_dir }}/{{ item.name }}"
             mode: "0644"
           loop: "{{ quadlet_declared | default([]) }}"

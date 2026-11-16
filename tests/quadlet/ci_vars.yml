@@ -6,6 +6,9 @@ demo_image: "ghcr.io/example/demo@sha256:0123456789abcdef0123456789abcdef0123456
 demo_subnet: "10.89.250.0/24"
 demo_port: 8080
 postgres_superuser: ci_admin
+# The copy to a backup server on another machine, as in prod: the copy container gets its
+# own network with a route only to this address (R59).
+backup_remote_url: http://100.64.0.7:18000
 # Application databases with three consumers, so the role renders its .network units,
 # Firefly's among them (roles/firefly renders its instance ci and joins it).
 postgres_databases:

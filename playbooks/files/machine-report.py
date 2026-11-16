@@ -146,6 +146,17 @@ def container_line(container: dict) -> tuple[str, str]:
     return text, problem
 
 
+def network_kind(network: dict) -> str:
+    """Where a network lets its containers go, as Podman has it now (not as its unit says)."""
+    if network.get("internal"):
+        return "interna (sin salida)"
+    if (network.get("options") or {}).get("no_default_route") == "true":
+        routes = ", ".join(route.get("destination", "?") for route in network.get("routes") or [])
+        dns = ", CON DNS" if network.get("dns_enabled") else ", sin DNS"
+        return f"salida SOLO a {routes or 'ningún sitio'}{dns}"
+    return "CON SALIDA A TODO (internet y red local)"
+
+
 def describe_item(line: str) -> str:
     """One line of backup.conf or backup.d, in words."""
     kind, _, rest = line.partition(" ")
@@ -217,7 +228,7 @@ def report(data: dict, host: str, env: str, declared: list[str], secrets: list[s
     lines.append("REDES")
     for network in sorted(data["networks"], key=lambda item: item.get("name", "")):
         subnets = ", ".join(subnet.get("subnet", "?") for subnet in network.get("subnets") or [])
-        kind = "interna (sin salida)" if network.get("internal") else "CON SALIDA"
+        kind = network_kind(network)
         lines.append(f"  {network.get('name')}: {kind}, {subnets or 'sin subred'} (de {label(network, 'infra.app') or '?'})")
     if not data["networks"]:
         lines.append("  ninguna")

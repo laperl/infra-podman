@@ -1,0 +1,16 @@
+# Ansible managed
+# The way out of one container, only to the destinations below (R59): the network has no
+# default route, so nothing else can be reached, and no DNS, so nothing leaves that way.
+# Only that container is on it.
+[Network]
+NetworkName=dev-backup-copy-egress-net
+Subnet=10.90.163.144/28
+Gateway=10.90.163.145
+DisableDNS=true
+Options=no_default_route=true
+PodmanArgs=--route=100.64.0.7/32,10.90.163.145
+Options=isolate=true
+Label=infra.env=dev
+Label=infra.app=backup
+Label=infra.component=egress
+Label=infra.managed-by=infra-podman

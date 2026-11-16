@@ -8,5 +8,7 @@ backup_data_repo: true
 # Desktop notification in the operator's session when a backup fails or is too old.
 backup_notify: true
 # Copy of the backups to the backup server, every hour, through Tailscale (R44): the
-# server's Tailscale name (or IP) and its port (backup_server_networking). Without it, no copy.
-backup_remote_url: http://example-server.example-tailnet.ts.net:18000
+# server's Tailscale IP (`tailscale ip -4` there) and its port (backup_server_networking).
+# An IP, not a name: the copy container can reach only that address and has no DNS (R59).
+# Without it, no copy. The address below is an example.
+backup_remote_url: http://100.64.0.7:18000

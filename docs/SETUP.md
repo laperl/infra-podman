@@ -631,9 +631,9 @@ En `~/infra-podman-data`:
    ```yaml
    backup_server_max_size_gb: 30
    ```
-3. `inventory/prod/host_vars/laptop.yml`: adónde va la copia. Es el nombre de Tailscale del servidor principal, el que sale en `sudo tailscale serve status` sin `https://`, con `http://` delante y el puerto detrás:
+3. `inventory/prod/host_vars/laptop.yml`: adónde va la copia. Es la **IP** de Tailscale del servidor principal (en él, `tailscale ip -4`; no cambia), con `http://` delante y el puerto detrás. No vale su nombre: el contenedor que envía las copias solo puede llegar a esa dirección y no tiene DNS (R59).
    ```yaml
-   backup_remote_url: http://<nombre del servidor principal>.<tu red>.ts.net:18000
+   backup_remote_url: http://100.64.0.7:18000   # un ejemplo: pon la IP de tu servidor
    ```
 4. `inventory/dev/host_vars/vm.yml`, un fichero nuevo. La VM no tiene Tailscale: el servidor no se expone y la copia llega desde la propia VM.
    ```yaml

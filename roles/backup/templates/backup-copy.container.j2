@@ -40,9 +40,9 @@ Environment=BACKUP_REMOTE_WARN_PERCENT={{ backup_remote_warn_percent }}
 PodmanArgs=--entrypoint=/bin/sh --memory={{ backup_memory }} --cpus={{ backup_cpus }}
 PidsLimit={{ backup_pids_limit }}
 Exec=/scripts/backup-copy.sh
-{% if backup_remote_network %}
-Network={{ backup_remote_network }}
-{% endif %}
+# Its only way out (R59): to the backup server and nowhere else. In DEV and CI, where
+# the server is on the same machine, it shares the server's network instead.
+Network={{ backup_remote_network if backup_remote_network else backup_copy_network ~ '.network' }}
 
 ReadOnly=true
 Tmpfs=/tmp

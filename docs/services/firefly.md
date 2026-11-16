@@ -25,6 +25,8 @@ Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, bac
 
 ## 2. Red: sin salida a internet
 
+Así es mientras no escribas `networking.egress` en la instancia ([`README.md`](README.md), apartado 4): Firefly no la necesita para funcionar.
+
 - **Cada instancia está en su red de Podman interna**, sin salida, cuyo único otro miembro es su Postgres: `prod-ff-<instancia>-pg-main-net` ([SPEC](../SPEC.md) 4.4, 4.12). Ni internet, ni la red de casa, ni otros contenedores.
 - **Se llega a él solo desde el portátil**, por un puerto en `127.0.0.1`, publicado desde esa misma red interna. Elegido por el operador el 2026-11-07 frente a un proxy delante o una segunda red. Sin root funciona y el contenedor sigue sin salida (comprobado con Podman 4.9.3, [`COMPATIBILITY.md`](../COMPATIBILITY.md)); con root no funcionaría. Probado en `lifecycle` con Podman 4.9; 🔍 falta probarlo en el portátil, con Podman 5 y SELinux.
 - **Siempre en marcha**, como servicio de `svc_runner`, y se abre desde el menú de Sway con su lanzador (R47).
