@@ -27,13 +27,19 @@ backup_notify_max_age_hours: 36
 # host_vars of the data repository. Every hour, if the server answers, restic copies
 # there the snapshots it does not have yet. The local repository is never changed.
 #   backup_remote_url: the server, without a path. In prod, the main server through Tailscale:
-#     http://<Tailscale name or IP of the main server>:<its port, backup_server_networking>. In dev and CI, where
+#     http://<Tailscale IP of the main server>:<its port, backup_server_networking>. In dev and CI, where
 #     server and client are the same machine: http://127.0.0.1:8000, with
 #   backup_remote_network: container:<env>-backup-server (it shares the server's network).
 #   The repository there is <infra_site>/<infra_env>-<this machine>, and the user infra_site
 #   (rest-server accepts at most two folder levels).
 backup_remote_url: ""
 backup_remote_network: ""
+# The way out of the copy container (R59): its own network, with a route only to the
+# address of backup_remote_url, which must therefore be an IP and not a name (the network
+# has no DNS). Not with backup_remote_network, where it shares the server's network.
+backup_copy_network: "{{ backup_copy_name }}-egress-net"
+backup_remote_host: "{{ backup_remote_url | regex_replace('^https?://([^:/]*).*$', '\\1') }}"
+backup_copy_egress: "{{ backup_remote_url | length > 0 and backup_remote_network | length == 0 }}"
 # The server's size limit (group_vars/all.yml, shared with the server) and when to warn.
 backup_remote_max_size_gb: "{{ backup_server_max_size_gb | default(30) }}"
 backup_remote_warn_percent: 80
@@ -84,3 +90,8 @@ backup_quadlet_units:
     name: "{{ backup_volume }}.volume"
   - template: backup-copy.container.j2
     name: "{{ backup_copy_name }}.container"
+  - template: egress.network.j2
+    common: true
+    name: "{{ backup_copy_network }}.network"
+    egress: ["{{ backup_remote_host }}"]
+    app: backup

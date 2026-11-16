@@ -1,0 +1,5 @@
+# A network that is not internal and does not say it is a way out.
+[Network]
+NetworkName={{ infra_env }}-demo-db-net
+Label="infra.env={{ infra_env }}" "infra.app=demo" "infra.component=network" "infra.managed-by=infra-podman"
+Options=isolate=true

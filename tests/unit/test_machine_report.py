@@ -30,6 +30,7 @@ HEALTHY = {
     "networks": [{"name": "prod-ff-casa-pg-main-net", "internal": True, "subnets": [{"subnet": "10.89.0.0/24"}],
                   "labels": {**LABELS, "infra.app": "pg-main"}}],
     "secrets": ["prod-pg-main-superuser-password", "prod-ff-casa-app-key", "unrelated"],
+    "network_stack": "netavark 1.14.0",
     "timers": {
         "prod-backup.timer": {"ActiveState": "active", "NextElapseUSecRealtime": "Sun 2026-11-15 13:00:00 CET",
                               "LastTriggerUSec": "Sat 2026-11-14 13:00:02 CET"},
@@ -121,7 +122,28 @@ class MachineReport(unittest.TestCase):
     def test_a_network_with_a_way_out_is_said(self) -> None:
         data = copy.deepcopy(HEALTHY)
         data["networks"][0]["internal"] = False
-        self.assertIn("prod-ff-casa-pg-main-net: CON SALIDA", report(data)[0])
+        self.assertIn("prod-ff-casa-pg-main-net: CON SALIDA A TODO (internet y red local), 10.89.0.0/24", report(data)[0])
+
+    def test_a_network_limited_to_some_destinations_says_which(self) -> None:
+        data = copy.deepcopy(HEALTHY)
+        data["networks"].append({
+            "name": "prod-backup-copy-egress-net", "internal": False, "dns_enabled": False,
+            "subnets": [{"subnet": "10.90.7.16/28", "gateway": "10.90.7.17"}],
+            "routes": [{"destination": "100.64.0.7/32", "gateway": "10.90.7.17"}],
+            "options": {"isolate": "true", "no_default_route": "true"}, "labels": {**LABELS, "infra.app": "backup"}})
+        text, problems = report(data)
+        self.assertEqual(problems, [])
+        self.assertIn("prod-backup-copy-egress-net: salida SOLO a 100.64.0.7/32, sin DNS, 10.90.7.16/28 (de backup)", text)
+        # The same network where the routes are ignored (Ubuntu 24.04): said, and a problem.
+        for stack in ("netavark 1.4.0", "netavark 1.6.9", "cni", ""):
+            data["network_stack"] = stack
+            text, problems = report(data)
+            self.assertIn("dice salir solo a 100.64.0.7/32, pero ESTA MÁQUINA NO LIMITA", text, stack)
+            self.assertIn("SALE A TODO", text)
+            self.assertEqual(problems, ["la red prod-backup-copy-egress-net no limita la salida en esta máquina: "
+                                        "hace falta netavark 1.7.0 o posterior"], stack)
+        data["network_stack"] = "netavark 1.7.0"
+        self.assertEqual(report(data)[1], [])
 
     def test_network_and_health_are_said_as_they_are(self) -> None:
         data = copy.deepcopy(HEALTHY)

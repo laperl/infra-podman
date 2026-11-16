@@ -11,6 +11,7 @@ Exit code 0 when every file complies, 1 otherwise.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import shlex
 import sys
@@ -178,6 +179,44 @@ def check_hardening(path: Path, values: dict[str, list[str]], allowed: set[str])
     return errors
 
 
+def check_network(path: Path, values: dict[str, list[str]], labels: dict[str, str]) -> list[str]:
+    """R59: a network is internal, or it is the one way out of a container, written as such.
+
+    A way out limited to some destinations works by routing: no default route and one route
+    per destination through the gateway of the network. Podman accepts a gateway outside
+    the subnet without a word, and then nothing is reachable, so that is checked here.
+    """
+    errors: list[str] = []
+    internal = [v.lower() for v in values.get("Internal", [])] == ["true"]
+    limited = "no_default_route=true" in values.get("Options", [])
+    if not internal and labels.get("infra.component") != "egress":
+        errors.append(f"{path}: a network with a way out must say so: Internal=true, or "
+                      "Label=infra.component=egress (roles/quadlet_deploy/templates/egress.network.j2, R59)")
+    if not limited:
+        return errors
+    routes = [v[len("--route="):] for v in values.get("PodmanArgs", []) if v.startswith("--route=")]
+    try:
+        subnet = ipaddress.ip_network(values.get("Subnet", [""])[0])
+        gateway = ipaddress.ip_address(values.get("Gateway", [""])[0])
+        destinations = [(ipaddress.ip_network(route.split(",")[0]), route.split(",")[1]) for route in routes]
+    except (ValueError, IndexError) as error:
+        return errors + [f"{path}: a network without default route needs Subnet=, Gateway= and "
+                         f"PodmanArgs=--route=<destination>,<gateway>, all valid: {error} (R59)"]
+    if gateway not in subnet:
+        errors.append(f"{path}: Gateway={gateway} is not inside Subnet={subnet} (R59)")
+    if not destinations:
+        errors.append(f"{path}: a network without default route and without any --route reaches nothing (R59)")
+    for destination, via in destinations:
+        if via != str(gateway):
+            errors.append(f"{path}: the route to {destination} goes through {via}, not through Gateway={gateway} (R59)")
+        if destination.overlaps(subnet):
+            errors.append(f"{path}: the destination {destination} overlaps the network's own Subnet={subnet} (R59)")
+    if [v.lower() for v in values.get("DisableDNS", [])] != ["true"]:
+        errors.append(f"{path}: a network limited to some destinations needs DisableDNS=true: "
+                      "its DNS would be another way out (R59)")
+    return errors
+
+
 def logical_lines(text: str):
     """Yield (line_number, line) joining backslash continuations, skipping comments."""
     buffer, start = "", 0
@@ -230,6 +269,8 @@ def check_file(path: Path) -> list[str]:
         errors += check_exposure_and_limits(path, values)
         allowed, exception_errors = policy_exceptions(path, text)
         errors += exception_errors + check_hardening(path, values, allowed)
+    if path.suffix == ".network":
+        errors += check_network(path, values, labels)
     return errors + check_names_and_labels(path, keys, labels)
 
 

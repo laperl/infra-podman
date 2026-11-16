@@ -68,7 +68,7 @@
   ansible.builtin.include_role:
     name: quadlet_deploy
   vars:
-    quadlet_deploy_units: "{{ firefly_quadlet_units }}"
+    quadlet_deploy_units: "{{ firefly_quadlet_units + [firefly_egress_unit] }}"
     quadlet_deploy_state: absent
     quadlet_deploy_purge: true
 

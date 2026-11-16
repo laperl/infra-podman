@@ -90,8 +90,11 @@
     name: quadlet_deploy
   vars:
     quadlet_deploy_units: >-
-      {{ backup_quadlet_units | rejectattr('name', 'equalto', backup_copy_name ~ '.container') | list
-         if backup_remote_url | length == 0 else backup_quadlet_units }}
+      {{ backup_quadlet_units
+         | rejectattr('name', 'in', ([] if backup_remote_url | length > 0 else [backup_copy_name ~ '.container'])
+                                    + ([] if backup_copy_egress | bool else [backup_copy_network ~ '.network']))
+         | list }}
+    quadlet_deploy_absent_networks: "{{ [] if backup_copy_egress | bool else [backup_copy_network] }}"
     quadlet_deploy_images:
       - "{{ restic_image }}"
     quadlet_deploy_start: false

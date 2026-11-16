@@ -93,6 +93,7 @@ def collect() -> dict:
         "volumes": run_json("podman", "volume", "ls", "--filter", MANAGED, "--format", "json"),
         "networks": run_json("podman", "network", "ls", "--filter", MANAGED, "--format", "json"),
         "secrets": run("podman", "secret", "ls", "--format", "{{.Name}}").split(),
+        "network_stack": run("podman", "info", "--format", "{{.Host.NetworkBackendInfo.Version}}").strip(),
         "timers": {timer: unit_properties(timer) for timer in timers},
         "services": {service: unit_properties(service) for service in services},
         "backup_items": read_lines(os.path.join(backup, "backup.conf")) + [
@@ -144,6 +145,31 @@ def container_line(container: dict) -> tuple[str, str]:
     text = (f"{name}: {health}. Entrada: {ports}. Redes: {networks}. "
             f"Imagen: {short_image(container.get('Image', '?'))}")
     return text, problem
+
+
+def limits_routes(stack: str) -> bool:
+    """Whether this network stack honours a network without default route: netavark from
+    1.7.0. An older one stores the routes and ignores them (docs/COMPATIBILITY.md)."""
+    name, _, version = stack.partition(" ")
+    try:
+        return name == "netavark" and tuple(int(part) for part in version.split(".")[:2]) >= (1, 7)
+    except ValueError:
+        return False
+
+
+def network_kind(network: dict, stack: str) -> tuple[str, str]:
+    """(text, problem): where a network lets its containers go, as it really is here."""
+    if network.get("internal"):
+        return "interna (sin salida)", ""
+    if (network.get("options") or {}).get("no_default_route") == "true":
+        routes = ", ".join(route.get("destination", "?") for route in network.get("routes") or [])
+        if not limits_routes(stack):
+            return (f"dice salir solo a {routes or 'ningún sitio'}, pero ESTA MÁQUINA NO LIMITA "
+                    f"({stack or 'pila de red desconocida'}): SALE A TODO (internet y red local)",
+                    f"la red {network.get('name')} no limita la salida en esta máquina: hace falta netavark 1.7.0 o posterior")
+        dns = ", CON DNS" if network.get("dns_enabled") else ", sin DNS"
+        return f"salida SOLO a {routes or 'ningún sitio'}{dns}", ""
+    return "CON SALIDA A TODO (internet y red local)", ""
 
 
 def describe_item(line: str) -> str:
@@ -217,7 +243,9 @@ def report(data: dict, host: str, env: str, declared: list[str], secrets: list[s
     lines.append("REDES")
     for network in sorted(data["networks"], key=lambda item: item.get("name", "")):
         subnets = ", ".join(subnet.get("subnet", "?") for subnet in network.get("subnets") or [])
-        kind = "interna (sin salida)" if network.get("internal") else "CON SALIDA"
+        kind, problem = network_kind(network, data.get("network_stack", ""))
+        if problem:
+            problems.append(problem)
         lines.append(f"  {network.get('name')}: {kind}, {subnets or 'sin subred'} (de {label(network, 'infra.app') or '?'})")
     if not data["networks"]:
         lines.append("  ninguna")

@@ -21,6 +21,10 @@ Volume={{ firefly_volume }}.volume:/var/www/html/storage/upload:Z
 # (SPEC 4.4, R45, R48). It is published where the operator wrote in inbound.publish of the
 # inventory (R55), from that same internal network.
 Network={{ firefly_network }}.network
+{% if firefly_egress %}
+# Its way out, as networking.egress of the inventory says (R59).
+Network={{ firefly_egress_network }}.network
+{% endif %}
 {% for firefly_published in firefly_publish %}
 PublishPort={{ firefly_published }}
 {% endfor %}

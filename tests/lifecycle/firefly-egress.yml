@@ -1,0 +1,16 @@
+---
+# The firefly job, step "A way out only where the operator says": the two instances of
+# tests/lifecycle/inventory.yml, with casa allowed out to one address of the runner (R59).
+# Used with -e lifecycle_allowed=<address>.
+firefly_instances:
+  - name: casa
+    networking:
+      inbound: {publish: ["127.0.0.1:18100:8080"]}
+      egress: ["{{ lifecycle_allowed }}"]
+    timezone: Europe/Madrid
+    start_timeout: 60
+  - name: canary
+    networking: {inbound: {publish: ["127.0.0.1:18101:8080"]}}
+    image: firefly_ci_image
+    memory: 768m
+    launcher_command: [flatpak, run, org.mozilla.firefox, --new-window]
