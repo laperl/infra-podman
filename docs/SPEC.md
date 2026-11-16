@@ -105,7 +105,8 @@ El rol `quadlet_deploy`, para cada servicio:
 2. Las valida con el generador de Quadlet del propio servidor antes de instalarlas: `QUADLET_UNIT_DIRS=<temporal> /usr/lib/systemd/system-generators/podman-system-generator --user --dryrun`. Esa ruta y esa variable están documentadas en el manual de Podman 4.9 de Ubuntu 24.04.
 3. Si es válido, las copia a `~/.config/containers/systemd/` del usuario de servicio.
 4. Ejecuta `daemon-reload` y reinicia solo lo que cambió, mediante handlers con `ansible.builtin.systemd_service` y `scope: user`. Hay que gestionar `XDG_RUNTIME_DIR` al cambiar de usuario.
-5. Al destruir un servicio, elimina el `.container` pero **nunca el `.volume`**, salvo purga explícita.
+5. Una red cuyo fichero cambia **se vuelve a crear**: Podman no modifica una red que ya existe, así que sin eso el cambio no tendría efecto. Para ello se paran y se arrancan los contenedores que la usan, y el `plan` lo anuncia. Una red que el rol ya no quiere se borra. Una red no guarda datos; un volumen sí, y nunca se toca así (R59).
+6. Al destruir un servicio, elimina el `.container` pero **nunca el `.volume`**, salvo purga explícita.
 
 Un segundo `apply` sin cambios debe dar **cero cambios** (idempotencia).
 

@@ -1,0 +1,71 @@
+---
+# Included once for each .network unit that changed and whose network already exists.
+# Podman keeps an existing network as it is (the generated service runs
+# `podman network create --ignore`), so the new unit would have no effect and nobody would
+# notice. A network holds no data: stop what uses it, remove it and create it again.
+- name: List the containers on {{ quadlet_deploy_network }}
+  ansible.builtin.command:
+    cmd: podman ps --all --filter network={{ quadlet_deploy_network }} --format {% raw %}'{{.Names}}'{% endraw %}
+  environment: "{{ quadlet_deploy_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_network_users
+  changed_when: false
+  check_mode: false
+
+- name: Show what would be done to create again {{ quadlet_deploy_network }}
+  ansible.builtin.debug:
+    msg: >-
+      Would create the network {{ quadlet_deploy_network }} again, because its unit changed
+      {{ ('and would stop and start: ' ~ quadlet_deploy_network_users.stdout_lines | join(', '))
+         if quadlet_deploy_network_users.stdout_lines | length > 0 else '(no container uses it now)' }}.
+  when: ansible_check_mode
+
+- name: Create again {{ quadlet_deploy_network }}
+  when: not ansible_check_mode
+  block:
+    - name: Stop the containers on the network
+      ansible.builtin.systemd_service:
+        name: "{{ item }}.service"
+        state: stopped
+        scope: user
+      loop: "{{ quadlet_deploy_network_users.stdout_lines }}"
+      environment: "{{ quadlet_deploy_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+
+    - name: Remove the network
+      ansible.builtin.command:
+        cmd: podman network rm {{ quadlet_deploy_network }}
+      environment: "{{ quadlet_deploy_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      changed_when: true
+
+    - name: Reload the service user's systemd
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+        scope: user
+      environment: "{{ quadlet_deploy_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+
+    # Its service is a one-shot that stays "active": only a restart runs it again.
+    - name: Create the network from its new unit
+      ansible.builtin.systemd_service:
+        name: "{{ quadlet_deploy_network }}-network.service"
+        state: restarted
+        scope: user
+      environment: "{{ quadlet_deploy_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+
+    - name: Start the containers that were stopped
+      ansible.builtin.systemd_service:
+        name: "{{ item }}.service"
+        state: started
+        scope: user
+      loop: "{{ quadlet_deploy_network_users.stdout_lines }}"
+      environment: "{{ quadlet_deploy_env }}"
+      become: true
+      become_user: "{{ service_user }}"

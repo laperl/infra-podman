@@ -24,6 +24,10 @@ quadlet_deploy_health_delay: 5
 # only; never start them, nor restart them when their unit changes.
 quadlet_deploy_start: true
 
+# Networks (by name) that this role installed before and no longer wants: their unit and
+# the network are removed once the containers run without them. A network holds no data.
+quadlet_deploy_absent_networks: []
+
 # present: install, validate and start. absent: stop and remove the .container files only;
 # the .volume and .network files and the data stay (SPEC 4.2, 8).
 quadlet_deploy_state: present

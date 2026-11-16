@@ -1,0 +1,32 @@
+---
+# Included, before anything is written, once for each .network unit that is about to
+# change and whose network already exists: it will be created again
+# (recreate_network.yml), which stops what uses it. Only units of the platform are
+# stopped; anything else on the network stops the apply here, with nothing changed.
+- name: List the containers on {{ quadlet_deploy_network }}
+  ansible.builtin.command:
+    cmd: podman ps --all --filter network={{ quadlet_deploy_network }} --format {% raw %}'{{.Names}}'{% endraw %}
+  environment: "{{ quadlet_deploy_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_network_users
+  changed_when: false
+  check_mode: false
+
+- name: Find which of them have a unit of the platform
+  ansible.builtin.stat:
+    path: "{{ quadlet_deploy_dir }}/{{ item }}.container"
+  loop: "{{ quadlet_deploy_network_users.stdout_lines }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_network_units
+
+- name: Refuse to touch a container that is not a unit of the platform
+  ansible.builtin.assert:
+    that: quadlet_deploy_network_units.results | rejectattr('stat.exists') | list | length == 0
+    fail_msg: >-
+      The network {{ quadlet_deploy_network }} is about to change and has to be created again, but
+      {{ quadlet_deploy_network_units.results | rejectattr('stat.exists') | map(attribute='item') | join(', ') }}
+      uses it and is not a unit of this platform. Remove that container by hand (as the service user:
+      podman rm -f <name>) and apply again. Nothing has been changed.
+    quiet: true
