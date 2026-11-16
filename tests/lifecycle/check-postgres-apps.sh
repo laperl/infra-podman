@@ -60,13 +60,19 @@ case $1 in
     ai_subnet=$("$as" podman network inspect "$ai_net" --format '{{range .Subnets}}{{.Subnet}}{{end}}')
     [[ $demo_subnet != "$ai_subnet" ]] || fail "both networks got the same subnet"
     hba=$("$as" cat "$home/.config/infra-podman/$name/pg_hba.conf")
-    for line in "\"demo\"  \"demo_app\"  $demo_subnet  scram-sha-256" "\"demo\"  \"demo_rw\"  $demo_subnet  scram-sha-256" \
-                "\"demo\"  \"demo_ro\"  $demo_subnet  scram-sha-256" "\"demo\"  \"demo_ai\"  $ai_subnet  scram-sha-256"; do
-      grep -qF "host    $line" <<<"$hba" || fail "pg_hba.conf has no line '$line'"
+    # Both applications name demo in their pg_hba (apps-vars.yml): every user of demo, from
+    # each of the two networks, and nothing else (docs/NETWORK.md, section 4).
+    expected=()
+    for user in demo_ai demo_app demo_ro demo_rw; do
+      for subnet in "$demo_subnet" "$ai_subnet"; do
+        line="\"demo\"  \"$user\"  $subnet  scram-sha-256"
+        grep -qF "host    $line" <<<"$hba" || fail "pg_hba.conf has no line '$line'"
+        expected+=("$user@${subnet%/*}")
+      done
     done
     [[ $(sql "SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL") == 0 ]] || fail "pg_hba.conf has errors"
-    [[ $(sql "SELECT string_agg(user_name[1] || '@' || address, ' ' ORDER BY user_name[1]) FROM pg_hba_file_rules
-              WHERE database = '{demo}'") == "demo_ai@${ai_subnet%/*} demo_app@${demo_subnet%/*} demo_ro@${demo_subnet%/*} demo_rw@${demo_subnet%/*}" ]] \
+    [[ $(sql "SELECT string_agg(user_name[1] || '@' || address, ' ' ORDER BY user_name[1] || '@' || address) FROM pg_hba_file_rules
+              WHERE database = '{demo}'") == "$(printf '%s\n' "${expected[@]}" | LC_ALL=C sort | xargs)" ]] \
       || fail "PostgreSQL does not read the lines of the users: $(sql "SELECT user_name, address FROM pg_hba_file_rules WHERE database = '{demo}'")"
     echo "::notice title=Application networks::$demo_net $demo_subnet, $ai_net $ai_subnet (chosen by Podman)"
     ;;
