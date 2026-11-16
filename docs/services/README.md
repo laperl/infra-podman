@@ -48,6 +48,15 @@ La norma completa está en [`NAMING.md`](../NAMING.md); incluye la tabla de nomb
   | `egress: ["192.168.1.20", "100.64.0.0/10"]` | Solo a esas direcciones o rangos IPv4. La red no tiene ruta a nada más, ni DNS. No valen nombres, ni nada dentro de `10.90.0.0/16`, que usa la plataforma para estas redes |
   | `egress: true` | Todo: internet y tu red local. Con DNS |
 
+  **La lista solo limita con netavark 1.7.0 o posterior** (Fedora con Podman 5, Ubuntu 26.04). Con uno anterior, como el 1.4.0 de Ubuntu 24.04, la red se crea **sin límite y sale a todo**: el `plan` y el `apply` lo avisan (`WARNING: … limits the way out …`) y el `plan check` lo cuenta como problema (`ESTA MÁQUINA NO LIMITA`). El motivo está en [`COMPATIBILITY.md`](../COMPATIBILITY.md). Para comprobar a mano que limita, desde dentro del contenedor (con una imagen que traiga `bash`):
+
+  ```bash
+  svc podman exec <contenedor> bash -c 'timeout 5 bash -c "</dev/tcp/<destino permitido>/<puerto>" && echo LLEGA || echo "NO LLEGA"'
+  svc podman exec <contenedor> bash -c 'timeout 5 bash -c "</dev/tcp/1.1.1.1/443" && echo LLEGA || echo "NO LLEGA"'
+  ```
+
+  La primera debe decir `LLEGA` y la segunda `NO LLEGA`.
+
   Cambiar la lista vuelve a crear esa red y reinicia la instancia; quitar `egress` la borra. «Solo internet, sin red local» no se puede con Podman 4.9 ([`COMPATIBILITY.md`](../COMPATIBILITY.md)). El `plan check` enseña a dónde sale cada red, tal como la tiene Podman.
 - **Los puertos los escribes tú** en `networking.inbound.publish`, una lista con el formato de Podman y Docker: `<dirección>:<puerto>:<puerto interno>`, los tres obligatorios (R55). El puerto interno es el de la aplicación dentro del contenedor y lo dice su página (Firefly: `8080`).
 - **Lo habitual: `127.0.0.1` y puertos desde 18100**, uno por instancia: `18100`, `18101`… Con `127.0.0.1` solo se entra desde la propia máquina. Cualquier otra dirección abre la aplicación a esa red: lo decides tú, nada lo impide.

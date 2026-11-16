@@ -59,6 +59,35 @@
   become: true
   become_user: "{{ service_user }}"
 
+# A way out limited to some destinations (egress.network.j2) is done with routes, which
+# netavark honours from 1.7.0. An older one accepts them and ignores them, without a word:
+# the network would look limited and reach everything. Said here, in plan and in apply,
+# and by the check playbook as a problem (docs/COMPATIBILITY.md).
+- name: Ask Podman for its network stack
+  ansible.builtin.command:
+    cmd: podman info --format {% raw %}'{{.Host.NetworkBackendInfo.Version}}'{% endraw %}
+  environment: "{{ quadlet_deploy_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_network_stack
+  changed_when: false
+  check_mode: false
+  when: quadlet_deploy_limited | length > 0
+
+- name: Warn that this machine does not limit the way out
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: {{ quadlet_deploy_limited | join(', ') }} limits the way out of its container to some
+      destinations with routes, and this machine has {{ quadlet_deploy_network_stack.stdout }}, which
+      ignores them (netavark 1.7.0 or newer is needed). The network is created WITHOUT that limit: its
+      container can reach everything, the internet and the local network. `./deploy.sh plan check`
+      reports it as a problem. See docs/COMPATIBILITY.md.
+  when:
+    - quadlet_deploy_limited | length > 0
+    - not quadlet_deploy_network_stack.stdout is match('netavark ')
+      or (quadlet_deploy_network_stack.stdout | regex_search('[0-9]+\.[0-9]+\.[0-9]+') | default('0.0.0', true))
+      is version('1.7.0', '<')
+
 # Before writing anything: a network whose unit is about to change and that already
 # exists will be created again, and that must be possible (network_users.yml).
 - name: See which network units are about to change

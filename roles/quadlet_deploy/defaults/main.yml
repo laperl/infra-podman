@@ -14,6 +14,10 @@ quadlet_deploy_units: []
 # would be this role's own. Only set it to use another folder.
 quadlet_deploy_templates: "{{ ansible_parent_role_paths[0] }}/templates"
 quadlet_deploy_common: "{{ role_path }}/templates"
+# The networks of this call with a way out limited to some destinations (egress: a list).
+quadlet_deploy_limited: >-
+  {{ quadlet_deploy_units | selectattr('egress', 'defined') | rejectattr('egress', 'boolean')
+     | map(attribute='name') | map('regex_replace', '\.network$', '') | list }}
 
 # Images the units use, pulled before starting so the first start does not run into
 # TimeoutStartSec while downloading.

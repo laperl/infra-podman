@@ -537,6 +537,7 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Motivo:** R56 dejaba en el rol si una aplicación sale a internet y con quién habla, y solo existía la red con Postgres. Que una aplicación pueda salir no significa que el operador quiera que salga: es decisión suya. El rol solo dice qué necesita la aplicación para funcionar.
 - **Cambia R56:** el contrato del rol pasa a decir lo que la aplicación necesita, no lo que se le concede.
 - **Por pasos:** primero, el bloque `networking` con `inbound` dentro (este cambio; `inbound` suelto y `backup_server_inbound` dejan de leerse). Después `egress` y, por último, `connects_to`. Hasta entonces, una clave de `networking` que aún no se lee se rechaza: no se ignora en silencio. El estado está en `docs/ROADMAP.md`.
+- **Límite de `egress` con lista (2026-11-16):** se hace con rutas, que necesitan netavark 1.7.0 o posterior. En una máquina con uno anterior (Ubuntu 24.04 trae el 1.4.0) no limita y la red sale a todo. El operador decidió no rechazarlo ni construir un contenedor intermedio: se avisa al planificar y al aplicar, y `check` lo cuenta como problema. Con Ubuntu 26.04 en el servidor y en DEV limitará en todas partes.
 - **Fuera:** conexiones entre máquinas (son entrada en una y salida en la otra), salida filtrada por nombre de dominio, IPv6 y la red del host.
 - **Aprobada por:** el operador, el 2026-11-16.
 - **SPEC:** 4.4.

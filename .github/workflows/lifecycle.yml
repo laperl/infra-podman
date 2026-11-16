@@ -480,9 +480,12 @@ jobs:
         run: |
           read -r ip1 ip2 _ < <(hostname -I)
           [[ -n $ip2 ]] || { echo "::error::the runner has a single address and this test needs two"; exit 1; }
-          tests/lifecycle/playbook.sh -i "$INV" -e "lifecycle_allowed=$ip1" -e @tests/lifecycle/firefly-egress.yml playbooks/firefly.yml 2>&1 | tee -a all.log
+          EGRESS=(-e "lifecycle_allowed=$ip1" -e @tests/lifecycle/firefly-egress.yml)
+          tests/lifecycle/playbook.sh -i "$INV" "${EGRESS[@]}" playbooks/firefly.yml 2>&1 | tee egress.log | tee -a all.log
           $CHECK running casa
           $CHECK egress casa "$ip1" "$ip2"
+          tests/lifecycle/playbook.sh -i "$INV" "${EGRESS[@]}" playbooks/check.yml > check.log 2>&1
+          $CHECK told casa egress.log check.log
           $CHECK isolation canary
           tests/lifecycle/playbook.sh -i "$INV" playbooks/firefly.yml 2>&1 | tee -a all.log
           ! $AS podman network exists dev-ff-casa-egress-net || { echo "::error::dev-ff-casa-egress-net is still there"; exit 1; }
@@ -844,8 +847,11 @@ jobs:
           mkdir "$RUNNER_TEMP/www"
           python3 -m http.server 18999 --bind 0.0.0.0 --directory "$RUNNER_TEMP/www" > /dev/null 2>&1 &
           web=$!
-          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup.yml -e "backup_remote_url=http://$ip1:18999" 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/backup.yml -e "backup_remote_url=http://$ip1:18999" 2>&1 | tee egress.log | tee -a all.log
           $CHECK egress "$ip1" "$ip2" 18999
+          # Whether this runner limits depends on its netavark: said in the apply and in check.
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/check.yml > check.log 2>&1
+          $CHECK told egress.log check.log
           # Another destination: Podman keeps an existing network as it is, so the network
           # must have been created again (SPEC 4.2).
           tests/lifecycle/playbook.sh -i "$INV" playbooks/backup.yml -e "backup_remote_url=http://$ip2:18999" 2>&1 | tee -a all.log

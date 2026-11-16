@@ -11,6 +11,9 @@
 #   egress <instance> <allowed ip> <forbidden ip>
 #              with networking.egress: [<allowed ip>], it reaches that address and nothing
 #              else: not the other address of the runner, not the internet (R59)
+#   told <instance> <apply log> <check log>
+#              the apply and the check playbook say whether this machine really limits
+#              that way out (it needs netavark 1.7.0 or newer)
 #   user       the first user, through the registration page, as the operator does it
 #   cron       the scheduled tasks run inside the container, from their service
 #   launcher   the operator's .desktop file is valid and opens 127.0.0.1:<its port>
@@ -57,6 +60,25 @@ healthy() { # healthy <seconds>
   return 1
 }
 
+# Whether this machine limits a way out with routes: netavark 1.7.0 or newer. An older
+# one, like Ubuntu 24.04's 1.4.0, ignores them, and the platform has to say so.
+limits() {
+  local stack
+  stack=$("$as" podman info --format '{{.Host.NetworkBackendInfo.Version}}')
+  [[ $stack == "netavark "* && $(printf '%s\n' 1.7.0 "${stack#netavark }" | sort -V | head -n 1) == 1.7.0 ]]
+}
+# told <apply log> <check log>: the apply and the check playbook say the truth about it.
+told() {
+  if limits; then
+    ! grep -q 'WARNING: .* limits the way out' "$1" || fail "the apply warns that this machine does not limit, and it does"
+    ! grep -q 'ESTA MÁQUINA NO LIMITA' "$2" || fail "the check report says this machine does not limit, and it does"
+    grep -q 'salida SOLO a' "$2" || fail "the check report does not show the limited network"
+  else
+    grep -q 'WARNING: .* limits the way out' "$1" || fail "this machine does not limit the way out and the apply did not warn"
+    grep -q 'ESTA MÁQUINA NO LIMITA' "$2" || fail "this machine does not limit the way out and the check report does not say so"
+    grep -q 'no limita la salida en esta máquina' "$2" || fail "the check report does not count it as a problem"
+  fi
+}
 case $step in
   running)
     [[ $("$as" systemctl --user is-active "$name.service") == active ]] || fail "$name.service is not active"
@@ -186,10 +208,15 @@ case $step in
     [[ $nets == "$egress_net $net" ]] || fail "networks of $name: $nets (expected $egress_net and $net)"
     in_ff "timeout 5 bash -c '</dev/tcp/$pg/5432'" || fail "Firefly no longer reaches $pg:5432"
     in_ff "timeout 5 bash -c '</dev/tcp/$allowed/18999'" || fail "Firefly cannot reach the allowed address $allowed:18999"
-    if in_ff "timeout 5 bash -c '</dev/tcp/$forbidden/18999'" 2>/dev/null; then fail "Firefly reached $forbidden:18999, and only $allowed is allowed"; fi
-    if in_ff 'timeout 5 bash -c "</dev/tcp/1.1.1.1/443"' 2>/dev/null; then fail "Firefly reached 1.1.1.1:443, and only $allowed is allowed"; fi
+    if limits; then
+      if in_ff "timeout 5 bash -c '</dev/tcp/$forbidden/18999'" 2>/dev/null; then fail "Firefly reached $forbidden:18999, and only $allowed is allowed"; fi
+      if in_ff 'timeout 5 bash -c "</dev/tcp/1.1.1.1/443"' 2>/dev/null; then fail "Firefly reached 1.1.1.1:443, and only $allowed is allowed"; fi
+    else
+      echo "::notice title=check-firefly egress::this machine does not limit the way out (netavark older than 1.7.0): that $forbidden is out of reach cannot be tried here"
+    fi
     if in_ff 'getent hosts example.com' >/dev/null 2>&1; then fail "Firefly resolved example.com"; fi
     ;;
+  told) told "${3:?}" "${4:?}" ;;
   user)
     # A fictitious user, with a random password that goes to the list of secrets the job
     # looks for in its output. Without internet: the password check against

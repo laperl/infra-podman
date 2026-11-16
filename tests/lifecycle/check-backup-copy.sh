@@ -13,6 +13,9 @@
 #   egress <allowed ip> <forbidden ip> <port>
 #                  the copy container's network lets it reach the first address and not
 #                  the second (R59), tried with a real container on that network
+#   told <apply log> <check log>
+#                  the apply and the check playbook say whether this machine really
+#                  limits that way out (it needs netavark 1.7.0 or newer)
 #   no-egress      that network and its unit are gone
 #   destroyed      server unit gone, copies kept (SPEC 4.2)
 set -Eeuo pipefail
@@ -52,6 +55,25 @@ restic_local() {
     "$restic_image" --no-cache "$@"
 }
 
+# Whether this machine limits a way out with routes: netavark 1.7.0 or newer. An older
+# one, like Ubuntu 24.04's 1.4.0, ignores them, and the platform has to say so.
+limits() {
+  local stack
+  stack=$("$as" podman info --format '{{.Host.NetworkBackendInfo.Version}}')
+  [[ $stack == "netavark "* && $(printf '%s\n' 1.7.0 "${stack#netavark }" | sort -V | head -n 1) == 1.7.0 ]]
+}
+# told <apply log> <check log>: the apply and the check playbook say the truth about it.
+told() {
+  if limits; then
+    ! grep -q 'WARNING: .* limits the way out' "$1" || fail "the apply warns that this machine does not limit, and it does"
+    ! grep -q 'ESTA MÁQUINA NO LIMITA' "$2" || fail "the check report says this machine does not limit, and it does"
+    grep -q 'salida SOLO a' "$2" || fail "the check report does not show the limited network"
+  else
+    grep -q 'WARNING: .* limits the way out' "$1" || fail "this machine does not limit the way out and the apply did not warn"
+    grep -q 'ESTA MÁQUINA NO LIMITA' "$2" || fail "this machine does not limit the way out and the check report does not say so"
+    grep -q 'no limita la salida en esta máquina' "$2" || fail "the check report does not count it as a problem"
+  fi
+}
 case $1 in
   server)
     "$as" systemctl --user is-active "$server.service" >/dev/null || fail "$server is not running"
@@ -141,7 +163,7 @@ case $1 in
     [[ $(jq -r '.[0].options.no_default_route' <<< "$info") == true ]] || fail "$net has a default route: $info"
     [[ $(jq -r '[.[0].routes[].destination] | join(" ")' <<< "$info") == "$allowed/32" ]] || fail "routes of $net: $(jq -c '.[0].routes' <<< "$info") (only $allowed/32 expected)"
     [[ $(jq -r '.[0].dns_enabled' <<< "$info") == false ]] || fail "$net has DNS"
-    grep -qx "Network=$net.network" "$home/.config/containers/systemd/$copy.container" || fail "$copy is not on $net"
+    "$as" grep -qx "Network=$net.network" "$home/.config/containers/systemd/$copy.container" || fail "$copy is not on $net"
     # A real container, with the image of the copy container. $1: its network, or
     # "default" for Podman's own, which has a way out to everything.
     reach() {
@@ -154,19 +176,24 @@ case $1 in
     reach default "$allowed" || fail "control: $allowed:$eport does not answer even from Podman's default network"
     reach default "$forbidden" || fail "control: $forbidden:$eport does not answer even from Podman's default network"
     reach "$net" "$allowed" || fail "from $net the allowed address $allowed:$eport does not answer"
-    ! reach "$net" "$forbidden" || fail "from $net the address $forbidden:$eport answers, and only $allowed is allowed (R59)"
+    if limits; then
+      ! reach "$net" "$forbidden" || fail "from $net the address $forbidden:$eport answers, and only $allowed is allowed (R59)"
+    else
+      echo "::notice title=check-backup-copy egress::this machine does not limit the way out (netavark older than 1.7.0): that $forbidden is out of reach cannot be tried here"
+    fi
     ;;
+  told) told "$2" "$3" ;;
   no-egress)
     net=$copy-egress-net
     ! "$as" podman network exists "$net" || fail "the network $net is still there"
     ! "$as" test -e "$home/.config/containers/systemd/$net.network" || fail "$net.network is still installed"
-    ! grep -q "$net" "$home/.config/containers/systemd/$copy.container" || fail "$copy still uses $net"
+    ! "$as" grep -q "$net" "$home/.config/containers/systemd/$copy.container" || fail "$copy still uses $net"
     ;;
   destroyed)
     ! "$as" test -e "$home/.config/containers/systemd/$server.container" || fail "$server.container is still installed"
     "$as" podman volume exists "$server-data" || fail "the copies were removed (SPEC 4.2)"
     [[ $(restic_direct snapshots --json | jq length) -gt 0 ]] || fail "the copies are gone"
     ;;
-  *) echo "usage: $0 server|installed|ok|append-only|unreachable|failed <text>|count|egress <ip> <ip> <port>|no-egress|destroyed" >&2; exit 2 ;;
+  *) echo "usage: $0 server|installed|ok|append-only|unreachable|failed <text>|count|egress <ip> <ip> <port>|told <log> <log>|no-egress|destroyed" >&2; exit 2 ;;
 esac
 [[ $1 == count ]] || echo "ok: $1"
