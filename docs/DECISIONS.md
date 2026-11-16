@@ -527,3 +527,16 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **No cambia:** por dónde se entra (`backup_server_inbound`, R55), `tailscale serve`, ni el cliente que comparte su red en DEV y en el CI (`Network=container:…`).
 - **Aprobada por:** el operador, el 2026-11-15.
 - **SPEC:** 4.11.
+
+### R59. La red de cada instancia la decide el operador, en `networking`
+
+- **Decisión:** toda instancia, de cualquier aplicación, lleva en el inventario un mismo bloque, `networking`, y lo que no se escribe está cerrado. Tiene tres partes:
+  - `inbound`: quién entra. `publish`, una lista de `<dirección>:<puerto>:<puerto interno>` (R55), y `tailscale_serve`, una lista de puertos.
+  - `connects_to`: con qué otras instancias de la misma máquina habla. Lo escribe solo quien inicia la conversación; cada pareja tiene su propia red interna, que se borra al quitar la línea. Postgres es una aplicación más. `consumer`, en una base de Postgres, sirve únicamente para `pg_hba.conf`: desde qué red se acepta a ese usuario.
+  - `egress`: a dónde sale. Nada, ningún sitio; una lista de direcciones o rangos, solo a esos; `true`, a todo (internet y red local).
+- **Motivo:** R56 dejaba en el rol si una aplicación sale a internet y con quién habla, y solo existía la red con Postgres. Que una aplicación pueda salir no significa que el operador quiera que salga: es decisión suya. El rol solo dice qué necesita la aplicación para funcionar.
+- **Cambia R56:** el contrato del rol pasa a decir lo que la aplicación necesita, no lo que se le concede.
+- **Por pasos:** primero, el bloque `networking` con `inbound` dentro (este cambio; `inbound` suelto y `backup_server_inbound` dejan de leerse). Después `egress` y, por último, `connects_to`. Hasta entonces, una clave de `networking` que aún no se lee se rechaza: no se ignora en silencio. El estado está en `docs/ROADMAP.md`.
+- **Fuera:** conexiones entre máquinas (son entrada en una y salida en la otra), salida filtrada por nombre de dominio, IPv6 y la red del host.
+- **Aprobada por:** el operador, el 2026-11-16.
+- **SPEC:** 4.4.

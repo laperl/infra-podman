@@ -15,7 +15,7 @@ Firefly III en contenedores Quadlet sin root, sobre la Postgres de la plataforma
 - **La red.** Solo la suya, `<entorno>-ff-<instancia>-pg-<postgres>-net`, interna. Ni una segunda red ni `Network=host`: es lo que impide que tus finanzas salgan del portátil.
 - **`--purge` borra datos** (`tasks/purge.yml`, R57): nunca antes de que la copia de los volúmenes haya terminado bien.
 - **Copias:** su base ya está en el backup de Postgres. El volumen de justificantes solo se copia si la instancia lo pide con `backup: [uploads]`.
-- **La entrada la escribe el operador** en `inbound.publish` (R55), y va tal cual a `PublishPort=`; el rol no pone direcciones ni puertos por su cuenta. El comando del navegador del lanzador, como lista de palabras comprobadas: nada que entrecomillar.
+- **La entrada la escribe el operador** en `networking.inbound.publish` (R55), y va tal cual a `PublishPort=`; el rol no pone direcciones ni puertos por su cuenta. El comando del navegador del lanzador, como lista de palabras comprobadas: nada que entrecomillar.
 - **El esquema y el usuario de Postgres**: los declara el operador en el repo de datos y los crea el rol `postgres`. Este rol solo comprueba que existen.
 - **Los secretos, como ficheros** (`*_FILE`), nunca en `Environment=`.
 - **`AUDIT_LOG_LEVEL=emergency`** (auditoría apagada): decisión del operador, 2026-11-08.

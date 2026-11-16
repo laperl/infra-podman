@@ -24,14 +24,14 @@
         fail_msg: >-
           firefly_instances of {{ inventory_hostname }} (group_vars/firefly_hosts.yml of the data
           repository): each instance with a name, and neither a name nor an address and port of
-          inbound.publish repeated on the same machine (docs/services/README.md). --retire and
+          networking.inbound.publish repeated on the same machine (docs/services/README.md). --retire and
           --purge only for an instance that is still declared.
         quiet: true
       vars:
         # <address>:<host port> of every instance, without the container port.
         firefly_listening: >-
-          {{ firefly_instances | selectattr('inbound', 'defined') | map(attribute='inbound')
-             | selectattr('publish', 'defined') | map(attribute='publish') | flatten
+          {{ firefly_instances | map(attribute='networking', default={})
+             | map(attribute='inbound', default={}) | map(attribute='publish', default=[]) | flatten
              | map('regex_replace', ':[0-9]+$', '') | list }}
 
     - name: Deploy each instance

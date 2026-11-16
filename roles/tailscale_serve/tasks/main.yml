@@ -1,7 +1,7 @@
 ---
 # One place to reach a service from the other machines of the tailnet (SPEC 4.4, R55):
 # `tailscale serve --bg --tcp=<port> tcp://localhost:<port>`, as root, for each port of
-# tailscale_serve_ports. The service must publish that port on 127.0.0.1 (inbound.publish).
+# tailscale_serve_ports. The service must publish that port on 127.0.0.1 (networking.inbound.publish).
 # Nothing is removed here: a forwarder that is no longer wanted is removed by hand
 # (sudo tailscale serve --tcp=<port> tcp://localhost:<port> off).
 #
@@ -10,7 +10,7 @@
 #     ansible.builtin.include_role:
 #       name: tailscale_serve
 #     vars:
-#       tailscale_serve_ports: "{{ myapp_inbound.tailscale_serve | default([]) }}"
+#       tailscale_serve_ports: "{{ myapp_networking.inbound.tailscale_serve | default([]) }}"
 - name: Check the ports
   ansible.builtin.assert:
     that:
