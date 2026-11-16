@@ -202,7 +202,7 @@
           {{ item.name }}: groups {{ item.name }}_owner, {{ item.name }}_writer, {{ item.name }}_reader;
           users {% for u in item.users | default([], true) -%}
           {{ u.name }} ({{ u.group }}){{ ', ' if not loop.last }}{% else %}none{% endfor %};
-          from {{ postgres_hba | selectattr('database', 'equalto', item.name) | map(attribute='client') | join(', ') or 'no application' }}
+          from {{ postgres_hba_entries | selectattr('database', 'equalto', item.name) | map(attribute='client') | join(', ') or 'no application' }}
       loop: "{{ postgres_databases }}"
       loop_control:
         label: "{{ item.name }}"

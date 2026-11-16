@@ -90,9 +90,9 @@
   ansible.builtin.debug:
     msg: >-
       WARNING: pg-{{ postgres_instance }} on {{ inventory_hostname }}: no application names
-      {{ postgres_db_names | reject('in', postgres_hba | map(attribute='database') | list) | join(', ') }}
+      {{ postgres_db_names | reject('in', postgres_hba_entries | map(attribute='database') | list) | join(', ') }}
       in pg_hba: they are kept, and nobody can log in to them over the network (docs/NETWORK.md, section 5).
-  when: postgres_db_names | reject('in', postgres_hba | map(attribute='database') | list) | list | length > 0
+  when: postgres_db_names | reject('in', postgres_hba_entries | map(attribute='database') | list) | list | length > 0
 
 # Its home, ids and environment, read in one place (roles/service_user).
 - name: Read the service user
