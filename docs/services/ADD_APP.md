@@ -5,6 +5,17 @@ El procedimiento para que una persona o una IA, la que sea, añada una aplicaci�
 - **Quién lo usa:** el operador le da este fichero a su IA con la aplicación que quiere (apartado 6).
 - **El modelo es el rol `firefly`:** lo que no sepas cómo se escribe, míralo en `roles/firefly/` y `playbooks/firefly.yml`. No hay rol esqueleto: sería una segunda copia que mantener.
 - **Podman sin root y Quadlet, no Docker:** la documentación oficial de casi todas las aplicaciones está escrita para Docker. Antes de copiar una orden o un `docker-compose.yml`, lee el apartado 2.
+
+**Nada se supone.** Lo que no diga la documentación oficial, lo que tengas que deducir y lo que no sea lo normal de este apartado y el 2 se le **pregunta al operador antes** de escribirlo. Cada pregunta:
+- dice qué has deducido y de dónde;
+- es una frase corta, con las opciones y la que recomiendas;
+- lleva un ejemplo de cómo quedaría en su inventario o en la máquina.
+
+```text
+Ejemplo de pregunta bien hecha:
+¿Puerto en tu portátil? Propongo 127.0.0.1:18200 (Firefly usa el 18100).
+  Quedaría:  inbound: {publish: ["127.0.0.1:18200:8080"]}
+```
 - **Reglas del repo:** [`CLAUDE.md`](../../CLAUDE.md), que valen para cualquier IA. Solo PRs en borrador, nada inventado y cero secretos.
 
 ## 1. Antes de escribir nada: la ficha
@@ -21,7 +32,7 @@ Rellénala **solo con la documentación oficial** de la aplicación y cita la UR
 | Entrada | Puerto interno (1024 o más: apartado 2) y protocolo. Qué responde cuando está sana (orden o URL del healthcheck) y si esa orden (`curl`, `wget`…) existe dentro de la imagen |
 | Lanzador | Si el operador la abre desde el escritorio: lleva un lanzador en su menú, como Firefly (SPEC 4.14, R47) |
 | Datos | Qué directorios guardan datos (serán volúmenes) y cuáles pueden ser `tmpfs` |
-| Secretos | Cuáles necesita y si los lee de un fichero (`*_FILE`) o solo de una variable |
+| Secretos | Cuáles necesita y si los lee de un fichero (`*_FILE`) o solo de una variable. **Siempre en KeePassXC** (SPEC 4.5): una entrada `<infra_site>/<corto>-<instancia>-<qué>` ([`NAMING.md`](../NAMING.md), apartado 5), declarada en `infra_secrets` y montada como fichero. Si la aplicación solo lo acepta en una variable, o lo guarda ella misma en su volumen, pregunta antes |
 | Copias | Qué hay que copiar además de su base: volúmenes enteros o una orden propia de la aplicación ([`README.md`](README.md), apartado 8) |
 | Primer arranque | Migraciones, usuario inicial, tareas programadas |
 | Recursos | Memoria, CPU y procesos razonables |
@@ -31,7 +42,7 @@ Rellénala **solo con la documentación oficial** de la aplicación y cita la UR
 
 ## 2. Podman sin root y Quadlet: lo que cambia respecto a Docker
 
-La plataforma solo usa **Podman sin root con Quadlet** (SPEC, D1), con Podman 4.9 como mínimo. Lo que dice la documentación oficial para Docker se traduce así; lo que no puedas comprobar, a «no verificado», y lo prueba `lifecycle`.
+La plataforma usa **siempre Podman sin root con Quadlet** (SPEC, D1), con Podman 4.9 como mínimo. Un contenedor con root solo si no hay otro remedio, y se le pregunta antes al operador. La referencia es la documentación oficial de Podman ([podman-systemd.unit de 4.9](https://docs.podman.io/en/v4.9.0/markdown/podman-systemd.unit.5.html)), no la de Docker. Lo que dice la aplicación para Docker se traduce así; lo que no se pueda traducir, se pregunta. Lo que no puedas comprobar, a «no verificado», y lo prueba `lifecycle`.
 
 - **Todo son unidades Quadlet**, plantillas del rol: `.container`, `.volume` y, si hace falta, `.network`. Nunca `docker run`, `podman run`, `docker-compose`, `podman-compose`, ficheros `.pod` ni `podman generate systemd`. Un `docker run` o un `docker-compose.yml` de la documentación se traduce **clave a clave**, y cada clave se comprueba en [`COMPATIBILITY.md`](../COMPATIBILITY.md). Si no existe en 4.9, va en `PodmanArgs=` solo si esa página lo permite; si no, para y dilo.
 - **Los UID no son los del host.** Sin root, el root del contenedor es el usuario de servicio de la máquina, y cualquier otro UID del contenedor (el 5050 de pgAdmin, el 33 de Firefly) es un número de su rango de `/etc/subuid`. Por eso:

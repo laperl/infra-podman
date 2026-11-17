@@ -7,4 +7,7 @@ Sigue [`docs/services/ADD_APP.md`](../../../docs/services/ADD_APP.md) paso a pas
 
 Empieza por la ficha de su apartado 1, con la documentación oficial de la aplicación, enséñasela al operador y no escribas código hasta que la apruebe.
 
-Esa documentación suele estar escrita para Docker: aquí todo es Podman sin root con Quadlet. Tradúcela con el apartado 2 de `ADD_APP.md` antes de rellenar la ficha.
+Recuerda sus tres reglas de base:
+- **No supongas nada.** Lo deducido o lo raro se pregunta antes, en una frase con un ejemplo de su inventario.
+- **Siempre Podman sin root con Quadlet.** La documentación de Docker se traduce con su apartado 2.
+- **Secretos siempre en KeePassXC.**
