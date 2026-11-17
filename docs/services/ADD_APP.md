@@ -5,6 +5,7 @@ El procedimiento para que una persona o una IA, la que sea, añada una aplicaci�
 - **Quién lo usa:** el operador le da este fichero a su IA con la aplicación que quiere (apartado 6).
 - **El modelo es el rol `firefly`:** lo que no sepas cómo se escribe, míralo en `roles/firefly/` y `playbooks/firefly.yml`. No hay rol esqueleto: sería una segunda copia que mantener.
 - **Podman sin root y Quadlet, no Docker:** la documentación oficial de casi todas las aplicaciones está escrita para Docker. Antes de copiar una orden o un `docker-compose.yml`, lee el apartado 2.
+- **Reglas del repo:** [`CLAUDE.md`](../../CLAUDE.md), que valen para cualquier IA. Solo PRs en borrador, nada inventado y cero secretos.
 
 **Nada se supone.** Lo que no diga la documentación oficial, lo que tengas que deducir y lo que no sea lo normal de este apartado y el 2 se le **pregunta al operador antes** de escribirlo. Cada pregunta:
 - dice qué has deducido y de dónde;
@@ -16,7 +17,6 @@ Ejemplo de pregunta bien hecha:
 ¿Puerto en tu portátil? Propongo 127.0.0.1:18200 (Firefly usa el 18100).
   Quedaría:  inbound: {publish: ["127.0.0.1:18200:8080"]}
 ```
-- **Reglas del repo:** [`CLAUDE.md`](../../CLAUDE.md), que valen para cualquier IA. Solo PRs en borrador, nada inventado y cero secretos.
 
 ## 1. Antes de escribir nada: la ficha
 
