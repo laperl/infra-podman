@@ -24,7 +24,7 @@ Rellénala **solo con la documentación oficial** de la aplicación y cita la UR
 | Recursos | Memoria, CPU y procesos razonables |
 | Lo que no encaja | Red del host, GPU, dispositivos, ventana propia: está fuera del contrato; para y dilo |
 
-**Para y pregunta** si la aplicación pide `egress: true`, un proveedor que no sea Postgres, una excepción al endurecimiento o cualquier cosa de SPEC, sección 7: son decisiones del operador. La plantilla de la red con salida y la de un proveedor nuevo aún no existen y se escriben, aprobadas, con la primera aplicación que las pida.
+**Para y pregunta** si la aplicación pide `egress: true`, un proveedor que no sea Postgres, una excepción al endurecimiento o cualquier cosa de SPEC, sección 7: son decisiones del operador. Las redes ya tienen plantilla común: la de salida (`egress.network.j2`) y la de una pareja de `connects_to` (`pair.network.j2`), en `roles/quadlet_deploy/templates/` ([`NETWORK.md`](../NETWORK.md)).
 
 ## 2. Los ficheros, en orden
 
@@ -34,19 +34,19 @@ Rellénala **solo con la documentación oficial** de la aplicación y cita la UR
 | --- | --- | --- | --- |
 | 1 | `docs/NAMING.md`, apartado 2 | Fila con el nombre corto | Ese apartado y su lista del 9 |
 | 2 | `playbooks/group_vars/all/images.yml` | `<app>_image`, por digest y con su `# track:` | SPEC, D6; la cabecera de ese fichero |
-| 3 | `roles/<app>/defaults/main.yml` | `<app>_short`, `<app>_contract`, nombres compuestos desde la instancia, `<app>_quadlet_units`, lo que se puede copiar (`<app>_backup_available`) y los valores por defecto de cada ajuste | `README.md`, apartados 1, 8 y 9; `NAMING.md` |
-| 4 | `roles/<app>/templates/` | `.container` y sus `.volume`: nombres explícitos, cuatro etiquetas, endurecimiento, límites, healthcheck, secretos como fichero, `PublishPort=` tal cual viene de `networking.inbound.publish` | SPEC 4.2 a 4.5 y 4.14; [`COMPATIBILITY.md`](../COMPATIBILITY.md) (solo claves de Podman 4.9) |
-| 5 | `roles/<app>/tasks/` | `checks.yml` (rechazos claros), `main.yml` (secretos con `podman_secrets`, unidades con `quadlet_deploy`, copias con `roles/backup/tasks/app_items.yml`, temporizadores con `user_units`), `purge.yml` | Los mismos ficheros de `roles/firefly/tasks/` |
+| 3 | `roles/<app>/defaults/main.yml` | `<app>_short`, `<app>_contract`, `<app>_id`, nombres compuestos desde la instancia, sus parejas (`<app>_pairs` con el filtro `pairs_of`, `<app>_pair_networks` y `<app>_pair_units`, como en `roles/firefly`), `<app>_quadlet_units`, lo que se puede copiar (`<app>_backup_available`) y los valores por defecto de cada ajuste | `README.md`, apartados 1, 8 y 9; `NAMING.md`; [`NETWORK.md`](../NETWORK.md) |
+| 4 | `roles/<app>/templates/` | `.container` y sus `.volume`: nombres explícitos, cuatro etiquetas, endurecimiento, límites, healthcheck, secretos como fichero, `PublishPort=` tal cual viene de `networking.inbound.publish`, y un `Network=` por cada red de `<app>_pair_networks` | SPEC 4.2 a 4.5 y 4.14; [`COMPATIBILITY.md`](../COMPATIBILITY.md) (solo claves de Podman 4.9) |
+| 5 | `roles/<app>/tasks/` | `checks.yml` (rechazos claros), `main.yml` (`connects_to` con `connects_to_problems` y, si usa Postgres, `pg_hba` con `pg_hba_problems`; secretos con `podman_secrets`; unidades con `quadlet_deploy`, pasándole `quadlet_deploy_pair_owner` y `quadlet_deploy_pair_networks`; copias con `roles/backup/tasks/app_items.yml`; temporizadores con `user_units`), `purge.yml` (sin las redes de sus parejas) | Los mismos ficheros de `roles/firefly/tasks/`; [`NETWORK.md`](../NETWORK.md) |
 | 6 | `roles/<app>/meta/main.yml` y `roles/<app>/CLAUDE.md` | Licencia `GPL-3.0-or-later`. `CLAUDE.md` corto: qué leer, qué no se toca y qué tests tiene | [`CLAUDE.md`](../../CLAUDE.md), «Dónde va cada cosa nueva» |
 | 7 | `playbooks/<app>.yml` | Un despliegue por elemento de `<app>_instances`, con `<app>_retire` y `<app>_purge` (así `deploy.sh` acepta `--retire` y `--purge`) | `playbooks/firefly.yml`; SPEC 4.10 |
-| 8 | `playbooks/check.yml` | Línea `<app>: <corto>` en `check_shorts` | [`OPERATIONS.md`](../OPERATIONS.md), apartado 4 |
+| 8 | `playbooks/group_vars/all/apps.yml` | Línea `<app>: <corto>` en `infra_apps`: con ella sus instancias salen en `check` y otras pueden nombrarlas en `connects_to` | La cabecera de ese fichero |
 | 9 | `tests/quadlet/ci_vars.yml` y `tests/quadlet/golden/` | Una instancia `ci`; después `tests/quadlet/run.sh --update-golden` y **revisar el diff**: solo deben aparecer las unidades nuevas | Cabecera de `tests/quadlet/run.sh` |
 | 10 | `tests/lifecycle/` y `.github/workflows/lifecycle.yml` | `check-<app>.sh`, sus variables y su job: rechazos, plan, apply, reaplicar sin cambios, salud, aislamiento, retirar y purgar | `check-firefly.sh` y el job `firefly` |
 | 11 | `inventory.example/{dev,prod}/` | Grupo `<app>_hosts` en `hosts.yml`, `group_vars/<app>_hosts.yml` con ejemplo comentado, sus secretos en `infra_secrets` con `readers:`, y la fila de `README.md` | `README.md`, apartado 5; [`SECRETS_INVENTORY.md`](../SECRETS_INVENTORY.md) |
 | 12 | `docs/services/<app>.md` | Solo lo propio: uso, red, seguridad, actualizaciones, copias. Con las URL oficiales de la ficha | La forma de [`firefly.md`](firefly.md) |
 | 13 | Tablas de los demás documentos | Una fila en `README.md` (apartado 9), `ARCHITECTURE.md`, `OPERATIONS.md` (apartados 1 y 4), `SECRETS_INVENTORY.md`, y una sección en `TROUBLESHOOTING.md`. Sin copiar textos entre ellos | [`CLAUDE.md`](../../CLAUDE.md) |
 
-Si usa Postgres, el rol **no crea** ni la base ni el usuario ni la red: los declara el operador y los crea el rol `postgres` ([`POSTGRES.md`](../POSTGRES.md), apartado 6). El rol de la aplicación solo comprueba que existen.
+Si usa Postgres, el rol **no crea** ni la base ni el usuario ni la red: el operador declara la base y el usuario en `postgres_hosts.yml`, y en la instancia `connects_to` y `pg_hba`; los crea el rol `postgres` ([`POSTGRES.md`](../POSTGRES.md), apartado 6; [`NETWORK.md`](../NETWORK.md)). El rol de la aplicación solo comprueba que existen.
 
 ## 3. Comprobar
 
@@ -61,7 +61,7 @@ tests/quadlet/run.sh
 tests/deploy/run.sh && tests/images/run.sh
 ```
 
-- `tests/unit/test_app_contract.py` falla si falta el contrato, su fila en `README.md`, la línea de `check_shorts` o si las unidades no cuadran con lo declarado: es lo que dice si la aplicación está bien añadida.
+- `tests/unit/test_app_contract.py` falla si falta el contrato, su fila en `README.md`, la línea de `infra_apps` o si las unidades no cuadran con lo declarado: es lo que dice si la aplicación está bien añadida.
 - Lo que no hayas podido ejecutar (por ejemplo `lifecycle`, que necesita systemd), dilo: no lo des por probado.
 
 ## 4. Entregar

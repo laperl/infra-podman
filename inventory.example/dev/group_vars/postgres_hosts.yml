@@ -29,14 +29,16 @@ postgres_instances:
 #         users:
 #           - name: app1        # ^[a-z][a-z0-9_]{0,62}$
 #             group: owner      # owner | writer | reader: joins app1_owner
-#             consumer: app1    # the application that connects with it: its network, only from there
 #           - name: app1_ai
 #             group: reader
-#             consumer: ai
 #       # Firefly III: one database per instance, never shared (docs/services/README.md).
-#       # The instance casa: its user in ff_casa_owner, from its own network.
+#       # The instance casa: its user in ff_casa_owner.
 #       - name: ff_casa
 #         users:
 #           - name: ff_casa
 #             group: owner
-#             consumer: ff-casa
+#
+# Who enters each database is not written here: the application says it in its own instance,
+# networking.connects_to: [pg-main] and pg_hba: [{instance: pg-main, database: ff_casa}]
+# (group_vars/firefly_hosts.yml; docs/NETWORK.md). Every user of that database is then
+# admitted from the network of that application, only to that database.

@@ -233,6 +233,10 @@
   loop_control:
     loop_var: quadlet_deploy_network
 
+- name: Remove the pair networks the inventory no longer has
+  ansible.builtin.include_tasks: pair_gc.yml
+  when: quadlet_deploy_pair_owner | length > 0
+
 # D11: no automatic rollback for services with data. If the healthcheck does not pass,
 # stop the service and tell the operator.
 - name: Wait for the healthcheck

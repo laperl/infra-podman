@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Application databases on dev-pg-main (docs/POSTGRES.md, sections 2 and 3), as declared in
 # tests/lifecycle/apps-vars.yml. Usage: check-postgres-apps.sh <step>
-#   networks   one internal, isolated network per consumer, no ports, pg_hba.conf per user
+#   networks   one internal, isolated network per application (ff-demo, ff-ai), no ports
 #   catalog    groups, users, database, schema and settings as the model says
 #   access     R35 and R36 over TCP, from throwaway containers on each network
-#   isolation  no way out: not to the internet, the host, or another consumer's network
+#   isolation  no way out: not to the internet, the host, or another application's network
 #   password   <user>: the password of that user is the one in its secret
 #   role|db|groups|secret|net  small checks of state (docs/POSTGRES.md, section 7)
 set -euo pipefail
@@ -12,8 +12,9 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 as=$here/as-svc.sh
 name=dev-pg-main
 su=ci_admin  # fictitious superuser of tests/lifecycle/inventory.yml
-demo_net=dev-demo-pg-main-net
-ai_net=dev-ai-pg-main-net
+# The networks of the two applications of apps-vars.yml (docs/NETWORK.md).
+demo_net=dev-ff-demo-pg-main-net
+ai_net=dev-ff-ai-pg-main-net
 fail() { local m="$*"; echo "::error title=check-postgres-apps::${m//$'\n'/ | }"; exit 1; }
 sql() { # sql <query> [database]: as the superuser, through the socket
   "$as" podman exec "$name" psql -X -U "$su" -d "${2:-postgres}" -v ON_ERROR_STOP=1 -tAq -c "$1" </dev/null
@@ -59,15 +60,21 @@ case $1 in
     ai_subnet=$("$as" podman network inspect "$ai_net" --format '{{range .Subnets}}{{.Subnet}}{{end}}')
     [[ $demo_subnet != "$ai_subnet" ]] || fail "both networks got the same subnet"
     hba=$("$as" cat "$home/.config/infra-podman/$name/pg_hba.conf")
-    for line in "\"demo\"  \"demo_app\"  $demo_subnet  scram-sha-256" "\"demo\"  \"demo_rw\"  $demo_subnet  scram-sha-256" \
-                "\"demo\"  \"demo_ro\"  $demo_subnet  scram-sha-256" "\"demo\"  \"demo_ai\"  $ai_subnet  scram-sha-256"; do
-      grep -qF "host    $line" <<<"$hba" || fail "pg_hba.conf has no line '$line'"
+    # Both applications name demo in their pg_hba (apps-vars.yml): every user of demo, from
+    # each of the two networks, and nothing else (docs/NETWORK.md, section 4).
+    expected=()
+    for user in demo_ai demo_app demo_ro demo_rw; do
+      for subnet in "$demo_subnet" "$ai_subnet"; do
+        line="\"demo\"  \"$user\"  $subnet  scram-sha-256"
+        grep -qF "host    $line" <<<"$hba" || fail "pg_hba.conf has no line '$line'"
+        expected+=("$user@${subnet%/*}")
+      done
     done
     [[ $(sql "SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL") == 0 ]] || fail "pg_hba.conf has errors"
-    [[ $(sql "SELECT string_agg(user_name[1] || '@' || address, ' ' ORDER BY user_name[1]) FROM pg_hba_file_rules
-              WHERE database = '{demo}'") == "demo_ai@${ai_subnet%/*} demo_app@${demo_subnet%/*} demo_ro@${demo_subnet%/*} demo_rw@${demo_subnet%/*}" ]] \
+    [[ $(sql "SELECT string_agg(user_name[1] || '@' || address, ' ' ORDER BY user_name[1] || '@' || address) FROM pg_hba_file_rules
+              WHERE database = '{demo}'") == "$(printf '%s\n' "${expected[@]}" | LC_ALL=C sort | xargs)" ]] \
       || fail "PostgreSQL does not read the lines of the users: $(sql "SELECT user_name, address FROM pg_hba_file_rules WHERE database = '{demo}'")"
-    echo "::notice title=Consumer networks::$demo_net $demo_subnet, $ai_net $ai_subnet (chosen by Podman)"
+    echo "::notice title=Application networks::$demo_net $demo_subnet, $ai_net $ai_subnet (chosen by Podman)"
     ;;
   catalog)
     for g in owner writer reader; do
@@ -124,9 +131,10 @@ case $1 in
       refused "a SECURITY DEFINER function, by $user" "$net" "$user" "SELECT probe_write()" 'permission denied'
       refused "CREATE TABLE by $user" "$net" "$user" "CREATE TABLE nope (v text)" 'permission denied'
     done
-    # pg_hba.conf: each user only from its consumer's network, only to its database.
-    refused "demo_app from the network of ai" "$ai_net" demo_app "SELECT 1" 'pg_hba.conf'
-    refused "demo_ai from the network of demo" "$demo_net" demo_ai "SELECT 1" 'pg_hba.conf'
+    # pg_hba.conf (docs/NETWORK.md): every user of demo from the network of each application
+    # that names demo in its pg_hba, ff-demo and ff-ai, and only to demo.
+    allowed "demo_app from the network of ai" "$ai_net" demo_app "SELECT 1"
+    allowed "demo_ai from the network of demo" "$demo_net" demo_ai "SELECT 1"
     if out=$("$as" podman --log-level=error run --rm --network "$demo_net" --secret dev-demo-app-db-password,type=env,target=PGPASSWORD \
                --entrypoint psql "$(image)" -X -h "$name" -U demo_app -d postgres -c 'SELECT 1' </dev/null 2>&1); then
       fail "demo_app connected to the database postgres"

@@ -1,0 +1,8 @@
+---
+# The applications deployed by instances, each with its short name (docs/NAMING.md,
+# section 2): an instance of <role>_instances is <short>-<name> everywhere, in labels,
+# networks, secrets and networking.connects_to. A new application adds its line
+# (docs/services/ADD_APP.md); tests/unit/test_app_contract.py requires it.
+infra_apps:
+  postgres: pg
+  firefly: ff

@@ -42,20 +42,9 @@
   hosts: servers
   gather_facts: false
   vars:
-    # Short name of each role deployed by instances (docs/NAMING.md, section 2): the
-    # instances of <role>_instances are <short>-<name>. A new application adds its line.
-    check_shorts:
-      postgres: pg
-      firefly: ff
-    # Every instance declared for this machine, as <short>-<name>, and the backup.
-    check_declared: >-
-      {%- set found = ['backup'] -%}
-      {%- for role, short in check_shorts.items() -%}
-      {%- for instance in hostvars[inventory_hostname][role ~ '_instances'] | default([]) -%}
-      {%- set _ = found.append(short ~ '-' ~ instance.name) -%}
-      {%- endfor -%}
-      {%- endfor -%}
-      {{ found }}
+    # Every instance declared for this machine, as <short>-<name> (infra_apps,
+    # group_vars/all/apps.yml), and the backup.
+    check_declared: "{{ ['backup'] + (infra_apps | instance_ids(hostvars[inventory_hostname])) }}"
     # The Podman secrets the inventory installs on this machine (playbooks/secrets.yml).
     check_secrets: >-
       {%- set found = [] -%}

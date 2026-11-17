@@ -46,7 +46,7 @@
     name: backup
     tasks_from: app_items.yml
   vars:
-    backup_items_app: "{{ firefly_consumer }}"
+    backup_items_app: "{{ firefly_id }}"
     backup_items: "{{ firefly_purge_volumes.results | selectattr('rc', 'equalto', 0) | map(attribute='item') | list }}"
 
 - name: Back up before deleting
@@ -68,7 +68,9 @@
   ansible.builtin.include_role:
     name: quadlet_deploy
   vars:
-    quadlet_deploy_units: "{{ firefly_quadlet_units + [firefly_egress_unit] }}"
+    # Not the networks of its pairs: the other side may still use them. They go when the
+    # inventory no longer has the pair (docs/NETWORK.md, section 6).
+    quadlet_deploy_units: "{{ firefly_quadlet_units | rejectattr('template', 'equalto', 'pair.network.j2') | list + [firefly_egress_unit] }}"
     quadlet_deploy_state: absent
     quadlet_deploy_purge: true
 
@@ -77,7 +79,7 @@
     name: backup
     tasks_from: app_items.yml
   vars:
-    backup_items_app: "{{ firefly_consumer }}"
+    backup_items_app: "{{ firefly_id }}"
     backup_items: []
 
 # The password of its database user is PostgreSQL's to remove, with the database.

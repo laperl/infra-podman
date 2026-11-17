@@ -13,7 +13,7 @@
   failed_when: firefly_pg_exists.rc not in [0, 1]
   check_mode: false
 
-- name: Check that its network exists (created by the postgres playbook)
+- name: Check that its network to PostgreSQL exists (created by the postgres playbook)
   ansible.builtin.command:
     cmd: podman network exists {{ firefly_network }}
   environment: "{{ firefly_env }}"
@@ -33,18 +33,19 @@
       Firefly {{ firefly_instance }} needs the PostgreSQL instance {{ firefly_pg_name }} and the network
       {{ firefly_network }} on {{ inventory_hostname }}
       (found: instance {{ 'yes' if firefly_pg_exists.rc == 0 else 'no' }}, network
-      {{ 'yes' if firefly_net_exists.rc == 0 else 'no' }}). Declare in postgres_hosts.yml of
-      the data repository, in the instance {{ firefly_pg_instance }}, the database
-      {{ firefly_db_name }} with the user {{ firefly_db_user }} (group: owner, consumer: {{ firefly_consumer }}),
-      and apply postgres first: ./deploy.sh apply postgres --env {{ infra_env }} --limit {{ inventory_hostname }}
-      (docs/POSTGRES.md, section 6).
+      {{ 'yes' if firefly_net_exists.rc == 0 else 'no' }}). The postgres role creates that network once
+      the instance {{ firefly_pg_instance }} in postgres_hosts.yml of the data repository has the database
+      {{ firefly_db_name }} with the user {{ firefly_db_user }} (group: owner), and this instance says
+      connects_to: [pg-{{ firefly_pg_instance }}] and pg_hba: [{instance: pg-{{ firefly_pg_instance }}, database:
+      {{ firefly_db_name }}}]. Then apply postgres first: ./deploy.sh apply postgres --env {{ infra_env }}
+      --limit {{ inventory_hostname }} (docs/NETWORK.md, docs/POSTGRES.md, section 6).
     quiet: true
 
 - name: Require its secrets
   ansible.builtin.include_role:
     name: podman_secrets
   vars:
-    podman_secrets_reader: "{{ firefly_consumer }}"
+    podman_secrets_reader: "{{ firefly_id }}"
     podman_secrets_required:
       - "{{ firefly_app_key_secret }}"
       - "{{ firefly_db_secret }}"

@@ -2,15 +2,27 @@
 # Extra variables of the postgres job, once phase 1 is checked: the same instance with
 # application databases (docs/POSTGRES.md, sections 2 and 6), as the operator would add
 # them to the data repository. Fictitious names only.
-#   demo: one user per group, all connecting from the network of the consumer demo;
-#   demo_ai: a second reader, from another consumer (ai), as the AI of later phases.
+#   demo: one user per group; demo_ai, a second reader, as the AI of later phases would have.
+# Every user of demo enters from the network of each application that names demo in its
+# pg_hba: here ff-demo and ff-ai.
 postgres_instances:
   - name: main
     superuser: ci_admin
     databases:
       - name: demo
         users:
-          - {name: demo_app, group: owner, consumer: demo}
-          - {name: demo_rw, group: writer, consumer: demo}
-          - {name: demo_ro, group: reader, consumer: demo}
-          - {name: demo_ai, group: reader, consumer: ai}
+          - {name: demo_app, group: owner}
+          - {name: demo_rw, group: writer}
+          - {name: demo_ro, group: reader}
+          - {name: demo_ai, group: reader}
+
+# The applications that enter these databases (docs/NETWORK.md): two Firefly instances,
+# demo and ai, only declared, never deployed by this job. Each gets its network to pg-main,
+# where the throwaway containers of check-postgres-apps.sh connect from.
+firefly_instances:
+  - name: demo
+    networking: {inbound: {publish: ["127.0.0.1:18110:8080"]}, connects_to: [pg-main]}
+    pg_hba: [{instance: pg-main, database: demo}]
+  - name: ai
+    networking: {inbound: {publish: ["127.0.0.1:18111:8080"]}, connects_to: [pg-main]}
+    pg_hba: [{instance: pg-main, database: demo}]

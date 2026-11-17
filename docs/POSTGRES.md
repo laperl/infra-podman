@@ -88,12 +88,12 @@ Lo genera Ansible a partir del inventario y se monta en solo lectura. Si cambia,
 1. `local all all trust`: solo por el socket, dentro del contenedor. Quien llega ahí ya es `svc_runner`.
 2. El superusuario por TCP: `reject`, **salvo desde la subred de pgAdmin** (R37), con `scram-sha-256`.
 3. `backup` por TCP: `reject`.
-4. Cada usuario LOGIN: `host <su base> <usuario> <subred de la red de su consumidor> scram-sha-256`. Una línea por usuario, limitada a su base y a la red de su consumidor (D9). La subred la elige Podman al crear la red y Ansible la lee; mientras la red no existe, el usuario no tiene línea y queda rechazado (R45).
+4. Cada usuario de una base que una aplicación nombra en su `pg_hba`: `host <esa base> <usuario> <subred de la red de esa aplicación> scram-sha-256`. Solo a esa base y solo desde la red de esa pareja; nunca `all` como usuario ([`NETWORK.md`](NETWORK.md), apartado 4). La subred la elige Podman al crear la red y Ansible la lee; mientras la red no existe, no hay línea y el usuario queda rechazado (R45).
 5. Cualquier otro caso: `reject`.
 
 No hay TLS: el tráfico nunca sale de la máquina, va por redes de Podman aisladas.
 
-No hay red compartida entre consumidores: cada consumidor tiene su red, `<entorno>-<consumidor>-pg-<instancia>-net`, interna y con `isolate=true` (D9, R45), unida solo a su instancia. Sin consumidores, la instancia sigue con `Network=none`. Al añadir el primero (o uno nuevo), Postgres se reinicia una vez, porque Podman no añade redes a un contenedor en marcha.
+No hay red compartida entre aplicaciones: cada aplicación que se conecta tiene su red con esta instancia, `<entorno>-<aplicación>-pg-<instancia>-net`, interna y con `isolate=true` (D9, R45; [`NETWORK.md`](NETWORK.md)). Sin aplicaciones, la instancia sigue con `Network=none`. Al añadir la primera (o una nueva), Postgres se reinicia una vez, porque Podman no añade redes a un contenedor en marcha.
 
 ## 4. Contraseñas
 
@@ -130,15 +130,15 @@ postgres_instances:
         users:
           - name: app1          # ^[a-z][a-z0-9_]{0,62}$
             group: owner        # owner | writer | reader: entra en app1_owner
-            consumer: app1      # la instancia de aplicación que entra con él (por ejemplo ff-laptop): su red, y solo desde ella
           - name: app1_ia
             group: reader       # entra en app1_reader
-            consumer: ia
 ```
 
 - **`group:`** es siempre `owner`, `writer` o `reader`. El grupo real es `<base>_<grupo>`, y lo que puede hacer cada uno está en la sección 2.
 - **`users:`** es opcional. Sin usuarios, la base existe pero nadie entra salvo el administrador.
-- **Una base por instancia de aplicación** (R48): dos Firefly son dos bases (`ff_casa`, `ff_canary`), cada una con su usuario y su consumidor (`ff-casa`, `ff-canary`). Nunca dos instancias en la misma base. Detalle en [`services/README.md`](services/README.md).
+- **Aquí no se nombra quién entra.** Lo dice cada aplicación, en su propia instancia: `networking.connects_to: [pg-<instancia>]` (el camino) y `pg_hba: [{instance: pg-<instancia>, database: <base>}]` (en qué bases entra). Todos los usuarios de esa base pueden entrar desde la red de esa aplicación, y solo a esa base; la contraseña de cada uno solo la recibe quien lo nombra en `readers:` ([`NETWORK.md`](NETWORK.md), apartado 4).
+- **`consumer:` ya no se lee:** si lo encuentra, el `plan` se para y dice qué escribir ([`NETWORK.md`](NETWORK.md), apartado 11).
+- **Una base por instancia de aplicación** (R48): dos Firefly son dos bases (`ff_casa`, `ff_canary`), cada una con su usuario, y cada instancia nombra la suya en `pg_hba`. Nunca dos instancias en la misma base. Detalle en [`services/README.md`](services/README.md).
 - **Una instancia en otra máquina** va en `host_vars/<máquina>.yml` del repo de datos, con su propio nombre (por ejemplo `servidor`). Cada aplicación tiene que estar en la misma máquina que su Postgres: las redes de Podman no salen de la máquina.
 
 ## 7. Altas, cambios y bajas
@@ -173,20 +173,21 @@ Se crean la base `app2`, su esquema `app2` con `vector` y sus tres grupos, `app2
    ```yaml
       - name: app2
         users:
-          - {name: app2, group: owner, consumer: app2}
+          - {name: app2, group: owner}
    ```
+   Y en la instancia de la aplicación: `connects_to: [pg-<instancia>]` y `pg_hba: [{instance: pg-<instancia>, database: app2}]` ([`NETWORK.md`](NETWORK.md)).
 4. `./deploy.sh secrets --limit <máquina>`, y después `plan` y `apply postgres`.
 
-Se crea el usuario con la contraseña de su secreto, en `app2_owner`, y solo puede entrar en `app2` desde la red de `app2`. Si `app2` es una aplicación nueva, se crea su red y Postgres se reinicia una vez: Podman no añade redes a un contenedor en marcha.
+Se crea el usuario con la contraseña de su secreto, en `app2_owner`, y solo puede entrar en `app2` desde la red de la aplicación que la nombra en su `pg_hba`. Si esa aplicación no tenía red con esta instancia, se crea y Postgres se reinicia una vez: Podman no añade redes a un contenedor en marcha.
 
-**Un usuario en varias bases.** Se puede: el mismo nombre en cada base, con su grupo y su aplicación en cada una, y una sola contraseña. Lo recomendable es un usuario por aplicación, para que cada una vea solo lo suyo.
+**Un usuario en varias bases.** Se puede: el mismo nombre en cada base, con su grupo en cada una, y una sola contraseña. Lo recomendable es un usuario por aplicación, para que cada una vea solo lo suyo.
 
 ### Cambios
 
 | Cambias | Qué pasa | Después |
 | --- | --- | --- |
 | `group:` de un usuario | Sale de su grupo y entra en el nuevo | Reinicia la aplicación: el cambio vale para las conexiones nuevas |
-| `consumer:` de un usuario | Solo puede entrar desde la red de la aplicación nueva. Si esa red no existía, Postgres se reinicia una vez | Reinicia las dos aplicaciones |
+| Una base en el `pg_hba` de una aplicación | Sus usuarios entran (o dejan de entrar) desde la red de esa aplicación: `pg_hba.conf` se recarga sin reiniciar. Si era su primera (o su última) base en esta instancia, la red se crea (o se borra) y Postgres se reinicia una vez | Reinicia la aplicación si cambió su red |
 | Su contraseña | `./deploy.sh secrets --rotate <usuario>-db-password --limit <máquina>` y `apply postgres` (sección 4) | Reinicia la aplicación |
 
 **No se renombra nada en el fichero:** ni bases, ni usuarios, ni instancias. Cambiar un nombre es borrar lo viejo y crear algo nuevo, vacío. Con una base, eso son sus datos. Si de verdad hace falta, es una mudanza a mano: base nueva, restaurar la copia en ella (OPERATIONS, apartado 5) y borrar la vieja.
@@ -210,7 +211,7 @@ Se crea el usuario con la contraseña de su secreto, en `app2_owner`, y solo pue
 ./deploy.sh apply postgres --limit <máquina> --confirm-drop <instancia>
 ```
 
-**La red de una aplicación** que se queda sin usuarios se quita, y Postgres se reinicia una vez.
+**La red de una aplicación** que ya no nombra ninguna base de esta instancia en su `pg_hba` se quita, y Postgres se reinicia una vez ([`NETWORK.md`](NETWORK.md), apartado 6).
 
 **Recuperar una base borrada:** la vuelves a declarar, aplicas (nace vacía) y restauras la copia hecha antes de borrarla (OPERATIONS, apartado 5).
 

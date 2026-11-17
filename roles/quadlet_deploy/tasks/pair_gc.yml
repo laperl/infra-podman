@@ -1,0 +1,37 @@
+---
+# Included by install.yml when the calling role passes quadlet_deploy_pair_owner: the
+# networks of the pairs of that instance (docs/NETWORK.md) that the inventory no longer has.
+# Both sides of a pair run this, from the same inventory. A network goes once no container
+# and no other unit uses it; while one does, it is kept and said, and it goes with the apply
+# of the other side. Whichever runs last removes it: the order does not matter.
+- name: List the pair networks of {{ quadlet_deploy_pair_owner }}
+  ansible.builtin.command:
+    argv:
+      - podman
+      - network
+      - ls
+      - --filter
+      - label=infra.env={{ infra_env }}
+      - --filter
+      - label=infra.component=net
+      - --format
+      - "{% raw %}{{.Name}}{% endraw %}"
+  environment: "{{ quadlet_deploy_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: quadlet_deploy_pair_ls
+  changed_when: false
+  check_mode: false
+
+# <env>-<client>-<receiver>-net, each side <short>-<name> (no hyphen inside either part):
+# the instance is one side or the other, never inside a name.
+- name: Look at each one the inventory no longer has
+  ansible.builtin.include_tasks: pair_gc_one.yml
+  loop: >-
+    {{ quadlet_deploy_pair_ls.stdout_lines | select('match', quadlet_deploy_pair_re)
+       | reject('in', quadlet_deploy_pair_networks) | list }}
+  loop_control:
+    loop_var: quadlet_deploy_network
+  vars:
+    quadlet_deploy_pair_re: >-
+      ^{{ infra_env }}-({{ quadlet_deploy_pair_owner }}-[a-z]+-[a-z0-9]+|[a-z]+-[a-z0-9]+-{{ quadlet_deploy_pair_owner }})-net$

@@ -1,0 +1,11 @@
+---
+# The firefly job, step "A connection is written by the application": casa as it was
+# written before R59, with pg_instance and without networking.connects_to.
+firefly_instances:
+  - name: casa
+    networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}}
+    pg_instance: main
+  - name: canary
+    networking: {inbound: {publish: ["127.0.0.1:18101:8080"]}, connects_to: [pg-main]}
+    pg_hba: [{instance: pg-main, database: ff_canary}, {instance: pg-main, database: ff_casa}]
+    image: firefly_ci_image

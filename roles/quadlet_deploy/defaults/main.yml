@@ -4,8 +4,9 @@
 # Units to install. Each item:
 #   template: the .j2 file, by its name inside quadlet_deploy_templates
 #   common:   true when the template is one of this role (templates/), shared by every
-#             role: egress.network.j2, the network with a way out (its header says what
-#             else the item carries)
+#             role: egress.network.j2, the network with a way out, and pair.network.j2,
+#             the network of a pair of instances (their headers say what else the item
+#             carries)
 #   name:     file name, the same as the object it creates (SPEC 4.12), e.g. prod-pg-main.container
 quadlet_deploy_units: []
 
@@ -35,6 +36,12 @@ quadlet_deploy_start: true
 # Networks (by name) that this role installed before and no longer wants: their unit and
 # the network are removed once the containers run without them. A network holds no data.
 quadlet_deploy_absent_networks: []
+
+# The pairs of the instance of this call (docs/NETWORK.md): its identifier, <short>-<name>,
+# and the names of the pair networks it has now. Any other pair network of that instance
+# goes once no container and no other unit uses it (tasks/pair_gc.yml). Empty: not looked at.
+quadlet_deploy_pair_owner: ""
+quadlet_deploy_pair_networks: []
 
 # present: install, validate and start. absent: stop and remove the .container files only;
 # the .volume and .network files and the data stay (SPEC 4.2, 8).

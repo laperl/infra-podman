@@ -28,10 +28,12 @@ Environment=POSTGRES_PASSWORD_FILE=/run/secrets/postgres-password
 # The image's command, plus our pg_hba.conf and the time zone on every start.
 Exec=postgres -c hba_file=/etc/postgresql/pg_hba.conf -c timezone={{ postgres_timezone }} -c log_timezone={{ postgres_timezone }}
 
+{# One per application that connects here (docs/NETWORK.md). The comment below keeps its
+   old words, so that the unit of an existing instance does not change (SPEC 4.2). -#}
 # No published ports (SPEC 4.4). One internal, isolated network per consumer (D9, R45);
 # without consumers, no network at all.
-{% for consumer in postgres_consumers %}
-Network={{ infra_env }}-{{ consumer }}-pg-{{ postgres_instance }}-net.network
+{% for client in postgres_clients %}
+Network={{ infra_env }}-{{ client }}-pg-{{ postgres_instance }}-net.network
 {% else %}
 Network=none
 {% endfor %}

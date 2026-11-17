@@ -11,13 +11,15 @@
 #   networking:  its network (docs/services/README.md, section 4):
 #               networking:
 #                 inbound: {publish: ["127.0.0.1:18100:8080"]}   # required: where it listens
+#                 connects_to: [pg-main]                         # required: its PostgreSQL
 #                 egress: ["192.168.1.20"]                       # optional: where it goes out
+#             connects_to: the PostgreSQL instance of this machine with its database,
+#             as pg-<instance>, and nothing else: Firefly talks to nobody else.
 #             egress: nothing (the default), no way out; a list of addresses or ranges,
 #             only there; true, everywhere (the internet and the local network).
 #             inbound.publish is a list of <address>:<host port>:<container port>, as Podman and Docker write
 #             them; Firefly listens on 8080 inside. The first one is the address the
 #             launcher opens and the one Firefly gives in its links (APP_URL)
-#   pg_instance:  the PostgreSQL instance of this machine with its database (default main)
 #   image:    the variable of playbooks/group_vars/all/images.yml with its image (default
 #             firefly_image; for example firefly_canary_image for a canary)
 #   language, timezone, log_level, memory, cpus, pids_limit, start_timeout, cron_time:
@@ -35,7 +37,7 @@ firefly_instances: []
 
 # The instance of this call (set by the playbook). The value here only serves to render the
 # templates in CI.
-firefly_item: {name: ci, networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}}}
+firefly_item: {name: ci, networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}, connects_to: [pg-main]}, pg_hba: [{instance: pg-main, database: ff_ci}]}
 
 # --retire <name>: the instance to stop and remove, keeping its data (playbook).
 firefly_retire: ""
@@ -47,12 +49,14 @@ firefly_purging: false
 
 firefly_state: present
 
-# What kind of application this is (docs/services/README.md, section 9; R56). Fixed here,
-# never a setting of the inventory. tests/unit/test_app_contract.py checks it.
+# What this application needs to work (docs/services/README.md, section 9; R56, R59).
+# Fixed here; the network itself is the operator's, in networking of each instance, and
+# the role refuses an instance that does not give it what is here.
+# tests/unit/test_app_contract.py checks it.
 firefly_contract:
   database: postgres     # none | postgres: its own database, user and password
-  providers: [postgres]  # the containers it calls: one internal network with each
-  egress: false          # true: it also needs a way out to the internet
+  providers: [postgres]  # what it must reach: one of each in networking.connects_to
+  egress: false          # true: it cannot work without a way out (networking.egress)
 
 # What each instance gets when it does not say otherwise.
 firefly_instance: "{{ firefly_item.name }}"
@@ -64,7 +68,13 @@ firefly_egress: "{{ firefly_networking.egress | default(false) }}"
 firefly_egress_network: "{{ firefly_name }}-egress-net"
 # Address and host port of the first one: http://127.0.0.1:18100
 firefly_url: "http://{{ firefly_publish[0] | regex_replace(':[0-9]+$', '') }}"
-firefly_pg_instance: "{{ firefly_item.pg_instance | default('main') }}"
+# With whom it talks (R59, docs/NETWORK.md): exactly one PostgreSQL instance, pg-<instance>,
+# and any other instance of the machine. pg_hba says which databases of that PostgreSQL it
+# enters: at least its own, ff_<instance>.
+firefly_connects_to: "{{ firefly_networking.connects_to | default([]) }}"
+firefly_pg_targets: "{{ firefly_connects_to | map('string') | select('match', '^pg-') | list }}"
+firefly_pg_instance: "{{ (firefly_pg_targets | first | default('pg-'))[3:] }}"
+firefly_pg_hba: "{{ firefly_item.pg_hba | default([]) }}"
 firefly_image_var: "{{ firefly_item.image | default('firefly_image') }}"
 firefly_container_image: "{{ lookup('ansible.builtin.vars', firefly_image_var) }}"
 # Language of new users and of the login page, and time zone (DEFAULT_LANGUAGE and TZ).
@@ -103,12 +113,17 @@ firefly_name: "{{ infra_env }}-{{ firefly_short }}-{{ firefly_instance }}"
 firefly_volume: "{{ firefly_name }}-uploads"
 firefly_pg_name: "{{ infra_env }}-pg-{{ firefly_pg_instance }}"
 # Its database, schema and user: one database per instance (docs/POSTGRES.md, section 2),
-# declared by the operator in postgres_hosts.yml with this consumer (D9).
+# declared by the operator in postgres_hosts.yml and named in pg_hba of the instance.
 firefly_db_name: "{{ firefly_short }}_{{ firefly_instance }}"
 firefly_db_user: "{{ firefly_short }}_{{ firefly_instance }}"
-firefly_consumer: "{{ firefly_short }}-{{ firefly_instance }}"
-# Created by the postgres role for that consumer (SPEC 4.4).
-firefly_network: "{{ infra_env }}-{{ firefly_consumer }}-pg-{{ firefly_pg_instance }}-net"
+# Its identifier everywhere: labels, secrets (readers:), connects_to and pg_hba of others.
+firefly_id: "{{ firefly_short }}-{{ firefly_instance }}"
+# Its pairs (docs/NETWORK.md): [client, receiver], one network each. The one to its
+# PostgreSQL is created by the postgres role (SPEC 4.4); the others by either side.
+firefly_pairs: "{{ firefly_id | pairs_of(infra_apps, hostvars[inventory_hostname]) }}"
+firefly_network: "{{ infra_env }}-{{ firefly_id }}-pg-{{ firefly_pg_instance }}-net"
+firefly_other_pairs: "{{ firefly_pairs | rejectattr('0', 'match', '^pg-') | rejectattr('1', 'match', '^pg-') | list }}"
+firefly_pair_networks: "{{ firefly_pairs | map('pair_network', infra_env) | list }}"
 # For each secret, two names: *_secret_entry is the title of its KeePassXC entry
 # (<infra_site>/<entry>) and its name in infra_secrets; *_secret is the Podman secret on
 # the machine, the same with the environment in front.
@@ -126,15 +141,19 @@ firefly_backup_available:
   uploads: {type: volume, name: uploads, volume: "{{ firefly_volume }}"}
 
 # What quadlet_deploy installs, and what CI renders (scripts/render-quadlets.yml).
-firefly_quadlet_units:
-  - template: firefly.container.j2
-    name: "{{ firefly_name }}.container"
-  - template: firefly-uploads.volume.j2
-    name: "{{ firefly_volume }}.volume"
+# With the networks of its pairs with other applications, if any.
+firefly_quadlet_units: >-
+  {{ [{'template': 'firefly.container.j2', 'name': firefly_name ~ '.container'},
+      {'template': 'firefly-uploads.volume.j2', 'name': firefly_volume ~ '.volume'}]
+     + firefly_pair_units }}
+# The network of each pair with another application (not PostgreSQL): either side writes
+# it, from the one template of quadlet_deploy, so both write the same file. A purge leaves
+# them (tasks/purge.yml): the other side may still use them.
+firefly_pair_units: "{{ firefly_other_pairs | pair_units(infra_env) }}"
 # Only with networking.egress (tasks/main.yml).
 firefly_egress_unit:
   template: egress.network.j2
   common: true
   name: "{{ firefly_egress_network }}.network"
   egress: "{{ firefly_egress }}"
-  app: "{{ firefly_consumer }}"
+  app: "{{ firefly_id }}"

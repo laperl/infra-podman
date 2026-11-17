@@ -8,6 +8,10 @@ firefly_instances:
     networking:
       inbound:                     # where it listens: <address>:<host port>:<container port>
         publish: ["127.0.0.1:18100:8080"]   # Firefly listens on 8080 inside the container
+      connects_to: [pg-main]       # whom it talks to on this machine: its PostgreSQL, pg-<instance>
+      # egress: ["192.168.1.20"]   # where it may go out of the machine: nothing (default), a list, or true
+    pg_hba:                        # which databases of that PostgreSQL it enters: its own
+      - {instance: pg-main, database: ff_casa}
     language: es_ES
     timezone: Europe/Madrid
     # memory: 512m               # resource limits (R46)
@@ -15,10 +19,13 @@ firefly_instances:
     # pids_limit: 200
     # cron_time: "05:30"         # its daily scheduled tasks
     # launcher_command: [flatpak, run, org.mozilla.firefox, --new-window]   # default [xdg-open]
-  # A canary, to try a new image before casa: its own database ff_canary, consumer
-  # ff-canary and secrets ff-canary-app-key and ff-canary-db-password.
+  # A canary, to try a new image before casa: its own database ff_canary and secrets
+  # ff-canary-app-key and ff-canary-db-password.
   # - name: canary
   #   networking:
   #     inbound:
   #       publish: ["127.0.0.1:18101:8080"]
+  #     connects_to: [pg-main]
+  #   pg_hba:
+  #     - {instance: pg-main, database: ff_canary}
   #   image: firefly_canary_image   # a variable of playbooks/group_vars/all/images.yml

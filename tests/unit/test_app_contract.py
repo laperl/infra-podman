@@ -69,6 +69,18 @@ class AppContract(unittest.TestCase):
                         self.assertIn("Internal=true", network.read_text(),
                                       f"{network.name}: without egress every network is internal")
 
+    def test_every_application_joins_the_networks_of_its_pairs(self) -> None:
+        # connects_to works between any two instances (docs/NETWORK.md): an application
+        # that did not join them would leave a pair without its network on one side.
+        for role in application_roles():
+            with self.subTest(role=role):
+                defaults = (REPO / "roles" / role / "defaults/main.yml").read_text()
+                self.assertIn(f"{role}_pair_networks:", defaults)
+                self.assertIn(f"{role}_pair_units:", defaults)
+                self.assertIn("pairs_of(", defaults)
+                containers = "".join(t.read_text() for t in (REPO / "roles" / role / "templates").glob("*.container.j2"))
+                self.assertIn(f"{role}_pair_networks", containers)
+
     def test_every_application_is_in_the_table_of_the_common_page(self) -> None:
         page = (REPO / "docs/services/README.md").read_text()
         for role in application_roles():
@@ -77,14 +89,14 @@ class AppContract(unittest.TestCase):
                                 f"{role} has no row in the table of docs/services/README.md, section 9")
 
 
-    def test_every_application_is_known_to_the_check_playbook(self) -> None:
-        check = yaml.safe_load((REPO / "playbooks/check.yml").read_text())
-        shorts = next(play["vars"]["check_shorts"] for play in check if "check_shorts" in play.get("vars", {}))
+    def test_every_application_is_in_the_list_of_applications(self) -> None:
+        shorts = yaml.safe_load((REPO / "playbooks/group_vars/all/apps.yml").read_text())["infra_apps"]
         for role in application_roles():
             with self.subTest(role=role):
                 defaults = yaml.safe_load((REPO / "roles" / role / "defaults/main.yml").read_text())
                 self.assertEqual(shorts.get(role), defaults[f"{role}_short"],
-                                 f"{role} is missing in check_shorts of playbooks/check.yml: its instances would be reported as undeclared")
+                                 f"{role} is missing in infra_apps (playbooks/group_vars/all/apps.yml): its instances would be "
+                                 "reported as undeclared and nothing could connect to them")
 
 
 if __name__ == "__main__":

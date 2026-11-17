@@ -6,7 +6,7 @@ Qué tiene que cumplir Firefly III antes de escribir su código. Es una propuest
 
 Ahí van tus finanzas. Por eso el principio es: **Firefly no puede enviar nada fuera del portátil**, y eso lo garantiza la red, no un ajuste de la aplicación.
 
-**Usa la Postgres de la plataforma:** una instancia de Postgres del portátil (`pg_instance`, por ejemplo `prod-pg-laptop`). Sin base dentro del contenedor ni SQLite.
+**Usa la Postgres de la plataforma:** una instancia de Postgres del portátil (`networking.connects_to: [pg-laptop]`, que es `prod-pg-laptop`). Sin base dentro del contenedor ni SQLite.
 
 Este documento dice solo lo propio de Firefly. Lo común (nombres, secretos, backups, red, Postgres) está en SPEC y en [`POSTGRES.md`](../POSTGRES.md), y aquí solo se enlaza.
 
@@ -63,7 +63,7 @@ Así es mientras no escribas `networking.egress` en la instancia ([`README.md`](
 - **Logs sin datos financieros:** `APP_DEBUG=false`, nivel `notice` y al journal de `svc_runner` (`LOG_CHANNEL=stdout`). El registro de auditoría, **apagado** (`AUDIT_LOG_LEVEL=emergency`, el valor por defecto): según Firefly, «puede contener información financiera sensible». Decidido por el operador el 2026-11-08.
 - **Postgres** (según [`POSTGRES.md`](../POSTGRES.md)):
   - **una base por instancia**, nunca compartida: `ff_<instancia>`, con su esquema del mismo nombre y sus grupos `ff_<instancia>_owner`, `_writer` y `_reader` (R35, R36, R48);
-  - Firefly migra sola, así que cada instancia usa un único usuario, `ff_<instancia>`, en su `_owner` (`POSTGRES.md`, tabla de usuarios), con `consumer: ff-<instancia>`;
+  - Firefly migra sola, así que cada instancia usa un único usuario, `ff_<instancia>`, en su `_owner` (`POSTGRES.md`, tabla de usuarios); la instancia lo dice con `connects_to: [pg-<instancia>]` y `pg_hba: [{instance: pg-<instancia>, database: ff_<instancia>}]` ([`NETWORK.md`](../NETWORK.md));
   - sus tablas, en el esquema de su base (`PGSQL_SCHEMA=ff_<instancia>`) y de su `_owner`: la base no tiene esquema `public` (probado en `lifecycle`);
   - `pg_hba` generado: cada usuario, solo en su base y solo desde la red de Firefly, cuya subred elige Podman (R45).
 

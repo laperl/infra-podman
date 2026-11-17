@@ -8,7 +8,7 @@
 #     ansible.builtin.include_role:
 #       name: podman_secrets
 #     vars:
-#       podman_secrets_reader: "{{ myapp_consumer }}"
+#       podman_secrets_reader: "{{ myapp_id }}"
 #       podman_secrets_required:
 #         - "{{ myapp_app_key_secret }}"
 #         - "{{ myapp_db_secret }}"
