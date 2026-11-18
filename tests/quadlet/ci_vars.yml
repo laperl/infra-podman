@@ -34,3 +34,10 @@ pgadmin_instances:
   - name: ci
     email: admin@example.com
     networking: {inbound: {publish: ["127.0.0.1:18102:8080"]}, connects_to: [pg-main]}
+# The Data Importer's instance ci imports into Firefly ci: roles/firefly_importer renders the
+# network of that pair from the common template, and roles/firefly renders ci joining it.
+# With one Firefly, it gets its address and a fictitious OAuth client.
+firefly_importer_instances:
+  - name: ci
+    networking: {inbound: {publish: ["127.0.0.1:18115:8080"]}, connects_to: [ff-ci]}
+    client_id: 9

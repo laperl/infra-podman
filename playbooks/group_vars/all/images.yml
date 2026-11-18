@@ -33,3 +33,10 @@ firefly_image: "docker.io/fireflyiii/core@sha256:d51ab6a3a7b91a5c892441578e0da7f
 # checked by the operator the same day (plus two attestation manifests). 9.19 fixes 15
 # vulnerabilities of server mode (CVE-2026-116238 to CVE-2026-116252).
 pgadmin_image: "docker.io/dpage/pgadmin4@sha256:3591b3d02910dcd817dec6fcaa681c278ba6966945283dd0ea0042731c330c83"  # track: 9.19
+
+# Firefly III Data Importer (phase 2, docs/services/firefly_importer.md). Digest of the index
+# computed by the operator on 2026-11-18 with skopeo inspect --raw | sha256sum. linux/amd64 and
+# linux/arm64, checked by the operator the same day (plus two attestation manifests). Needs
+# Firefly 6.6.0 or newer. Read the release notes before updating: 2.3.1 to 2.3.3 warned of
+# possible duplicate transactions.
+firefly_importer_image: "docker.io/fireflyiii/data-importer@sha256:59f2f26ddf6eb55e84ce0d571259c9aabd6ddfcc23dd4d3825ab01ad79e34930"  # track: version-2.3.5

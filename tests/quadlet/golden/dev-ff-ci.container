@@ -23,6 +23,8 @@ Volume=dev-ff-ci-uploads.volume:/var/www/html/storage/upload:Z
 Network=dev-ff-ci-pg-main-net.network
 # A pair with another instance of this machine, as networking.connects_to says (docs/NETWORK.md).
 Network=dev-ff-ci-ff-peer-net.network
+# A pair with another instance of this machine, as networking.connects_to says (docs/NETWORK.md).
+Network=dev-ffimport-ci-ff-ci-net.network
 PublishPort=127.0.0.1:18100:8080
 
 # Secrets as files (SPEC 4.5), read by the image through the *_FILE variables. The

@@ -1,0 +1,75 @@
+# Ansible managed
+[Unit]
+Description=Firefly III Data Importer ci (dev)
+# It imports into these Firefly instances. Only After=, not Requires=: the importer starts
+# without them, and one being down must not stop it (docs/services/firefly_importer.md, 2).
+After=dev-ff-ci.service
+
+[Container]
+ContainerName=dev-ffimport-ci
+Image=docker.io/fireflyiii/data-importer@sha256:59f2f26ddf6eb55e84ce0d571259c9aabd6ddfcc23dd4d3825ab01ad79e34930
+Label=infra.env=dev
+Label=infra.app=ffimport-ci
+Label=infra.component=app
+Label=infra.managed-by=infra-podman
+
+# No volume: the files you upload and your session stay in the container's own layer and
+# go when it restarts (docs/services/firefly_importer.md, section 4).
+
+# Only internal networks: one to each Firefly of connects_to, and one per other pair
+# (docs/NETWORK.md). No way out (SPEC 4.4): no bank connections. It is published where the
+# operator wrote in inbound.publish (R55), from those internal networks.
+Network=dev-ffimport-ci-ff-ci-net.network
+PublishPort=127.0.0.1:18115:8080
+
+# The image's variables, as documented in the importer's .env.example (v2.3.5).
+# Its only Firefly: by the network of the pair, and in your browser (section 3). With
+# several, both stay empty and the importer's form asks every session.
+Environment=FIREFLY_III_URL=http://dev-ff-ci:8080
+Environment=VANITY_URL=http://127.0.0.1:18100
+# The OAuth client of that Firefly: a number, not a secret. No personal access token.
+Environment=FIREFLY_III_CLIENT_ID=9
+Environment=FALLBACK_LOCALE=en_US
+Environment=TZ=UTC
+Environment=SESSION_LIFETIME=120
+Environment=IGNORE_DUPLICATE_ERRORS=false
+Environment=CONNECTION_TIMEOUT=31.41
+Environment=APP_ENV=production
+Environment=APP_DEBUG=false
+# To the journal, without a file inside the container, and without the JSON dump of the
+# transactions the .env.example itself warns about.
+Environment=LOG_CHANNEL=stdout
+Environment=LOG_LEVEL=notice
+Environment=LOG_RETURN_JSON=false
+# Firefly is plain HTTP on the network of the pair.
+Environment=EXPECT_SECURE_URL=false
+# Only CSV and camt.053 files uploaded from the web (section 7): no import from a
+# directory, by POST or from a mounted folder of configurations.
+Environment=CAN_POST_AUTOIMPORT=false
+Environment=CAN_POST_FILES=false
+# Nothing leaves the machine (section 2): no mail, no analytics in your browser and no
+# bank connections. Their variables are not set at all. The network blocks it anyway.
+Environment=ENABLE_MAIL_REPORT=false
+Environment=MAIL_MAILER=log
+
+# GET /health answers OK while the importer serves; it does not ask Firefly. Podman runs
+# it with sh -c.
+HealthCmd=curl -fsS -o /dev/null http://127.0.0.1:8080/health
+HealthInterval=30s
+HealthStartPeriod=60s
+HealthRetries=3
+HealthTimeout=10s
+
+# Hardening: the image already runs as www-data (UID 33), as Firefly; no capabilities, no
+# new privileges. Not read-only: it writes sessions and uploads in its storage.
+DropCapability=all
+NoNewPrivileges=true
+# Resource limits (R46), the only place they are written (docs/COMPATIBILITY.md).
+PodmanArgs=--memory=512m --cpus=1
+PidsLimit=200
+
+[Service]
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

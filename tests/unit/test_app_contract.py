@@ -15,7 +15,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[2]
 PLATFORM = {"postgres"}
-PROVIDERS = {"postgres"}
+PROVIDERS = {"postgres", "firefly"}
 
 
 def application_roles() -> list[str]:

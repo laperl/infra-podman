@@ -1,0 +1,91 @@
+---
+# One instance of the Firefly III Data Importer (docs/services/firefly_importer.md, R48), the
+# item firefly_importer_item of firefly_importer_instances. Check its settings, install and
+# start it with quadlet_deploy, then the operator's launcher. No checks.yml: it needs no
+# secret, no volume and no network made by another role (its pairs are its own units).
+
+- name: Check the settings of the instance
+  ansible.builtin.assert:
+    that:
+      - firefly_importer_state in ['present', 'absent']
+      - firefly_importer_instance is match('^[a-z0-9]{1,14}$')
+      - firefly_importer_image_var is match('^firefly_importer[a-z0-9_]*_image$')
+      - lookup('ansible.builtin.vars', firefly_importer_image_var, default='') is match('^[^ ]+@sha256:[0-9a-f]{64}$')
+      - firefly_importer_publish is sequence and firefly_importer_publish is not string and firefly_importer_publish | length > 0
+      - >-
+        firefly_importer_publish | map('string') | select('match', '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{1,5}:[0-9]{1,5}$') | list | length
+        == firefly_importer_publish | length
+      - firefly_importer_backup is sequence and firefly_importer_backup is not string
+      - firefly_importer_backup | difference(firefly_importer_backup_available.keys() | list) | length == 0
+      - firefly_importer_log_level in ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency']
+      - firefly_importer_memory is match('^[0-9]+[kmg]$')
+      - firefly_importer_cpus | string is match('^[0-9]+(\.[0-9]+)?$')
+      - firefly_importer_pids_limit | int > 0
+      - firefly_importer_locale is match('^[a-z]{2}_[A-Z]{2}$')
+      - firefly_importer_timezone is match('^[A-Za-z0-9_+/-]+$')
+      - firefly_importer_session_lifetime | string is match('^[1-9][0-9]*$')
+      - firefly_importer_ignore_duplicate_errors is boolean
+      - firefly_importer_connection_timeout | string is match('^[0-9]+(\.[0-9]+)?$')
+      - firefly_importer_connects_to | connects_to_problems(firefly_importer_id, infra_apps, hostvars[inventory_hostname]) | length == 0
+      - firefly_importer_ff_targets | length > 0
+      - firefly_importer_client_id | length == 0 or firefly_importer_client_id is match('^[A-Za-z0-9-]{1,64}$')
+      - firefly_importer_client_id | length == 0 or firefly_importer_single | bool
+      - not firefly_importer_single | bool or firefly_importer_vanity_url | length > 0
+      - firefly_importer_item.pg_hba is not defined
+      - firefly_importer_networking is mapping and firefly_importer_networking.keys() | difference(['inbound', 'connects_to']) | length == 0
+      - (firefly_importer_networking.inbound | default({})).keys() | difference(['publish']) | length == 0
+      - firefly_importer_launcher_name is match('^[^\n\[\]=]+$')
+      - firefly_importer_launcher_command is sequence and firefly_importer_launcher_command is not string
+      - firefly_importer_launcher_command | length > 0
+      - >-
+        firefly_importer_launcher_command | map('string') | select('match', '^[A-Za-z0-9._/:=@+,-]+$') | list | length
+        == firefly_importer_launcher_command | length
+    fail_msg: >-
+      Instance {{ firefly_importer_item.name | default('?') }} of firefly_importer_instances
+      (roles/firefly_importer/defaults/main.yml): name ^[a-z0-9]{1,14}$; image the name of a variable
+      of images.yml (firefly_importer_..._image) pinned by digest (D6); networking.inbound.publish a
+      list like ["127.0.0.1:18115:8080"], each one <address>:<host port>:<container port>;
+      networking takes only inbound, with only publish, and connects_to: no egress, no bank
+      connections (docs/services/firefly_importer.md, section 2); networking.connects_to the Firefly
+      instances of this machine it imports into, at least one, like [ff-laptop]
+      {{ ('(' ~ firefly_importer_connects_to | connects_to_problems(firefly_importer_id, infra_apps, hostvars[inventory_hostname]) | join('; ') ~ ')')
+         if firefly_importer_connects_to | connects_to_problems(firefly_importer_id, infra_apps, hostvars[inventory_hostname]) else '' }},
+      and with only one, that Firefly with an inbound.publish (its address in your browser); no
+      pg_hba: it never enters PostgreSQL; client_id the Client ID of the OAuth client of that
+      Firefly, only with one Firefly in connects_to; locale like es_ES; timezone like
+      Europe/Madrid; session_lifetime minutes above 0; ignore_duplicate_errors true or false;
+      connection_timeout seconds; log_level debug, info, notice, warning, error, critical, alert
+      or emergency; memory like 512m; cpus a number; pids_limit above 0; no backup: it has nothing
+      to copy; launcher_name without [ ] or =; launcher_command a list of words with only letters,
+      digits and ._/:=@+,- (no spaces, quotes or %), without the address.
+    quiet: true
+
+# Its home, ids and environment, read in one place (roles/service_user).
+- name: Read the service user
+  ansible.builtin.include_role:
+    name: service_user
+
+- name: Deploy with quadlet_deploy
+  ansible.builtin.include_role:
+    name: quadlet_deploy
+  vars:
+    quadlet_deploy_units: "{{ firefly_importer_quadlet_units }}"
+    quadlet_deploy_images:
+      - "{{ firefly_importer_container_image }}"
+    quadlet_deploy_wait_healthy:
+      - "{{ firefly_importer_name }}"
+    quadlet_deploy_health_retries: 36
+    quadlet_deploy_state: "{{ firefly_importer_state }}"
+    # Its pairs (docs/NETWORK.md): one the inventory no longer has goes, once nobody uses it.
+    quadlet_deploy_pair_owner: "{{ firefly_importer_id }}"
+    quadlet_deploy_pair_networks: "{{ firefly_importer_pair_networks }}"
+
+# Nothing for the daily backup: no volume (firefly_importer_backup_available is empty).
+
+- name: Install or remove the launcher
+  ansible.builtin.include_tasks: launcher.yml
+
+# --purge: the instance is retired by now, and there is nothing else to delete.
+- name: Purge the instance
+  ansible.builtin.include_tasks: purge.yml
+  when: firefly_importer_purging | bool and firefly_importer_state == 'absent'

@@ -1,0 +1,15 @@
+---
+# Included by main.yml after the instance has been retired, with --purge <instance>. The
+# importer has no volume, no secret and no database: once retired there is nothing left to
+# delete. The networks of its pairs stay while the other side uses them; they go when the
+# inventory no longer has the pair (docs/NETWORK.md, section 6).
+- name: Say what is left to do
+  ansible.builtin.debug:
+    msg:
+      - >-
+        {{ firefly_importer_name }} is purged: it had no volume and no secret, so retiring it was
+        all there was to do.
+      - >-
+        Remove the instance from firefly_importer_hosts.yml. The next apply firefly removes the
+        network of each pair, and restarts that Firefly once. Delete its OAuth client in Firefly if
+        you will not use it again.

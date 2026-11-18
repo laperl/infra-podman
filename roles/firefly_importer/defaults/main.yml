@@ -1,0 +1,135 @@
+---
+# Firefly III Data Importer (phase 2, docs/services/firefly_importer.md), as INSTANCES (R48,
+# docs/services/README.md). playbooks/firefly_importer.yml calls this role once per item of
+# firefly_importer_instances, with that item in firefly_importer_item. Each instance has its
+# own container, port, networks and launcher. No volume, no secret and no database: it
+# talks to Firefly through its API, and you log in with OAuth (section 4 of that page).
+
+# The instances of this machine, in the data repository
+# (group_vars/firefly_importer_hosts.yml). Each item:
+#   name:     ^[a-z0-9]{1,14}$, only the instance, for example laptop (required). The role
+#             adds the rest: prod-ffimport-<name>
+#   networking:  its network (docs/services/README.md, section 4):
+#               networking:
+#                 inbound: {publish: ["127.0.0.1:18115:8080"]}   # required: where it listens
+#                 connects_to: [ff-laptop]                       # required: one or more Firefly
+#             connects_to: the Firefly instances of this machine it imports into, as
+#             ff-<instance>, at least one. With exactly one, the role tells the importer
+#             where it is (FIREFLY_III_URL, VANITY_URL); with more, its form asks every
+#             session. No pg_hba: it never enters PostgreSQL. No egress: no bank connections
+#             (docs/services/firefly_importer.md, section 2). inbound.publish is a list of
+#             <address>:<host port>:<container port>; it listens on 8080 inside. The first
+#             one is the address the launcher opens and the OAuth redirect URL of Firefly
+#   client_id: the Client ID of the OAuth client created in that Firefly (not a secret),
+#             only with exactly one Firefly in connects_to. Default: empty, the form asks
+#   locale:   FALLBACK_LOCALE, how an ambiguous amount like 14.000 is read (default en_US)
+#   timezone: TZ (default UTC)
+#   session_lifetime: minutes until you authorize again (default 120)
+#   ignore_duplicate_errors: true to leave skipped duplicates out of the report (default false)
+#   connection_timeout: seconds it waits for Firefly per request (default 31.41)
+#   log_level, memory, cpus, pids_limit: as the defaults below
+#   image:    the variable of playbooks/group_vars/all/images.yml with its image (default
+#             firefly_importer_image)
+#   launcher: false on a machine without a desktop (default true)
+#   launcher_name:    its name in the menu (default "Firefly Importer (<name>)")
+#   launcher_command: the browser, as a list of words, without the address, which the role
+#             adds (default [xdg-open])
+# Set these per instance, never as firefly_importer_* variables in the inventory: those
+# would win over every instance.
+firefly_importer_instances: []
+
+# The instance of this call (set by the playbook). The value here only serves to render the
+# templates in CI.
+firefly_importer_item: {name: ci, networking: {inbound: {publish: ["127.0.0.1:18115:8080"]}, connects_to: [ff-ci]}, client_id: 9}
+
+# --retire <name>: the instance to stop and remove (it has no data to keep).
+firefly_importer_retire: ""
+
+# --purge <name>: the same as --retire: it has no volume and no secret to delete
+# (tasks/purge.yml).
+firefly_importer_purge: ""
+firefly_importer_purging: false
+
+firefly_importer_state: present
+
+# What this application needs to work (docs/services/README.md, section 9; R56, R59).
+# tests/unit/test_app_contract.py checks it.
+firefly_importer_contract:
+  database: none        # no database of its own; it writes through Firefly's API
+  providers: [firefly]  # at least one Firefly in networking.connects_to
+  egress: false
+
+# What each instance gets when it does not say otherwise.
+firefly_importer_instance: "{{ firefly_importer_item.name }}"
+firefly_importer_networking: "{{ firefly_importer_item.networking | default({}) }}"
+firefly_importer_publish: "{{ (firefly_importer_networking.inbound | default({})).publish | default([]) }}"
+# Address and host port of the first one: http://127.0.0.1:18115
+firefly_importer_url: "http://{{ firefly_importer_publish[0] | regex_replace(':[0-9]+$', '') }}"
+firefly_importer_connects_to: "{{ firefly_importer_networking.connects_to | default([]) }}"
+firefly_importer_ff_targets: >-
+  {{ firefly_importer_connects_to | map('string') | select('match', '^' ~ infra_apps.firefly ~ '-') | list }}
+firefly_importer_client_id: "{{ firefly_importer_item.client_id | default('') | string }}"
+firefly_importer_locale: "{{ firefly_importer_item.locale | default('en_US') }}"
+firefly_importer_timezone: "{{ firefly_importer_item.timezone | default('UTC') }}"
+firefly_importer_session_lifetime: "{{ firefly_importer_item.session_lifetime | default(120) }}"
+firefly_importer_ignore_duplicate_errors: "{{ firefly_importer_item.ignore_duplicate_errors | default(false) }}"
+firefly_importer_connection_timeout: "{{ firefly_importer_item.connection_timeout | default('31.41') }}"
+firefly_importer_image_var: "{{ firefly_importer_item.image | default('firefly_importer_image') }}"
+firefly_importer_container_image: "{{ lookup('ansible.builtin.vars', firefly_importer_image_var) }}"
+# LOG_LEVEL of Laravel, to the journal of the service user. The importer's own default is
+# debug, which writes your transactions in the log.
+firefly_importer_log_level: "{{ firefly_importer_item.log_level | default('notice') }}"
+# Resource limits (R46). Podman 4.9 has no Memory= key: memory and CPU go through
+# PodmanArgs (docs/COMPATIBILITY.md). To be measured in DEV.
+firefly_importer_memory: "{{ firefly_importer_item.memory | default('512m') }}"
+firefly_importer_cpus: "{{ firefly_importer_item.cpus | default('1') }}"
+firefly_importer_pids_limit: "{{ firefly_importer_item.pids_limit | default(200) }}"
+# Launcher in the operator's menu (R47).
+firefly_importer_launcher: "{{ firefly_importer_item.launcher | default(true) }}"
+firefly_importer_launcher_name: >-
+  {{ firefly_importer_item.launcher_name | default('Firefly Importer (' ~ firefly_importer_instance ~ ')') }}
+firefly_importer_launcher_command: "{{ firefly_importer_item.launcher_command | default(['xdg-open']) }}"
+
+# Names (SPEC 4.12, R48). Derived; do not override. The short name has 8 letters (R52):
+# the instance laptop in prod is prod-ffimport-laptop.
+firefly_importer_short: ffimport
+firefly_importer_name: "{{ infra_env }}-{{ firefly_importer_short }}-{{ firefly_importer_instance }}"
+# Its identifier everywhere: labels, connects_to of others.
+firefly_importer_id: "{{ firefly_importer_short }}-{{ firefly_importer_instance }}"
+firefly_importer_launcher_file_name: infra-podman-{{ firefly_importer_name }}.desktop
+
+# Its Firefly (docs/services/firefly_importer.md, section 3), only with exactly one in
+# connects_to: its container on the network of the pair, and its address in your browser,
+# the first of its inbound.publish in firefly_instances of this machine.
+firefly_importer_ff_names: "{{ firefly_importer_ff_targets | map('regex_replace', '^', infra_env ~ '-') | list }}"
+firefly_importer_single: "{{ firefly_importer_ff_targets | length == 1 }}"
+firefly_importer_ff_item: >-
+  {{ (hostvars[inventory_hostname].firefly_instances | default([])
+      | selectattr('name', 'equalto', (firefly_importer_ff_targets[0] | default('') | regex_replace('^' ~ infra_apps.firefly ~ '-', '')))
+      | list + [{}]) | first }}
+firefly_importer_ff_publish: >-
+  {{ ((firefly_importer_ff_item.networking | default({})).inbound | default({})).publish | default([]) }}
+firefly_importer_firefly_url: "http://{{ firefly_importer_ff_names[0] | default('') }}:8080"
+firefly_importer_vanity_url: >-
+  {{ ('http://' ~ (firefly_importer_ff_publish[0] | regex_replace(':[0-9]+$', '')))
+     if firefly_importer_ff_publish | length > 0 else '' }}
+
+# Its pairs (docs/NETWORK.md): [client, receiver], one network each, all with other
+# applications (it never connects to PostgreSQL): either side writes them.
+firefly_importer_pairs: "{{ firefly_importer_id | pairs_of(infra_apps, hostvars[inventory_hostname]) }}"
+firefly_importer_pair_networks: "{{ firefly_importer_pairs | map('pair_network', infra_env) | list }}"
+firefly_importer_other_pairs: >-
+  {{ firefly_importer_pairs | rejectattr('0', 'match', '^pg-') | rejectattr('1', 'match', '^pg-') | list }}
+
+# Nothing to add to the daily backup: no volume (docs/services/firefly_importer.md, 9).
+# Your JSON configurations live in your data repository.
+firefly_importer_backup: "{{ firefly_importer_item.backup | default([]) }}"
+firefly_importer_backup_available: {}
+
+# What quadlet_deploy installs, and what CI renders (scripts/render-quadlets.yml).
+firefly_importer_quadlet_units: >-
+  {{ [{'template': 'firefly_importer.container.j2', 'name': firefly_importer_name ~ '.container'}]
+     + firefly_importer_pair_units }}
+# The network of each pair with another application: either side writes it, from the one
+# template of quadlet_deploy. A retire leaves them while the other side uses them.
+firefly_importer_pair_units: "{{ firefly_importer_other_pairs | pair_units(infra_env) }}"
