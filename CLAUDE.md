@@ -47,3 +47,4 @@ No leas todo el repo: lee lo que pide la tarea. Cada cosa se explica en un solo 
 - Documentación y mensajes en español; código, variables y commits en inglés.
 - Commits con prefijo convencional (`feat:`, `fix:`, `docs:`, `chore:`, `ci:`).
 - Lista completa de prohibiciones: SPEC, sección 8.
+- **Procedimientos guiados** (como `docs/services/ADD_APP.md`; las skills de `.claude/skills/` solo remiten a ellos, para que valgan con cualquier IA): al terminar una tarea guiada por uno, evalúa con el operador lo que no previó y propón el cambio en un PR propio.
