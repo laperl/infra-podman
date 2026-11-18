@@ -1,0 +1,9 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Working directory of {{ pgadmin_name }}: its user, the servers registered in it and its
+# settings. Never removed when the service is destroyed (SPEC 4.2).
+[Volume]
+VolumeName={{ pgadmin_volume }}
+Label=infra.env={{ infra_env }}
+Label=infra.app={{ pgadmin_id }}
+Label=infra.component=data
+Label=infra.managed-by=infra-podman

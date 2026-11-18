@@ -6,3 +6,9 @@
 infra_apps:
   postgres: pg
   firefly: ff
+  pgadmin: pgadmin
+
+# The applications that administer PostgreSQL (R37): the postgres role lets its superuser
+# in over TCP, to every database, only from the network of each pair with an instance of
+# these. A fixed exception: tests/unit/test_app_contract.py allows only pgadmin.
+infra_postgres_admins: [pgadmin]

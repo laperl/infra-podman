@@ -1,0 +1,122 @@
+---
+# pgAdmin 4 (phase 2, R37, docs/services/pgadmin.md), as INSTANCES (R48,
+# docs/services/README.md). playbooks/pgadmin.yml calls this role once per item of
+# pgadmin_instances, with that item in pgadmin_item. Each instance has its own container,
+# port, networks, secret, volume and launcher: nothing is shared between instances.
+
+# The instances of this machine, in the data repository (group_vars/pgadmin_hosts.yml).
+# Each item:
+#   name:     ^[a-z0-9]{1,14}$, only the instance, for example laptop (required). The role
+#             adds the rest: prod-pgadmin-<name>
+#   email:    the e-mail of its only user, created on the first start (required). Personal
+#             data: only in the data repository, never in this one (SPEC 5.2)
+#   networking:  its network (docs/services/README.md, section 4):
+#               networking:
+#                 inbound: {publish: ["127.0.0.1:18101:8080"]}   # required: where it listens
+#                 connects_to: [pg-main]                         # required: one or more PostgreSQL
+#             connects_to: the PostgreSQL instances of this machine it administers, as
+#             pg-<instance>, at least one. Their superuser may log in over TCP only from
+#             the network of each pair (R37, docs/services/pgadmin.md, section 3). No
+#             pg_hba: pgAdmin enters as the superuser, not as a user of a database.
+#             No egress: pgAdmin needs no way out (docs/services/pgadmin.md, section 2).
+#             inbound.publish is a list of <address>:<host port>:<container port>; pgAdmin
+#             listens on 8080 inside. The first one is the address the launcher opens
+#   image:    the variable of playbooks/group_vars/all/images.yml with its image (default
+#             pgadmin_image)
+#   log_level, memory, cpus, pids_limit: as the defaults below
+#   backup:   what the daily backup of the machine copies of this instance: a list of
+#             names, of [data] (its volume). Default [], nothing
+#   launcher: false on a machine without a desktop (default true)
+#   launcher_name:    its name in the menu (default "pgAdmin 4 (<name>)")
+#   launcher_command: the browser, as a list of words, without the address, which the role
+#             adds (default [xdg-open])
+# Set these per instance, never as pgadmin_* variables in the inventory: those would win
+# over every instance.
+pgadmin_instances: []
+
+# The instance of this call (set by the playbook). The value here only serves to render the
+# templates in CI.
+pgadmin_item: {name: ci, email: admin@example.com, networking: {inbound: {publish: ["127.0.0.1:18102:8080"]}, connects_to: [pg-main]}}
+
+# --retire <name>: the instance to stop and remove, keeping its data (playbook).
+pgadmin_retire: ""
+
+# --purge <name>: the instance to retire and then delete, with its volume and its own
+# secret, after a backup of the volume (playbook, tasks/purge.yml).
+pgadmin_purge: ""
+pgadmin_purging: false
+
+pgadmin_state: present
+
+# What this application needs to work (docs/services/README.md, section 9; R56, R59).
+# tests/unit/test_app_contract.py checks it. Besides, pgAdmin is in infra_postgres_admins
+# (playbooks/group_vars/all/apps.yml, R37): the postgres role lets its superuser in from
+# the network of each pair with an instance of pgAdmin.
+pgadmin_contract:
+  database: none         # its own data is SQLite, in its volume
+  providers: [postgres]  # at least one PostgreSQL in networking.connects_to
+  egress: false
+
+# What each instance gets when it does not say otherwise.
+pgadmin_instance: "{{ pgadmin_item.name }}"
+pgadmin_email: "{{ pgadmin_item.email | default('') }}"
+pgadmin_networking: "{{ pgadmin_item.networking | default({}) }}"
+pgadmin_publish: "{{ (pgadmin_networking.inbound | default({})).publish | default([]) }}"
+# Address and host port of the first one: http://127.0.0.1:18101
+pgadmin_url: "http://{{ pgadmin_publish[0] | regex_replace(':[0-9]+$', '') }}"
+pgadmin_connects_to: "{{ pgadmin_networking.connects_to | default([]) }}"
+pgadmin_pg_targets: "{{ pgadmin_connects_to | map('string') | select('match', '^pg-') | list }}"
+pgadmin_image_var: "{{ pgadmin_item.image | default('pgadmin_image') }}"
+pgadmin_container_image: "{{ lookup('ansible.builtin.vars', pgadmin_image_var) }}"
+# CONSOLE_LOG_LEVEL of config.py, as Python's logging levels: 10 debug, 20 info,
+# 30 warning, 40 error, 50 critical. The logs go to the journal of the service user.
+pgadmin_log_level: "{{ pgadmin_item.log_level | default(30) }}"
+# Resource limits (R46). Podman 4.9 has no Memory= key: memory and CPU go through
+# PodmanArgs (docs/COMPATIBILITY.md). To be measured in DEV (docs/services/pgadmin.md).
+pgadmin_memory: "{{ pgadmin_item.memory | default('512m') }}"
+pgadmin_cpus: "{{ pgadmin_item.cpus | default('1') }}"
+pgadmin_pids_limit: "{{ pgadmin_item.pids_limit | default(256) }}"
+# Launcher in the operator's menu (R47).
+pgadmin_launcher: "{{ pgadmin_item.launcher | default(true) }}"
+pgadmin_launcher_name: "{{ pgadmin_item.launcher_name | default('pgAdmin 4 (' ~ pgadmin_instance ~ ')') }}"
+pgadmin_launcher_command: "{{ pgadmin_item.launcher_command | default(['xdg-open']) }}"
+
+# The user the image runs as (docs/services/pgadmin.md, section 1): only for the owner of
+# the secret file inside the container. Not a setting.
+pgadmin_uid: 5050
+
+# Names (SPEC 4.12, R48). Derived; do not override. The short name is the real one
+# (R52): the instance laptop in prod is prod-pgadmin-laptop.
+pgadmin_short: pgadmin
+pgadmin_name: "{{ infra_env }}-{{ pgadmin_short }}-{{ pgadmin_instance }}"
+pgadmin_volume: "{{ pgadmin_name }}-data"
+# Its identifier everywhere: labels, secrets (readers:), connects_to of others.
+pgadmin_id: "{{ pgadmin_short }}-{{ pgadmin_instance }}"
+# Its pairs (docs/NETWORK.md): [client, receiver], one network each. The ones to
+# PostgreSQL are created by the postgres role (SPEC 4.4); the others by either side.
+pgadmin_pairs: "{{ pgadmin_id | pairs_of(infra_apps, hostvars[inventory_hostname]) }}"
+pgadmin_pair_networks: "{{ pgadmin_pairs | map('pair_network', infra_env) | list }}"
+pgadmin_pg_networks: "{{ pgadmin_pairs | selectattr('1', 'match', '^pg-') | map('pair_network', infra_env) | list }}"
+pgadmin_pg_names: "{{ pgadmin_pg_targets | map('regex_replace', '^', infra_env ~ '-') | list }}"
+pgadmin_other_pairs: "{{ pgadmin_pairs | rejectattr('0', 'match', '^pg-') | rejectattr('1', 'match', '^pg-') | list }}"
+# Its only secret, two names: the title of its KeePassXC entry (<infra_site>/<entry>) and
+# its name in infra_secrets; and the Podman secret on the machine, with the environment.
+pgadmin_password_secret_entry: "{{ pgadmin_short }}-{{ pgadmin_instance }}-login-password"
+pgadmin_password_secret: "{{ infra_env }}-{{ pgadmin_password_secret_entry }}"
+pgadmin_launcher_file_name: infra-podman-{{ pgadmin_name }}.desktop
+
+# What this instance adds to the daily backup (roles/backup/tasks/app_items.yml): the
+# items of pgadmin_backup_available the operator named in backup: of the instance.
+pgadmin_backup: "{{ pgadmin_item.backup | default([]) }}"
+pgadmin_backup_available:
+  data: {type: volume, name: data, volume: "{{ pgadmin_volume }}"}
+
+# What quadlet_deploy installs, and what CI renders (scripts/render-quadlets.yml).
+# With the networks of its pairs with other applications, if any.
+pgadmin_quadlet_units: >-
+  {{ [{'template': 'pgadmin.container.j2', 'name': pgadmin_name ~ '.container'},
+      {'template': 'pgadmin-data.volume.j2', 'name': pgadmin_volume ~ '.volume'}]
+     + pgadmin_pair_units }}
+# The network of each pair with another application (not PostgreSQL): either side writes
+# it, from the one template of quadlet_deploy. A purge leaves them (tasks/purge.yml).
+pgadmin_pair_units: "{{ pgadmin_other_pairs | pair_units(infra_env) }}"

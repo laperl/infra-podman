@@ -5,6 +5,20 @@
 # 1. The socket inside the container: whoever gets here is already the service user.
 local   all  all  trust
 
+{% if postgres_admins %}
+# 2a. The superuser, to every database, only from the network of each pgAdmin that
+#     administers this instance (R37), whose subnet Podman chose.
+{% for admin in postgres_admins %}
+{% if admin in postgres_subnets %}
+host    all  {{ postgres_superuser }}  {{ postgres_subnets[admin] }}  scram-sha-256
+{% else %}
+# {{ postgres_superuser }} from {{ admin }}: its network does not exist yet
+{% endif %}
+{% endfor %}
+
+{% endif %}
+{# The comment below keeps its old words, so that the file of an existing instance does
+   not change when no pgAdmin administers it: its exception is 2a, above. -#}
 # 2. The superuser never over TCP (pgAdmin's exception arrives in phase 2, R37).
 host    all  {{ postgres_superuser }}  0.0.0.0/0  reject
 host    all  {{ postgres_superuser }}  ::/0       reject

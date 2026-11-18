@@ -1,0 +1,101 @@
+---
+# Included by main.yml after the instance has been retired, with --purge <instance>: its
+# volume and its own secret are DELETED, after a backup of the volume. Nothing is deleted
+# if that backup cannot be made. pgAdmin has no database in PostgreSQL.
+
+# An older backup-prepare.sh does not read backup.d: the backup would run and leave the
+# volumes out.
+- name: Check that the backup of this machine copies what the applications declare
+  ansible.builtin.command:
+    cmd: grep -q backup.d {{ service_user_home }}/.local/share/infra-podman/backup/backup-prepare.sh
+  become: true
+  become_user: "{{ service_user }}"
+  register: pgadmin_purge_backup
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Require it before deleting anything
+  ansible.builtin.assert:
+    that: pgadmin_purge_backup.rc == 0
+    fail_msg: >-
+      {{ pgadmin_name }} is retired, and nothing has been deleted: the backup of
+      {{ inventory_hostname }} is missing or too old to copy its volumes first. Apply the backup
+      playbook and repeat: ./deploy.sh apply backup --env {{ infra_env }} --limit {{ inventory_hostname }}
+    quiet: true
+
+# Every volume of the instance that still exists, whatever backup: says: this is the last
+# copy of them. A purge that is repeated finds none, and only finishes the cleaning.
+- name: Find which of its volumes exist
+  ansible.builtin.command:
+    cmd: podman volume exists {{ item.volume }}
+  loop: "{{ pgadmin_backup_available.values() | selectattr('type', 'equalto', 'volume') | list }}"
+  loop_control:
+    label: "{{ item.volume }}"
+  environment: "{{ service_user_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: pgadmin_purge_volumes
+  changed_when: false
+  failed_when: pgadmin_purge_volumes.rc not in [0, 1]
+  check_mode: false
+
+- name: Declare them for the backup before the purge
+  ansible.builtin.include_role:
+    name: backup
+    tasks_from: app_items.yml
+  vars:
+    backup_items_app: "{{ pgadmin_id }}"
+    backup_items: "{{ pgadmin_purge_volumes.results | selectattr('rc', 'equalto', 0) | map(attribute='item') | list }}"
+
+- name: Back up before deleting
+  ansible.builtin.include_role:
+    name: backup
+    tasks_from: run_now.yml
+  vars:
+    backup_now_reason: pre-purge
+    backup_now_missing_msg: >-
+      {{ pgadmin_name }} is retired, and nothing has been deleted: there is no backup service on
+      {{ inventory_hostname }} to copy its volumes first. Apply the backup playbook before.
+    backup_now_plan_msg: "{{ pgadmin_name }} is purged: apply will run {{ infra_env }}-backup.service first."
+    backup_now_failed_msg: >-
+      The backup before purging {{ pgadmin_name }} failed, so its volumes and secrets have NOT
+      been deleted. The instance stays retired.
+  when: pgadmin_purge_volumes.results | selectattr('rc', 'equalto', 0) | list | length > 0
+
+- name: Delete its volumes
+  ansible.builtin.include_role:
+    name: quadlet_deploy
+  vars:
+    # Not the networks of its pairs: the other side may still use them. They go when the
+    # inventory no longer has the pair (docs/NETWORK.md, section 6).
+    quadlet_deploy_units: "{{ pgadmin_quadlet_units | rejectattr('template', 'equalto', 'pair.network.j2') | list }}"
+    quadlet_deploy_state: absent
+    quadlet_deploy_purge: true
+
+- name: Remove its items from the daily backup
+  ansible.builtin.include_role:
+    name: backup
+    tasks_from: app_items.yml
+  vars:
+    backup_items_app: "{{ pgadmin_id }}"
+    backup_items: []
+
+- name: Delete its secret
+  containers.podman.podman_secret:
+    name: "{{ pgadmin_password_secret }}"
+    state: absent
+  environment: "{{ service_user_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+
+- name: Say what is left to do
+  ansible.builtin.debug:
+    msg:
+      - >-
+        {{ pgadmin_name }} is purged: its volume and its secret are deleted. The copy of the
+        volume is in the backup, with reason=pre-purge.
+      - >-
+        Remove the instance from pgadmin_hosts.yml and its line from infra_secrets, and its
+        entry from KeePassXC. The next apply postgres removes the superuser's line for it from
+        pg_hba.conf, with the network of each pair.

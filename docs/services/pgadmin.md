@@ -8,17 +8,17 @@ Qué tiene que cumplir pgAdmin antes de escribir su código. Es una propuesta: l
 
 **Por instancias (R48),** como cualquier aplicación ([`README.md`](README.md)), aunque lo normal es tener una sola, que puede administrar **una o varias** Postgres de la misma máquina. Abajo, `<instancia>` es el `name:` de la tuya.
 
-Fuente de todo lo que dice este documento de la imagen, salvo que se diga otra cosa: [Container Deployment, pgAdmin 4 9.17](https://www.pgadmin.org/docs/pgadmin4/9.17/container_deployment.html). Todas las opciones de configuración: [The config.py File](https://www.pgadmin.org/docs/pgadmin4/9.17/config_py.html).
+Fuente de todo lo que dice este documento de la imagen, salvo que se diga otra cosa: [Container Deployment, pgAdmin 4 9.19](https://www.pgadmin.org/docs/pgadmin4/9.19/container_deployment.html). Todas las opciones de configuración: [The config.py File](https://www.pgadmin.org/docs/pgadmin4/9.19/config_py.html).
 
 ## 1. Ficha
 
 | Dato | Valor |
 | --- | --- |
 | Nombres | De código `pgadmin`; corto `pgadmin` (7 letras, su nombre real, R52) |
-| Imagen | `docker.io/dpage/pgadmin4`, la oficial, en Docker Hub; sin suscripción. Se sigue la versión exacta: `# track: 9.17`. 🔍 Digest del índice y que existan `linux/amd64` y `linux/arm64`: lo calcula el operador con `skopeo inspect --raw \| sha256sum`, como con Firefly |
+| Imagen | `docker.io/dpage/pgadmin4`, la oficial, en Docker Hub; sin suscripción. Se sigue la versión exacta: `# track: 9.19`, que corrige 15 vulnerabilidades del modo servidor. Digest del índice calculado por el operador el 2026-11-18 con `skopeo inspect --raw \| sha256sum`, con `linux/amd64` y `linux/arm64` |
 | Usuario del contenedor | `pgadmin`, UID y GID 5050. Sin `User=` ni `UserNS=`: como Firefly con su UID 33, el 5050 de dentro es un UID subordinado de `svc_runner` en el host |
 | Endurecimiento | `DropCapability=all` y `NoNewPrivileges=true`, sin excepción: la imagen lo contempla y entonces escucha en el 8080. `ReadOnly=true` 🔍 (apartado 3) |
-| Contrato | `database: none` (sus datos propios van en SQLite, en su volumen), `providers: [postgres]` (al menos una en `connects_to`), `egress: false`. Además, la marca de administrador de Postgres (apartado 3) |
+| Contrato | `database: none` (sus datos propios van en SQLite, en su volumen), `providers: [postgres]` (al menos una en `connects_to`), `egress: false`. Además, está en `infra_postgres_admins` (apartado 3) |
 | Entrada | HTTP en el 8080, publicado en `127.0.0.1:<puerto>`. Salud: `GET /misc/ping` responde 200 y `PING` (dicho por sus desarrolladores en la lista oficial `pgadmin-support`, no en la documentación). 🔍 Qué herramienta trae la imagen para pedirlo (`wget` o `python3`) |
 | Datos | `/var/lib/pgadmin` (sesiones, ficheros de usuario, configuración y su base SQLite): volumen `prod-pgadmin-<instancia>-data`. `/tmp` en `tmpfs` |
 | Secretos | Uno: la contraseña de entrada (apartado 4) |
@@ -39,9 +39,10 @@ Fuente de todo lo que dice este documento de la imagen, salvo que se diga otra c
 
 R37 decidió que el superusuario solo pueda entrar por TCP desde la red de pgAdmin. Hoy el inventario no puede decirlo: `pg_hba` va por bases y abre a todos los usuarios de una, y el superusuario no pertenece a ninguna. La forma, aprobada por el operador el 2026-11-18:
 
-- **Una marca en el contrato de pgAdmin** que dice «administra Postgres». Es una excepción fija en el código: un test impide que otra aplicación la tenga.
-- **El rol `postgres` escribe la línea.** En cada `apply postgres`, para cada instancia con la marca que lo nombra en `connects_to`, añade antes del rechazo del superusuario: `host all <su superusuario> <subred de esa pareja> scram-sha-256`. El superusuario es el `superuser:` de esa instancia en `postgres_hosts.yml`; la subred, la que eligió Podman al crear la red, que el rol ya lee para las demás aplicaciones. Si cambia, la recarga sin reiniciar ([`POSTGRES.md`](../POSTGRES.md), apartado 3).
-- **En la instancia de pgAdmin no se escribe `pg_hba`:** solo `connects_to`. El `plan` acepta que una aplicación con la marca no lo tenga.
+- **Una lista fija, `infra_postgres_admins: [pgadmin]`**, en `playbooks/group_vars/all/apps.yml`, junto a la de nombres cortos: las aplicaciones que administran Postgres. Es una excepción fija en el código: un test impide que tenga otra cosa. Va ahí y no en el contrato del rol porque es el rol `postgres` quien la lee.
+- **El rol `postgres` escribe la línea.** En cada `apply postgres`, para cada instancia de esas aplicaciones que lo nombra en `connects_to` (filtro `admins_of`), añade antes del rechazo del superusuario: `host all <su superusuario> <subred de esa pareja> scram-sha-256`. El superusuario es el `superuser:` de esa instancia en `postgres_hosts.yml`; la subred, la que eligió Podman al crear la red, que el rol ya lee para las demás aplicaciones. Si cambia, la recarga sin reiniciar ([`POSTGRES.md`](../POSTGRES.md), apartado 3).
+- **En la instancia de pgAdmin no se escribe `pg_hba`:** solo `connects_to`, y el `plan` rechaza un `pg_hba`.
+- **Sin pgAdmin, `pg_hba.conf` no cambia:** las instancias que ya existen no se recargan.
 - **Toca otro rol** (`postgres`) y el filtro `pg_hba_problems`, aunque el criterio de la fase 2b dice «sin tocar los demás roles»: lo exige R37.
 - **Para trabajar como una aplicación,** el superusuario usa `SET ROLE <base>_owner` ([`POSTGRES.md`](../POSTGRES.md), apartado 2): no hace falta abrir a pgAdmin los usuarios de las bases.
 
@@ -60,7 +61,7 @@ R37 decidió que el superusuario solo pueda entrar por TCP desde la red de pgAdm
 
 ## 5. Configuración
 
-Todas las opciones: [The config.py File](https://www.pgadmin.org/docs/pgadmin4/9.17/config_py.html). Cualquier opción de `config.py` se fija con una variable `PGADMIN_CONFIG_<opción>`, que la imagen escribe en `config_distro.py` **solo en el primer arranque**: cambiarla después no se aplica sola.
+Todas las opciones: [The config.py File](https://www.pgadmin.org/docs/pgadmin4/9.19/config_py.html). Cualquier opción de `config.py` se fija con una variable `PGADMIN_CONFIG_<opción>`, que la imagen escribe en `config_distro.py` **solo en el primer arranque**: cambiarla después no se aplica sola.
 
 | Opción | Valor | Por qué |
 | --- | --- | --- |
@@ -74,7 +75,9 @@ Todas las opciones: [The config.py File](https://www.pgadmin.org/docs/pgadmin4/9
 | `PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION` | `True` | Está en los ejemplos oficiales |
 | `PGADMIN_CONFIG_CONSOLE_LOG_LEVEL` | por defecto | Se cambia por instancia (`log_level`) para depurar |
 
-🔍 Que `ALLOW_SAVE_PASSWORD`, `SHOW_GRAVATAR_IMAGE` y `UPGRADE_CHECK_ENABLED` siguen existiendo en la 9.17, en su `config.py`.
+🔍 Que `ALLOW_SAVE_PASSWORD`, `SHOW_GRAVATAR_IMAGE` y `UPGRADE_CHECK_ENABLED` siguen existiendo en la 9.19, en su `config.py`.
+
+**`SERVER_PASSEXEC_COMMANDS`** (nueva en la 9.19): la lista de órdenes que pueden dar una contraseña en modo servidor, sustituyendo las de texto libre. Su aviso de «configúrala antes del primer arranque» es para quien ya las usaba al actualizar. Aquí no se usan: las contraseñas se copian de KeePassXC.
 
 ## 6. Actualizaciones y copias
 

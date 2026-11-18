@@ -99,5 +99,12 @@ class AppContract(unittest.TestCase):
                                  "reported as undeclared and nothing could connect to them")
 
 
+    def test_only_pgadmin_administers_postgres(self) -> None:
+        # R37: the superuser over TCP, only from the network of pgAdmin. A fixed exception,
+        # not something any application can ask for.
+        apps = yaml.safe_load((REPO / "playbooks/group_vars/all/apps.yml").read_text())
+        self.assertEqual(apps["infra_postgres_admins"], ["pgadmin"])
+
+
 if __name__ == "__main__":
     unittest.main()

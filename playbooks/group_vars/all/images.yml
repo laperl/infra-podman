@@ -27,3 +27,9 @@ rest_server_image: "docker.io/restic/rest-server@sha256:d2aff06f47eb38637dff580c
 # operator on 2026-11-08 with skopeo inspect --raw | sha256sum. linux/amd64 and
 # linux/arm64, checked by the operator the same day (plus two attestation manifests).
 firefly_image: "docker.io/fireflyiii/core@sha256:d51ab6a3a7b91a5c892441578e0da7f2935f84f36bd1151fc3833acc6e060871"  # track: version-6.7.9
+
+# pgAdmin 4 (phase 2, R37, docs/services/pgadmin.md). Digest of the index computed by the
+# operator on 2026-11-18 with skopeo inspect --raw | sha256sum. linux/amd64 and linux/arm64,
+# checked by the operator the same day (plus two attestation manifests). 9.19 fixes 15
+# vulnerabilities of server mode (CVE-2026-116238 to CVE-2026-116252).
+pgadmin_image: "docker.io/dpage/pgadmin4@sha256:3591b3d02910dcd817dec6fcaa681c278ba6966945283dd0ea0042731c330c83"  # track: 9.19

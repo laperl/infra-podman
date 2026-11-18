@@ -195,10 +195,22 @@ def hba_of(target, apps, variables) -> list[dict]:
     return [{"client": client, "database": database} for client, database in sorted(unique)]
 
 
+def admins_of(target, apps, variables, admins) -> list[str]:
+    """The instances of a machine that administer the PostgreSQL instance <target> (R37).
+
+    Those of an application in <admins> (infra_postgres_admins) that say connects_to:
+    [<target>]. The postgres role lets its superuser in from the network of each of these
+    pairs, and no one else. Sorted.
+    """
+    shorts = [apps[role] for role in admins or [] if role in apps]
+    return [client for client in clients_of(target, apps, variables)
+            if any(client.startswith(f"{short}-") for short in shorts)]
+
+
 class FilterModule:
     def filters(self):
         return {"egress_problems": egress_problems, "instance_ids": instance_ids,
                 "clients_of": clients_of, "connects_to_problems": connects_to_problems,
                 "is_postgres": is_postgres, "pairs_of": pairs_of, "pair_network": pair_network,
                 "pair_units": pair_units, "databases_of": databases_of,
-                "pg_hba_problems": pg_hba_problems, "hba_of": hba_of}
+                "pg_hba_problems": pg_hba_problems, "hba_of": hba_of, "admins_of": admins_of}

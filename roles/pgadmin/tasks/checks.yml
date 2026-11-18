@@ -1,0 +1,51 @@
+---
+# Included by main.yml: everything pgAdmin needs, checked before anything changes, each
+# with what to do about it. Only reads.
+
+- name: Check that its PostgreSQL instances exist
+  ansible.builtin.command:
+    cmd: podman container exists {{ item }}
+  loop: "{{ pgadmin_pg_names }}"
+  environment: "{{ pgadmin_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: pgadmin_pg_exists
+  changed_when: false
+  failed_when: pgadmin_pg_exists.rc not in [0, 1]
+  check_mode: false
+
+- name: Check that its networks to them exist (created by the postgres playbook)
+  ansible.builtin.command:
+    cmd: podman network exists {{ item }}
+  loop: "{{ pgadmin_pg_networks }}"
+  environment: "{{ pgadmin_env }}"
+  become: true
+  become_user: "{{ service_user }}"
+  register: pgadmin_net_exists
+  changed_when: false
+  failed_when: pgadmin_net_exists.rc not in [0, 1]
+  check_mode: false
+
+- name: Require the instances and the networks
+  ansible.builtin.assert:
+    that:
+      - pgadmin_pg_missing | length == 0
+      - pgadmin_net_missing | length == 0
+    fail_msg: >-
+      pgAdmin {{ pgadmin_instance }} on {{ inventory_hostname }} needs
+      {{ (pgadmin_pg_missing + pgadmin_net_missing) | join(', ') }}. The postgres role creates the
+      network of each pair once this instance says connects_to: [pg-<instance>]: apply postgres
+      first, ./deploy.sh apply postgres --env {{ infra_env }} --limit {{ inventory_hostname }}
+      (docs/NETWORK.md, docs/services/pgadmin.md, section 3).
+    quiet: true
+  vars:
+    pgadmin_pg_missing: "{{ pgadmin_pg_exists.results | rejectattr('rc', 'equalto', 0) | map(attribute='item') | list }}"
+    pgadmin_net_missing: "{{ pgadmin_net_exists.results | rejectattr('rc', 'equalto', 0) | map(attribute='item') | list }}"
+
+- name: Require its secret
+  ansible.builtin.include_role:
+    name: podman_secrets
+  vars:
+    podman_secrets_reader: "{{ pgadmin_id }}"
+    podman_secrets_required:
+      - "{{ pgadmin_password_secret }}"

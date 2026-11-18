@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  author: laperl
+  description: pgAdmin 4 as a rootless Quadlet container to administer the platform PostgreSQL (phase 2, R37)
+  license: GPL-3.0-or-later
+  min_ansible_version: "2.18"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+    - name: Fedora
+      versions:
+        - "44"
+dependencies: []

@@ -167,5 +167,30 @@ class PgHba(unittest.TestCase):
         self.assertIn("written by the application", found[0])
 
 
+class AdminsOf(unittest.TestCase):
+    """Who may use the superuser of a PostgreSQL instance over TCP (R37)."""
+
+    APPS = {"postgres": "pg", "firefly": "ff", "pgadmin": "pgadmin"}
+    MACHINE = {
+        "postgres_instances": [{"name": "laptop"}, {"name": "test"}],
+        "firefly_instances": [{"name": "casa", "networking": {"connects_to": ["pg-laptop"]}}],
+        "pgadmin_instances": [{"name": "laptop", "networking": {"connects_to": ["pg-laptop", "pg-test"]}},
+                              {"name": "spare"}],
+    }
+
+    def admins(self, target, admins=("pgadmin",)):
+        return networking_filter.admins_of(target, self.APPS, self.MACHINE, list(admins))
+
+    def test_only_the_admin_application_that_connects(self) -> None:
+        self.assertEqual(self.admins("pg-laptop"), ["pgadmin-laptop"])
+        self.assertEqual(self.admins("pg-test"), ["pgadmin-laptop"])
+
+    def test_nobody_without_the_list(self) -> None:
+        self.assertEqual(self.admins("pg-laptop", ()), [])
+
+    def test_an_application_outside_the_list_never_gets_it(self) -> None:
+        self.assertNotIn("ff-casa", self.admins("pg-laptop"))
+
+
 if __name__ == "__main__":
     unittest.main()
