@@ -21,6 +21,7 @@ Rellénala **solo con la documentación oficial** de la aplicación y cita la UR
 | Secretos | Cuáles necesita y si los lee de un fichero (`*_FILE`) o solo de una variable |
 | Copias | Qué hay que copiar además de su base: volúmenes enteros o una orden propia de la aplicación ([`README.md`](README.md), apartado 8) |
 | Primer arranque | Migraciones, usuario inicial, tareas programadas |
+| Configuración | El enlace a la página oficial con **todas** las opciones y, de ellas, las más importantes para esta plataforma: cada una con el valor que propones y por qué (sin salida, sin guardar contraseñas, registros…). Di cuáles solo se leen en el primer arranque |
 | Recursos | Memoria, CPU y procesos razonables |
 | Lo que no encaja | Red del host, GPU, dispositivos, ventana propia: está fuera del contrato; para y dilo |
 
