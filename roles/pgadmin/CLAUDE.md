@@ -22,4 +22,4 @@ pgAdmin 4 en contenedores Quadlet sin root, para administrar las Postgres de la 
 
 - `lint`: renderiza `pgadmin.container` y su `.volume`, política y generador de Podman 4.9; la copia de referencia en `tests/quadlet/golden`.
 - `unit`: el contrato (`test_app_contract.py`) y el filtro `admins_of` (`test_networking.py`).
-- `lifecycle`: llega en el PR siguiente (`docs/services/ADD_APP.md`, entrega (c)).
+- `lifecycle`, job `pgadmin` (`tests/lifecycle/check-pgadmin.sh`): rechazos, plan, apply, reaplicar sin cambios, salud, endurecimiento, la entrada de tu usuario y la del superusuario de punta a punta, aislamiento, el informe de `check`, el manual, retirar y volver a desplegar sobre el volumen.

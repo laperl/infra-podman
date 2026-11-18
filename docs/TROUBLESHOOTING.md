@@ -204,3 +204,18 @@ Cada instancia tiene sus nombres ([`services/README.md`](services/README.md)): c
 | `There is no user in the system with the "owner"-role, cannot continue.` (en los logs de `prod-ff-<instancia>-cron.service`) | Las tareas diarias necesitan un usuario, y aún no has creado el tuyo en esa instancia | Crea tu usuario en `http://127.0.0.1:<puerto>` (el primero es el administrador). Hasta entonces, el temporizador falla cada día sin más consecuencia |
 | `Not in the inventory of …, left running as they are: ff-<instancia>` | Has quitado una instancia del inventario y sigue en marcha: quitarla no la para | Si querías retirarla, vuelve a declararla y `./deploy.sh apply firefly … --retire <instancia>` ([`services/INSTALL.md`](services/INSTALL.md), apartado 10; apartado 7) |
 | La página no carga en `http://127.0.0.1:<puerto>` | Esa instancia está parada o arrancando, o el puerto es de otra | `svc podman port prod-ff-<instancia>` dice su puerto. `svc systemctl --user status prod-ff-<instancia>.service` |
+
+## 12. pgAdmin 4
+
+Lo propio de pgAdmin está en [`services/pgadmin.md`](services/pgadmin.md). Sus logs: `sudo journalctl _SYSTEMD_USER_UNIT=prod-pgadmin-<instancia>.service -n 50`.
+
+| Lo que ves | Por qué | Qué hacer |
+| --- | --- | --- |
+| `Instance … of pgadmin_instances (roles/pgadmin/defaults/main.yml): name ^[a-z0-9]{1,14}$; email …` | Un ajuste de esa instancia no vale: nombre, email, `networking` (sin `egress`), sin ninguna Postgres en `connects_to`, o con `pg_hba`, que pgAdmin no usa | El mensaje dice el formato de cada uno. pgAdmin solo lleva `connects_to: [pg-<instancia>]`: entra como superusuario (R37) |
+| `pgAdmin … needs prod-pgadmin-…-pg-…-net … apply postgres first` | La red de pgAdmin con esa Postgres aún no existe: la crea el rol `postgres`, y con ella la línea del superusuario en `pg_hba.conf` | `./deploy.sh apply postgres --limit laptop` y después `apply pgadmin` |
+| `Missing Podman secrets on …: prod-pgadmin-<instancia>-login-password` | Falta su secreto en la máquina | Decláralo en `infra_secrets`, crea su entrada en KeePassXC con tu contraseña y `./deploy.sh secrets --limit laptop` ([`SECRETS_INVENTORY.md`](SECRETS_INVENTORY.md)) |
+| `prod-pgadmin-<instancia> did not pass its healthcheck in … s and has been STOPPED` | pgAdmin no llega a servir. El primer arranque crea su base y tarda | Mira sus logs. Si hablan de un fichero de solo lectura o de permisos en `/var/lib/pgadmin`, pídeme ayuda: es el endurecimiento ([`services/pgadmin.md`](services/pgadmin.md), apartado 4) |
+| No te deja entrar con tu email y la contraseña de KeePassXC | pgAdmin solo lee el secreto al crear tu usuario, en el primer arranque. Si la cambiaste dentro de pgAdmin, vale la nueva | Usa la que pusiste en pgAdmin. Si la perdiste y no tienes nada guardado en él, retírala, borra su volumen y vuelve a desplegarla: se crea tu usuario otra vez |
+| Al registrar o conectar un servidor: `pg_hba.conf rejects connection for host …, user <superusuario>` | Esa Postgres no tiene la línea del superusuario para esta pgAdmin: falta en `connects_to`, o no se aplicó `postgres` después | Añade la Postgres a `connects_to` de la instancia, `./deploy.sh apply postgres` y `apply pgadmin` |
+| Al conectar: `password authentication failed for user <superusuario>` | La contraseña no es la del superusuario de esa Postgres | Cópiala de `pg-<instancia>-superuser-password` en KeePassXC. pgAdmin no la guarda: la pide cada vez |
+| `Not in the inventory of …, left running as they are: pgadmin-<instancia>` | Has quitado la instancia del inventario y sigue en marcha | Vuelve a declararla y `./deploy.sh apply pgadmin … --retire <instancia>` (apartado 11, la misma fila) |

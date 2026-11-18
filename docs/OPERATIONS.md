@@ -18,6 +18,7 @@ El día a día: qué hay en marcha, cómo van las copias, cómo lanzar algo a ma
 | `prod-pg-main` (Postgres) | Portátil | **Siempre** | systemd, al encender |
 | `prod-ff-<instancia>` (Firefly III, uno por instancia) | Portátil | **Siempre** | systemd, al encender, cuando Postgres está sano |
 | `prod-ff-<instancia>-cron` (tareas de esa instancia) | Portátil | No es un contenedor: lanza una orden dentro de su Firefly | `prod-ff-<instancia>-cron.timer`, cada día a las 05:30 |
+| `prod-pgadmin-<instancia>` (pgAdmin 4, normalmente una) | Portátil | **Siempre** | systemd, al encender |
 | `prod-backup` (copia diaria) | Portátil | **Duerme** y despierta un rato | `prod-backup.timer`, cada día a las 13:00 |
 | `prod-backup-copy` (envío al servidor principal) | Portátil | **Duerme** y despierta un rato | `prod-backup-copy.timer`, cada hora a y media |
 | `prod-backup-server` (recibe las copias) | Servidor principal | **Siempre** | systemd, al encender |
@@ -45,6 +46,16 @@ svc podman port prod-ff-<instancia>               # su puerto: 8080/tcp -> 127.0
 ```
 
 Cada instancia se abre desde su lanzador del menú («Firefly III (<instancia>)») o en el navegador, en `http://127.0.0.1:<puerto>`.
+
+pgAdmin, en el portátil ([`services/pgadmin.md`](services/pgadmin.md)):
+
+<!-- test: deployed-pgadmin -->
+```bash
+svc podman ps --filter label=infra.app=pgadmin-<instancia>   # en marcha, con (healthy)
+svc podman port prod-pgadmin-<instancia>                     # su puerto: 8080/tcp -> 127.0.0.1:<puerto>
+```
+
+Se abre desde su lanzador («pgAdmin 4 (<instancia>)») o en `http://127.0.0.1:<puerto>`.
 
 ## 2. Estado de los backups
 
@@ -158,6 +169,23 @@ curl -s http://127.0.0.1:<puerto>/health; echo
 | `healthcheck` | `sano`: responde y lee su base |
 | `podman port` | Una sola línea, `8080/tcp -> 127.0.0.1:<puerto>`: solo se llega desde el portátil |
 | `curl` | `OK` |
+
+**pgAdmin, en el portátil:**
+
+<!-- test: healthy-pgadmin -->
+```bash
+svc systemctl --user is-active prod-pgadmin-<instancia>.service
+svc podman healthcheck run prod-pgadmin-<instancia> && echo sano
+svc podman port prod-pgadmin-<instancia>
+curl -s http://127.0.0.1:<puerto>/misc/ping; echo
+```
+
+| Orden | Lo que tiene que salir |
+| --- | --- |
+| `is-active` | `active` |
+| `healthcheck` | `sano`: responde |
+| `podman port` | Una sola línea, `8080/tcp -> 127.0.0.1:<puerto>`: solo se llega desde el portátil |
+| `curl` | `PING` |
 
 Y el aviso de escritorio, en tu usuario: `systemctl --user is-active infra-podman-backup-notify.timer` → `active`.
 

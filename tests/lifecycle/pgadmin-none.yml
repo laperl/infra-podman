@@ -1,0 +1,3 @@
+---
+# After tests/lifecycle/pgadmin-vars.yml: pgAdmin no longer declared, the rest the same.
+pgadmin_instances: []

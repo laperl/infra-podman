@@ -2,7 +2,7 @@
 
 **`pgadmin` es pgAdmin 4:** su nombre corto en todo lo que se crea en la máquina, y también su nombre de código (`roles/pgadmin`, `pgadmin_instances`). La instancia `laptop` es `prod-pgadmin-laptop`. Instalarla, paso a paso: [`INSTALL.md`](INSTALL.md); lo que es propio de pgAdmin está en el apartado 7.
 
-Qué tiene que cumplir pgAdmin antes de escribir su código. Es una propuesta: lo que esté aquí y no en SPEC, sección 3, se aprueba con este PR. Lo marcado 🔍 no está verificado en la documentación oficial o en una máquina: se comprueba en `lifecycle` o en DEV, y el PR que lo verifique lo deja escrito.
+Qué tiene que cumplir pgAdmin antes de escribir su código. Es una propuesta: lo que esté aquí y no en SPEC, sección 3, se aprueba con este PR. Lo marcado 🔍 no está verificado en la documentación oficial o en una máquina: se comprueba en DEV, y el PR que lo verifique lo deja escrito. Lo demás lo comprueba el job `pgadmin` de `lifecycle` con la imagen real.
 
 **Para qué:** administrar a mano las instancias de Postgres de la plataforma desde el navegador del portátil (R37). Postgres no publica puertos (SPEC 4.4), así que pgAdmin tiene que vivir dentro, como una aplicación más de `svc_runner`.
 
@@ -17,14 +17,14 @@ Fuente de todo lo que dice este documento de la imagen, salvo que se diga otra c
 | Nombres | De código `pgadmin`; corto `pgadmin` (7 letras, su nombre real, R52) |
 | Imagen | `docker.io/dpage/pgadmin4`, la oficial, en Docker Hub; sin suscripción. Se sigue la versión exacta: `# track: 9.19`, que corrige 15 vulnerabilidades del modo servidor. Digest del índice calculado por el operador el 2026-11-18 con `skopeo inspect --raw \| sha256sum`, con `linux/amd64` y `linux/arm64` |
 | Usuario del contenedor | `pgadmin`, UID y GID 5050. Sin `User=` ni `UserNS=`: como Firefly con su UID 33, el 5050 de dentro es un UID subordinado de `svc_runner` en el host |
-| Endurecimiento | `DropCapability=all` y `NoNewPrivileges=true`, sin excepción: la imagen lo contempla y entonces escucha en el 8080. `ReadOnly=true` 🔍 (apartado 3) |
+| Endurecimiento | `DropCapability=all` y `NoNewPrivileges=true`, sin excepción: la imagen lo contempla y entonces escucha en el 8080. `ReadOnly=true` (apartado 4). Comprobado en `lifecycle` |
 | Contrato | `database: none` (sus datos propios van en SQLite, en su volumen), `providers: [postgres]` (al menos una en `connects_to`), `egress: false`. Además, está en `infra_postgres_admins` (apartado 3) |
-| Entrada | HTTP en el 8080, publicado en `127.0.0.1:<puerto>`. Salud: `GET /misc/ping` responde 200 y `PING` (dicho por sus desarrolladores en la lista oficial `pgadmin-support`, no en la documentación). 🔍 Qué herramienta trae la imagen para pedirlo (`wget` o `python3`) |
+| Entrada | HTTP en el 8080, publicado en `127.0.0.1:<puerto>`. Salud: `GET /misc/ping` responde 200 y `PING` (dicho por sus desarrolladores en la lista oficial `pgadmin-support`, no en la documentación), con el `wget` de la imagen. Comprobado en `lifecycle` |
 | Datos | `/var/lib/pgadmin` (sesiones, ficheros de usuario, configuración y su base SQLite): volumen `prod-pgadmin-<instancia>-data`. `/tmp` en `tmpfs` |
 | Secretos | Uno: la contraseña de entrada (apartado 4) |
 | Copias | Opcional, apagada por defecto: `backup: [data]`, el volumen entero (apartado 6) |
 | Primer arranque | Crea su base de configuración con el usuario inicial (email y contraseña). Sin tareas programadas |
-| Recursos | Para empezar, 512 MB, 1 CPU y 256 procesos; se miden en DEV 🔍. Gunicorn usa 25 hilos por defecto |
+| Recursos | 512 MB, 1 CPU y 256 procesos. Medido en `lifecycle` tras entrar y conectar a Postgres: unos 240 MB y 5 procesos. Gunicorn usa 25 hilos por defecto |
 | Lanzador | «pgAdmin 4 (<instancia>)» en el menú de Sway (rofi `drun`, R47) |
 | Lo que no encaja | Nada |
 
@@ -52,12 +52,12 @@ R37 decidió que el superusuario solo pueda entrar por TCP desde la red de pgAdm
 - **La contraseña de entrada:**
   - la escribes tú en KeePassXC, en `pgadmin-<instancia>-login-password` (sin entorno, [`NAMING.md`](../NAMING.md), apartado 5);
   - `deploy.sh secrets` la instala como secreto de Podman, `<entorno>-pgadmin-<instancia>-login-password`, y llega al contenedor como fichero, legible solo por el UID 5050 (`PGADMIN_DEFAULT_PASSWORD_FILE`);
-  - **solo se usa en el primer arranque**, para crear tu usuario. La imagen exige una contraseña al arrancar, así que el secreto se queda instalado. 🔍 La documentación describe `PGADMIN_DEFAULT_PASSWORD_FILE` para Swarm y Compose; con un secreto de Podman se prueba en `lifecycle`;
+  - **solo se usa en el primer arranque**, para crear tu usuario. La imagen exige una contraseña al arrancar, así que el secreto se queda instalado. La documentación describe `PGADMIN_DEFAULT_PASSWORD_FILE` para Swarm y Compose; con un secreto de Podman funciona: `lifecycle` entra con esa contraseña;
   - para cambiarla después, dentro de pgAdmin, y lo apuntas en KeePassXC. El secreto de Podman ya no cuenta.
 - **Sin recuperación por correo:** Postfix apagado (`PGADMIN_DISABLE_POSTFIX`). Con `NoNewPrivileges` no podría arrancar, y no hay salida.
 - **Las contraseñas de Postgres no se guardan en pgAdmin** (`ALLOW_SAVE_PASSWORD` a `False`): se copian de KeePassXC al conectar ([`POSTGRES.md`](../POSTGRES.md), apartado 5). Sin `.pgpass` ni `servers.json`.
 - **Contenedor endurecido**, como el resto: sin capacidades, sin privilegios nuevos y con límites (R46, R51).
-  - **`ReadOnly=true`** 🔍: en el primer arranque la imagen escribe `config_distro.py` con las opciones `PGADMIN_CONFIG_*`. Se apunta a su volumen con `PGADMIN_CUSTOM_CONFIG_DISTRO_FILE`, la variable que la documentación da para un sistema de ficheros de solo lectura, y `/tmp` va en `tmpfs`. Si `lifecycle` no lo consigue, se para y se pide la excepción al operador.
+  - **`ReadOnly=true`**, comprobado en `lifecycle`: en el primer arranque la imagen escribe `config_distro.py` con las opciones `PGADMIN_CONFIG_*`. Se apunta a su volumen con `PGADMIN_CUSTOM_CONFIG_DISTRO_FILE`, la variable que la documentación da para un sistema de ficheros de solo lectura, y `/tmp` va en `tmpfs`.
 
 ## 5. Configuración
 
@@ -68,7 +68,7 @@ Todas las opciones: [The config.py File](https://www.pgadmin.org/docs/pgadmin4/9
 | `PGADMIN_LISTEN_PORT` | `8080` | Puerto sin privilegios; es el que usa la imagen sin capacidades |
 | `PGADMIN_LISTEN_ADDRESS` | `0.0.0.0` | Por defecto escucha en `[::]`; las redes de la plataforma son solo IPv4 |
 | `PGADMIN_DISABLE_POSTFIX` | activada | Sin correo y sin salida |
-| `PGADMIN_CUSTOM_CONFIG_DISTRO_FILE` | en el volumen | Para `ReadOnly=true` (apartado 4) 🔍 |
+| `PGADMIN_CUSTOM_CONFIG_DISTRO_FILE` | en el volumen | Para `ReadOnly=true` (apartado 4) |
 | `PGADMIN_CONFIG_ALLOW_SAVE_PASSWORD` | `False` | Las contraseñas viven en KeePassXC |
 | `PGADMIN_CONFIG_SHOW_GRAVATAR_IMAGE` | `False` | Tu navegador no manda una huella de tu email a gravatar.com. Sin el prefijo `PGADMIN_CONFIG_` no se lee (Dave Page, lista `pgadmin-support`, 2018) |
 | `PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED` | `False` | No intenta buscar versiones: de eso avisa `image-updates` |
@@ -103,7 +103,7 @@ El orden general está en [`INSTALL.md`](INSTALL.md). Lo de pgAdmin, cuando lleg
        email: admin@example.com        # el tuyo, solo aquí
        networking:
          inbound:
-           publish: ["127.0.0.1:18101:8080"]
+           publish: ["127.0.0.1:18110:8080"]
          connects_to: [pg-main]        # una o varias Postgres de esta máquina
        # backup: [data]
    ```

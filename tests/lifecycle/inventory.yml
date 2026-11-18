@@ -18,6 +18,7 @@ all:
       - {name: ff-canary-db-password, group: postgres_hosts, readers: [pg-main, ff-canary]}
       - {name: ff-casa-app-key, group: firefly_hosts, readers: [ff-casa]}
       - {name: ff-canary-app-key, group: firefly_hosts, readers: [ff-canary]}
+      - {name: pgadmin-ci-login-password, group: pgadmin_hosts, readers: [pgadmin-ci]}
       - {name: backup-restic-password, group: backup_clients, readers: [backup]}
       - {name: backup-server-password, group: [backup_clients, backup_servers], readers: [backup, backup-server]}
   children:
@@ -69,3 +70,10 @@ all:
             image: firefly_ci_image
             memory: 768m
             launcher_command: [flatpak, run, org.mozilla.firefox, --new-window]
+    # The pgadmin job declares its instance in tests/lifecycle/pgadmin-vars.yml: here none,
+    # so the other jobs keep PostgreSQL without the network of pgAdmin.
+    pgadmin_hosts:
+      hosts:
+        localhost: {}
+      vars:
+        pgadmin_instances: []

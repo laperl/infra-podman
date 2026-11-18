@@ -1,0 +1,13 @@
+---
+# Extra variables of the pgadmin job: PostgreSQL main without databases (pgAdmin enters as
+# its superuser, R37), no Firefly (its databases are not here), and the instance ci of
+# pgAdmin administering pg-main. Only this job declares pgAdmin, so the other jobs keep
+# PostgreSQL without its network. Fictitious names and e-mail only.
+firefly_instances: []
+postgres_instances:
+  - name: main
+    superuser: ci_admin
+pgadmin_instances:
+  - name: ci
+    email: admin@example.com
+    networking: {inbound: {publish: ["127.0.0.1:18102:8080"]}, connects_to: [pg-main]}

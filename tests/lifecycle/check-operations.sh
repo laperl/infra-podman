@@ -8,11 +8,13 @@
 #   run-now         3    a backup and a copy, both result=ok
 #   healthy         4    the laptop and the main server look healthy
 #   firefly         1, 4 Firefly III, its instance casa: deployed and healthy (firefly job)
+#   pgadmin         1, 4 pgAdmin 4, its instance ci: deployed and healthy (pgadmin job)
 #   restore-local   5.1  a broken database restored under another name, checked, swapped
 #   restore-server    5.2  a database restored from the main server's volume, with only the restic key
 #   data-repo       5.3  the data repository from the local copy
 #   lost-laptop     5.4  the data repository from the main server's volume, cloned as on a new laptop
-# prod- names become dev- and the placeholders (<…>) the values of the runner; a block
+# prod- names become dev- and the placeholders (<…>) the values of the runner (the
+# instance and port of the step: OPS_INSTANCE and OPS_PORT, casa and 18100 by default); a block
 # left with a placeholder this script does not know fails, so the manual cannot drift.
 set -Eeuo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -46,8 +48,8 @@ substitute() {
     -e 's/\bprod-/dev-/g' \
     -e "s|<base>|$db|g" \
     -e 's|<superusuario>|ci_admin|g' \
-    -e 's|<instancia>|casa|g' \
-    -e 's|<puerto>|18100|g' \
+    -e "s|<instancia>|${OPS_INSTANCE:-casa}|g" \
+    -e "s|<puerto>|${OPS_PORT:-18100}|g" \
     -e "s|<imagen_de_restic>|$restic_image|g" \
     -e 's|<instalación>/dev-laptop|ci-site/dev-localhost|g' \
     -e "s|~/infra-podman-datos-restaurados|$work/data-restored|g" \
@@ -137,6 +139,17 @@ case $step in
     count_is healthy-firefly '8080/tcp -> 127.0.0.1:18100' 1
     expect healthy-firefly '^OK$'
     ;;
+  pgadmin)
+    export OPS_INSTANCE=ci OPS_PORT=18102
+    run deployed-pgadmin
+    expect deployed-pgadmin 'dev-pgadmin-ci'
+    expect deployed-pgadmin '\(healthy\)'
+    run healthy-pgadmin
+    count_is healthy-pgadmin 'active' 1
+    expect healthy-pgadmin '^sano$'
+    count_is healthy-pgadmin '8080/tcp -> 127.0.0.1:18102' 1
+    expect healthy-pgadmin '^PING$'
+    ;;
   restore-local)
     # Break the database after the last backup; restore it under another name; swap.
     sql "DELETE FROM app.t WHERE n <= 10" "$db"
@@ -177,7 +190,7 @@ case $step in
     rm -rf "$work/data-lost"
     echo "::notice title=Lost laptop (5.4)::data repository recovered from the main server's volume with only the restic key"
     ;;
-  *) echo "usage: $0 deployed|status|run-now|healthy|restore-local|restore-server|data-repo|lost-laptop" >&2; exit 2 ;;
+  *) echo "usage: $0 deployed|status|run-now|healthy|firefly|pgadmin|restore-local|restore-server|data-repo|lost-laptop" >&2; exit 2 ;;
 esac
 rm -f "$work/key"
 echo "ok: $step"

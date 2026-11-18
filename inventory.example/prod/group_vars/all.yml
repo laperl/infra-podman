@@ -30,6 +30,10 @@ infra_secrets:
   # - name: ff-casa-app-key
   #   group: firefly_hosts
   #   readers: [ff-casa]
+  # pgAdmin 4, one per instance: the password of its only user, which you write yourself.
+  # - name: pgadmin-laptop-login-password
+  #   group: pgadmin_hosts
+  #   readers: [pgadmin-laptop]
   - name: backup-restic-password  # key of the restic repositories: lose it, lose the backups
     group: backup_clients
     readers: [backup]
