@@ -12,7 +12,7 @@ Firefly III en contenedores Quadlet sin root, sobre la Postgres de la plataforma
 
 - **El nombre corto `ff`** (`firefly_short`, R49): todo lo que se crea en la máquina es `<entorno>-ff-<instancia>`, `ff_<instancia>`… En el código y el inventario, `firefly`. No es un ajuste del inventario.
 - **Nada compartido entre instancias**: cada nombre lleva la instancia (`defaults/main.yml`, «Names»). Una base de datos por instancia, nunca un esquema dentro de la base de otra.
-- **La red.** Solo la suya, `<entorno>-ff-<instancia>-pg-<postgres>-net`, interna. Ni una segunda red ni `Network=host`: es lo que impide que tus finanzas salgan del portátil.
+- **La red.** Solo la que escribe el inventario (R59, [`docs/NETWORK.md`](../../docs/NETWORK.md)): la de su pareja con Postgres, `<entorno>-ff-<instancia>-pg-<postgres>-net`, una interna por cada otra pareja de `connects_to`, y una de salida solo si la instancia lleva `egress`. Nunca `Network=host`: es lo que impide que tus finanzas salgan del portátil.
 - **`--purge` borra datos** (`tasks/purge.yml`, R57): nunca antes de que la copia de los volúmenes haya terminado bien.
 - **Copias:** su base ya está en el backup de Postgres. El volumen de justificantes solo se copia si la instancia lo pide con `backup: [uploads]`.
 - **La entrada la escribe el operador** en `networking.inbound.publish` (R55), y va tal cual a `PublishPort=`; el rol no pone direcciones ni puertos por su cuenta. El comando del navegador del lanzador, como lista de palabras comprobadas: nada que entrecomillar.
