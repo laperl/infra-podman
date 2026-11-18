@@ -34,10 +34,17 @@ net=dev-pgadmin-$instance-pg-main-net
 launcher=$HOME/.local/share/applications/infra-podman-$name.desktop
 fail() { local m="$*"; echo "::error title=check-pgadmin $step::${m//$'\n'/ | }"; exit 1; }
 inspect() { "$as" podman inspect "$name" --format "$1"; }
-# The image has no bash: sh, and its own python3 for what sh cannot do.
+# The image has no bash: sh, and for what sh cannot do, the Python that runs pgAdmin. Not
+# python3 from PATH: the image gives one interpreter a file capability, and with
+# NoNewPrivileges it cannot be run (Container Deployment, 9.19); gunicorn runs on the other.
 in_pa() { "$as" podman exec "$name" sh -c "$1" </dev/null; }
+pybin() {
+  # shellcheck disable=SC2016  # expanded by sh inside the container
+  in_pa 'for p in /proc/[0-9]*; do case "$(tr "\0" " " <"$p/cmdline" 2>/dev/null)" in
+    *gunicorn*) readlink "$p/exe"; exit 0 ;; esac; done; exit 1'
+}
 reach() { # reach <host> <port>: from pgAdmin, a TCP connection within 5 seconds
-  in_pa "python3 -c 'import socket,sys; socket.create_connection((sys.argv[1], int(sys.argv[2])), 5)' $1 $2" >/dev/null 2>&1
+  in_pa "$(pybin) -c 'import socket,sys; socket.create_connection((sys.argv[1], int(sys.argv[2])), 5)' $1 $2" >/dev/null 2>&1
 }
 sql() { # sql <query>: as the superuser, through the socket of pg-main
   "$as" podman exec "$pg" psql -X -U "$su" -d postgres -v ON_ERROR_STOP=1 -tAq -c "$1" </dev/null
@@ -110,7 +117,8 @@ case $step in
     [[ $rules == "${sn%/*}/$(python3 -c 'import ipaddress,sys; print(ipaddress.ip_network(sys.argv[1]).netmask)' "$sn")" ]] \
       || fail "the superuser's lines with a password: '$rules', expected only $sn"
     # With the psql of its image, newest version first, the password through the environment.
-    psql=$(in_pa 'ls -d /usr/local/pgsql-*/bin/psql | sort -V | tail -n 1') || fail "no psql in the image"
+    psql=$(in_pa 'find /usr/local -name psql -type f 2>/dev/null | sort -V | tail -n 1')
+    [[ -n $psql ]] || fail "no psql under /usr/local in the image: $(in_pa 'ls /usr/local' | tr '\n' ' ')"
     out=$("$as" podman exec -e PGPASSWORD="$(cat "${RUNNER_TEMP:?}/pg-su-pw")" "$name" \
       "$psql" -X -w -h "$pg" -U "$su" -d postgres -tAc 'SELECT current_user, inet_server_addr() IS NOT NULL' 2>&1 </dev/null) \
       || fail "the superuser cannot enter $pg from pgAdmin: $out"
@@ -138,7 +146,9 @@ case $step in
     timeout 5 bash -c "</dev/tcp/$host_ip/18998" || fail "control: the runner cannot reach its own port 18998"
     reach "$pg" 5432 || fail "control: pgAdmin cannot reach $pg:5432"
     if reach 1.1.1.1 443; then fail "pgAdmin reached 1.1.1.1:443"; fi
-    if in_pa "python3 -c 'import socket; socket.gethostbyname(\"example.com\")'" >/dev/null 2>&1; then
+    py=$(pybin) || fail "control: the Python of gunicorn not found"
+    in_pa "$py -c 'print(1)'" >/dev/null || fail "control: $py does not run"
+    if in_pa "$py -c 'import socket; socket.gethostbyname(\"example.com\")'" >/dev/null 2>&1; then
       fail "pgAdmin resolved example.com"
     fi
     if reach "$host_ip" 18998; then fail "pgAdmin reached the host ($host_ip:18998)"; fi
