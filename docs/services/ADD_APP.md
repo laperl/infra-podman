@@ -70,6 +70,8 @@ tests/deploy/run.sh && tests/images/run.sh
 - **Varios PR pequeños, en este orden**, cada uno verde por sí solo: (a) ficha y página de la aplicación; (b) imagen, rol, playbook, unidades y tests; (c) `lifecycle` y el resto de documentos.
 - Cada entrega dice **«Probado y no probado»** ([`WORKFLOW.md`](../WORKFLOW.md), «Si una IA escribe el cambio y otra lo aplica»).
 - La prueba en una máquina la hace el operador: `./deploy.sh plan <app> --env dev`, `apply`, y `./deploy.sh plan check --env dev`, que debe acabar en `RESUMEN: todo correcto`. Lo que tiene que escribir en su inventario va en la página de la aplicación.
+- **Mientras trabajas, anota** en la descripción de cada PR, en «Notas para mejorar el procedimiento», lo que este fichero no previó: preguntas del operador que la ficha no respondía, decisiones que costaron varias vueltas y pasos que sobraron.
+- **Al terminar, una evaluación corta** con el operador sobre esas notas: qué cambia en este fichero y cuánto costó el alta. Los cambios van en un PR propio y pequeño.
 
 ## 5. Cómo se lo pides a tu IA
 

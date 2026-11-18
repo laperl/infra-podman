@@ -47,3 +47,4 @@ No leas todo el repo: lee lo que pide la tarea. Cada cosa se explica en un solo 
 - Documentación y mensajes en español; código, variables y commits en inglés.
 - Commits con prefijo convencional (`feat:`, `fix:`, `docs:`, `chore:`, `ci:`).
 - Lista completa de prohibiciones: SPEC, sección 8.
+- **Skills del repo** (`.claude/skills/`): al terminar una tarea guiada por una, evalúa con el operador lo que su procedimiento no previó y propón el cambio en un PR propio.
