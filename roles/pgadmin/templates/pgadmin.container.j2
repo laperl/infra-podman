@@ -1,0 +1,81 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+[Unit]
+Description=pgAdmin 4 {{ pgadmin_instance }} ({{ infra_env }})
+# It administers these PostgreSQL instances. Only After=, not Requires=: pgAdmin works
+# without them, and one being down must not stop it (docs/services/pgadmin.md, section 2).
+{% for pgadmin_pg in pgadmin_pg_names %}
+After={{ pgadmin_pg }}.service
+{% endfor %}
+
+[Container]
+ContainerName={{ pgadmin_name }}
+Image={{ pgadmin_container_image }}
+Label=infra.env={{ infra_env }}
+Label=infra.app={{ pgadmin_id }}
+Label=infra.component=app
+Label=infra.managed-by=infra-podman
+
+# Its working directory: sessions, its SQLite database with its user and the servers you
+# register, and config_distro.py (below). Podman fills the empty volume with what the image
+# has there, owned by its user (UID 5050), on the first start: no chown.
+Volume={{ pgadmin_volume }}.volume:/var/lib/pgadmin:Z
+
+# Only internal networks: one to each PostgreSQL of connects_to, made by the postgres role,
+# and one per other pair (docs/NETWORK.md). No way out (SPEC 4.4). It is published where the
+# operator wrote in inbound.publish (R55), from those internal networks.
+{% for pgadmin_pair_net in pgadmin_pair_networks %}
+Network={{ pgadmin_pair_net }}.network
+{% endfor %}
+{% for pgadmin_published in pgadmin_publish %}
+PublishPort={{ pgadmin_published }}
+{% endfor %}
+
+# The password of its user, as a file readable only by the user of the image (SPEC 4.5).
+# Read only on the first start, when its database is created; the image requires it at
+# every start (docs/services/pgadmin.md, section 4).
+Secret={{ pgadmin_password_secret }},type=mount,target=/run/secrets/login-password,uid={{ pgadmin_uid }},gid={{ pgadmin_uid }},mode=0400
+Environment=PGADMIN_DEFAULT_EMAIL={{ pgadmin_email }}
+Environment=PGADMIN_DEFAULT_PASSWORD_FILE=/run/secrets/login-password
+
+# The image's variables, as documented in Container Deployment (pgAdmin 4 9.19).
+# Without capabilities it cannot bind a port below 1024: 8080, on IPv4 (the networks of
+# the platform have no IPv6). No Postfix: no mail and no sudo with NoNewPrivileges.
+Environment=PGADMIN_LISTEN_ADDRESS=0.0.0.0
+Environment=PGADMIN_LISTEN_PORT=8080
+Environment=PGADMIN_DISABLE_POSTFIX=true
+# With a read-only root, the file the image writes on the first start with the
+# PGADMIN_CONFIG_* values goes to its volume.
+Environment=PGADMIN_CUSTOM_CONFIG_DISTRO_FILE=/var/lib/pgadmin/config_distro.py
+# Settings of config.py, written once, on the first start (docs/services/pgadmin.md, 5).
+# Database passwords live in KeePassXC, never in pgAdmin (docs/POSTGRES.md, section 5).
+Environment=PGADMIN_CONFIG_ALLOW_SAVE_PASSWORD=False
+# Your browser would send a hash of your e-mail to gravatar.com.
+Environment=PGADMIN_CONFIG_SHOW_GRAVATAR_IMAGE=False
+# New versions are announced by image-updates; it has no way out anyway.
+Environment=PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED=False
+Environment=PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION=True
+Environment=PGADMIN_CONFIG_CONSOLE_LOG_LEVEL={{ pgadmin_log_level }}
+
+# GET /misc/ping answers 200 PING while pgAdmin serves (its developers, list
+# pgadmin-support). Podman runs it with sh -c.
+HealthCmd=wget -q -O /dev/null http://127.0.0.1:8080/misc/ping
+HealthInterval=30s
+HealthStartPeriod=120s
+HealthRetries=3
+HealthTimeout=10s
+
+# Hardening: the image already runs as pgadmin (UID 5050); no capabilities, no new
+# privileges, read-only root with /tmp in memory.
+DropCapability=all
+NoNewPrivileges=true
+ReadOnly=true
+Tmpfs=/tmp
+# Resource limits (R46), the only place they are written (docs/COMPATIBILITY.md).
+PodmanArgs=--memory={{ pgadmin_memory }} --cpus={{ pgadmin_cpus }}
+PidsLimit={{ pgadmin_pids_limit }}
+
+[Service]
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

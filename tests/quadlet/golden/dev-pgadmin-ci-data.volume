@@ -1,0 +1,9 @@
+# Ansible managed
+# Working directory of dev-pgadmin-ci: its user, the servers registered in it and its
+# settings. Never removed when the service is destroyed (SPEC 4.2).
+[Volume]
+VolumeName=dev-pgadmin-ci-data
+Label=infra.env=dev
+Label=infra.app=pgadmin-ci
+Label=infra.component=data
+Label=infra.managed-by=infra-podman

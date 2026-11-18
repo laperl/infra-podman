@@ -1,0 +1,91 @@
+---
+# One instance of pgAdmin 4 (docs/services/pgadmin.md, R37, R48), the item pgadmin_item of
+# pgadmin_instances. Check what it needs, install and start it with quadlet_deploy, then
+# the operator's launcher.
+
+- name: Check the settings of the instance
+  ansible.builtin.assert:
+    that:
+      - pgadmin_state in ['present', 'absent']
+      - pgadmin_instance is match('^[a-z0-9]{1,14}$')
+      - pgadmin_email is match('^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$')
+      - pgadmin_image_var is match('^pgadmin[a-z0-9_]*_image$')
+      - lookup('ansible.builtin.vars', pgadmin_image_var, default='') is match('^[^ ]+@sha256:[0-9a-f]{64}$')
+      - pgadmin_publish is sequence and pgadmin_publish is not string and pgadmin_publish | length > 0
+      - pgadmin_publish | map('string') | select('match', '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{1,5}:[0-9]{1,5}$') | list | length == pgadmin_publish | length
+      - pgadmin_backup is sequence and pgadmin_backup is not string
+      - pgadmin_backup | difference(pgadmin_backup_available.keys() | list) | length == 0
+      - pgadmin_log_level | int in [10, 20, 30, 40, 50]
+      - pgadmin_memory is match('^[0-9]+[kmg]$')
+      - pgadmin_cpus | string is match('^[0-9]+(\.[0-9]+)?$')
+      - pgadmin_pids_limit | int > 0
+      - pgadmin_connects_to | connects_to_problems(pgadmin_id, infra_apps, hostvars[inventory_hostname]) | length == 0
+      - pgadmin_pg_targets | length > 0
+      - pgadmin_item.pg_hba is not defined
+      - pgadmin_networking is mapping and pgadmin_networking.keys() | difference(['inbound', 'connects_to']) | length == 0
+      - (pgadmin_networking.inbound | default({})).keys() | difference(['publish']) | length == 0
+      - pgadmin_launcher_name is match('^[^\n\[\]=]+$')
+      - pgadmin_launcher_command is sequence and pgadmin_launcher_command is not string
+      - pgadmin_launcher_command | length > 0
+      - pgadmin_launcher_command | map('string') | select('match', '^[A-Za-z0-9._/:=@+,-]+$') | list | length == pgadmin_launcher_command | length
+    fail_msg: >-
+      Instance {{ pgadmin_item.name | default('?') }} of pgadmin_instances (roles/pgadmin/defaults/main.yml):
+      name ^[a-z0-9]{1,14}$; email the address of its user; image the name of a variable of
+      images.yml (pgadmin_..._image) pinned by digest (D6); networking.inbound.publish a list like
+      ["127.0.0.1:18101:8080"], each one <address>:<host port>:<container port>; networking takes
+      only inbound, with only publish, and connects_to: no egress, pgAdmin needs no way out
+      (docs/services/pgadmin.md, section 2); networking.connects_to the PostgreSQL instances of this
+      machine it administers, at least one, like [pg-main]
+      {{ ('(' ~ pgadmin_connects_to | connects_to_problems(pgadmin_id, infra_apps, hostvars[inventory_hostname]) | join('; ') ~ ')')
+         if pgadmin_connects_to | connects_to_problems(pgadmin_id, infra_apps, hostvars[inventory_hostname]) else '' }};
+      no pg_hba: it enters as the superuser (R37); backup a list of names, of [data]; log_level
+      10, 20, 30, 40 or 50; memory like 512m; cpus a number; pids_limit above 0; launcher_name
+      without [ ] or =; launcher_command a list of words with only letters, digits and
+      ._/:=@+,- (no spaces, quotes or %), without the address.
+    quiet: true
+
+# Its home, ids and environment, read in one place (roles/service_user).
+- name: Read the service user
+  ansible.builtin.include_role:
+    name: service_user
+
+- name: Set the environment of the service user
+  ansible.builtin.set_fact:
+    pgadmin_env: "{{ service_user_env }}"
+
+- name: Check what pgAdmin needs
+  ansible.builtin.include_tasks: checks.yml
+  when: pgadmin_state == 'present'
+
+- name: Deploy with quadlet_deploy
+  ansible.builtin.include_role:
+    name: quadlet_deploy
+  vars:
+    quadlet_deploy_units: "{{ pgadmin_quadlet_units }}"
+    quadlet_deploy_images:
+      - "{{ pgadmin_container_image }}"
+    quadlet_deploy_wait_healthy:
+      - "{{ pgadmin_name }}"
+    quadlet_deploy_health_retries: 36
+    quadlet_deploy_state: "{{ pgadmin_state }}"
+    # Its pairs (docs/NETWORK.md): one the inventory no longer has goes, once nobody uses it.
+    quadlet_deploy_pair_owner: "{{ pgadmin_id }}"
+    quadlet_deploy_pair_networks: "{{ pgadmin_pair_networks }}"
+
+# Only what the operator asked for in backup: of the instance; removed with the instance.
+- name: Declare what the daily backup copies of this instance
+  ansible.builtin.include_role:
+    name: backup
+    tasks_from: app_items.yml
+  vars:
+    backup_items_app: "{{ pgadmin_id }}"
+    backup_items: "{{ pgadmin_backup | map('extract', pgadmin_backup_available) | list }}"
+    backup_items_state: "{{ pgadmin_state }}"
+
+- name: Install or remove the launcher
+  ansible.builtin.include_tasks: launcher.yml
+
+# --purge: the instance is retired by now. Last, so that a failure leaves it only retired.
+- name: Purge the instance
+  ansible.builtin.include_tasks: purge.yml
+  when: pgadmin_purging | bool and pgadmin_state == 'absent'

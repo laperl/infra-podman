@@ -48,10 +48,13 @@ postgres_hba_all: "{{ postgres_id | hba_of(infra_apps, hostvars[inventory_hostna
 postgres_db_names: "{{ postgres_databases | map(attribute='name') | list }}"
 # Only those of a database declared here: a network and pg_hba.conf lines only for them.
 postgres_hba_entries: "{{ postgres_hba_all | selectattr('database', 'in', postgres_db_names) | list }}"
+# The instances that administer this one (R37, infra_postgres_admins in
+# playbooks/group_vars/all/apps.yml): the superuser may log in from the network of each.
+postgres_admins: "{{ postgres_id | admins_of(infra_apps, hostvars[inventory_hostname], infra_postgres_admins | default([])) }}"
 # The applications with a network of their own to this instance (D9, SPEC 4.4): one per
-# client of postgres_hba_entries. None: the container runs with Network=none, reachable only
-# through podman exec. Do not override.
-postgres_clients: "{{ postgres_hba_entries | map(attribute='client') | unique | sort }}"
+# client of postgres_hba_entries and one per administrator. None: the container runs with
+# Network=none, reachable only through podman exec. Do not override.
+postgres_clients: "{{ (postgres_hba_entries | map(attribute='client') | list + postgres_admins) | unique | sort }}"
 
 # Names of the users, each once, derived. Do not override.
 postgres_user_names: >-

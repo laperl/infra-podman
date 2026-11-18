@@ -1,0 +1,88 @@
+---
+# Phase 2: pgAdmin 4 on each machine of pgadmin_hosts (docs/services/pgadmin.md, R37), one
+# deployment per item of pgadmin_instances (R48, docs/services/README.md). Each instance
+# needs the base playbook, postgres applied after it says connects_to: [pg-<instance>]
+# (the postgres role creates the network of each pair and the superuser's line in
+# pg_hba.conf; docs/NETWORK.md) and its secret.
+#   ./deploy.sh plan pgadmin --env dev --limit <vm>
+# An instance removed from the inventory is never stopped by removing it: it is only
+# reported. Retiring one, keeping its data, while it is still declared:
+#   ./deploy.sh apply pgadmin --retire <name>   (-e pgadmin_retire=<name>) CI removes every instance with -e pgadmin_state=absent.
+- name: Instances of pgAdmin 4
+  hosts: pgadmin_hosts
+  gather_facts: false
+  tasks:
+    - name: Check the instances of this machine
+      ansible.builtin.assert:
+        that:
+          - pgadmin_instances is sequence and pgadmin_instances is not string
+          - pgadmin_instances | rejectattr('name', 'defined') | list | length == 0
+          - pgadmin_instances | map(attribute='name') | unique | list | length == pgadmin_instances | length
+          - pgadmin_listening | unique | list | length == pgadmin_listening | length
+          - pgadmin_retire | default('') | length == 0 or pgadmin_retire in pgadmin_instances | map(attribute='name')
+          - pgadmin_purge | default('') | length == 0 or pgadmin_purge in pgadmin_instances | map(attribute='name')
+        fail_msg: >-
+          pgadmin_instances of {{ inventory_hostname }} (group_vars/pgadmin_hosts.yml of the data
+          repository): each instance with a name, and neither a name nor an address and port of
+          networking.inbound.publish repeated on the same machine (docs/services/README.md). --retire and
+          --purge only for an instance that is still declared.
+        quiet: true
+      vars:
+        # <address>:<host port> of every instance, without the container port.
+        pgadmin_listening: >-
+          {{ pgadmin_instances | map(attribute='networking', default={})
+             | map(attribute='inbound', default={}) | map(attribute='publish', default=[]) | flatten
+             | map('regex_replace', ':[0-9]+$', '') | list }}
+
+    - name: Deploy each instance
+      ansible.builtin.include_role:
+        name: pgadmin
+      loop: "{{ pgadmin_instances }}"
+      loop_control:
+        loop_var: pgadmin_item
+        label: pgadmin-{{ pgadmin_item.name }}
+      vars:
+        # pgadmin_retire <name>: only that one is removed (its data kept); -e pgadmin_state,
+        # as an extra variable, still wins over this for every instance.
+        pgadmin_state: >-
+          {{ 'absent' if pgadmin_item.name in [pgadmin_retire | default(''), pgadmin_purge | default('')] else 'present' }}
+        # pgadmin_purge <name>: retired as above and then its volumes and its own secrets
+        # are deleted, after a backup (roles/pgadmin/tasks/purge.yml).
+        pgadmin_purging: "{{ pgadmin_item.name == pgadmin_purge | default('') }}"
+
+    # An instance removed from the inventory is never stopped or removed by removing it:
+    # only reported, on every run (as PostgreSQL's, docs/POSTGRES.md, section 7).
+    - name: Read the service user
+      ansible.builtin.include_role:
+        name: service_user
+
+    - name: Read the pgAdmin instances running on this machine
+      ansible.builtin.command:
+        argv:
+          - podman
+          - ps
+          - --all
+          - --filter
+          - label=infra.component=app
+          - --filter
+          - label=infra.managed-by=infra-podman
+          - --format
+          - '{% raw %}{{ index .Labels "infra.app" }}{% endraw %}'
+      environment: "{{ service_user_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      register: pgadmin_found
+      changed_when: false
+      check_mode: false
+
+    - name: Report instances that are not in the inventory (left as they are)
+      ansible.builtin.debug:
+        msg: >-
+          Not in the inventory of {{ inventory_hostname }}, left running as they are:
+          {{ pgadmin_undeclared | join(', ') }}. To retire one keeping its data, declare it again
+          and run ./deploy.sh apply pgadmin --retire <name> (docs/services/INSTALL.md, section 10).
+      when: pgadmin_undeclared | length > 0
+      vars:
+        pgadmin_undeclared: >-
+          {{ pgadmin_found.stdout_lines | select('match', '^pgadmin-') | reject('in', pgadmin_instances
+             | map(attribute='name') | map('regex_replace', '^', 'pgadmin-') | list) | list }}

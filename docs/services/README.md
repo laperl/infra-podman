@@ -160,6 +160,7 @@ Las aplicaciones de hoy:
 | --- | --- | --- | --- | --- |
 | Postgres | `postgres` | `pg` | Nada: no entra nadie de fuera, no sale y no inicia conexiones | Sin red, más una red interna por cada instancia que se le conecta |
 | Firefly III | `firefly` | `ff` | Una instancia de Postgres | Solo entra |
+| pgAdmin 4 | `pgadmin` | `pgadmin` | Una o varias instancias de Postgres, que administra como superusuario (R37) | Solo entra |
 
 - **Añadir una aplicación:** el paso a paso está en [`ADD_APP.md`](ADD_APP.md). Aquí, su fila y su `<app>_contract`; `tests/unit/test_app_contract.py` comprueba que los dos existen y que las unidades del rol cuadran con lo declarado.
 - **Cualquier aplicación puede ser destino de `connects_to`.** Cada rol de aplicación calcula sus parejas con el filtro `pairs_of` (`plugins/filter/networking.py`), une su contenedor a sus redes y las instala con la plantilla común `roles/quadlet_deploy/templates/pair.network.j2`; `tests/unit/test_app_contract.py` lo exige a todo rol nuevo ([`ADD_APP.md`](ADD_APP.md)). La red de una pareja con Postgres la pone el rol `postgres`, porque `pg_hba.conf` necesita su subred.

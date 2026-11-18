@@ -28,3 +28,9 @@ firefly_instances:
     pg_hba: [{instance: pg-main, database: ff_ci}]
   - name: peer
     networking: {inbound: {publish: ["127.0.0.1:18101:8080"]}}
+# pgAdmin's instance ci administers pg-main (R37): the postgres role renders the network of
+# that pair, and roles/pgadmin renders ci joining it. Fictitious e-mail.
+pgadmin_instances:
+  - name: ci
+    email: admin@example.com
+    networking: {inbound: {publish: ["127.0.0.1:18102:8080"]}, connects_to: [pg-main]}

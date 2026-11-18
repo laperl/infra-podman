@@ -31,6 +31,7 @@ Exec=postgres -c hba_file=/etc/postgresql/pg_hba.conf -c timezone=UTC -c log_tim
 # No published ports (SPEC 4.4). One internal, isolated network per consumer (D9, R45);
 # without consumers, no network at all.
 Network=dev-ff-ci-pg-main-net.network
+Network=dev-pgadmin-ci-pg-main-net.network
 
 # Through the socket, which pg_hba.conf allows: over TCP every probe would be rejected and
 # logged. Healthy only when the final server runs: during the first initialisation the
