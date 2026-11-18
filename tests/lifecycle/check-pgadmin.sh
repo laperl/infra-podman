@@ -116,12 +116,14 @@ case $step in
     rules=$(su_rules)
     [[ $rules == "${sn%/*}/$(python3 -c 'import ipaddress,sys; print(ipaddress.ip_network(sys.argv[1]).netmask)' "$sn")" ]] \
       || fail "the superuser's lines with a password: '$rules', expected only $sn"
-    # With the psql of its image, newest version first, the password through the environment.
+    # With the psql of its image, newest version first. The password goes through stdin,
+    # never on a command line: sudo (as-svc.sh) writes the whole command to the journal.
     psql=$(in_pa 'find /usr/local -name psql -type f 2>/dev/null | sort -V | tail -n 1')
     [[ -n $psql ]] || fail "no psql under /usr/local in the image: $(in_pa 'ls /usr/local' | tr '\n' ' ')"
-    out=$("$as" podman exec -e PGPASSWORD="$(cat "${RUNNER_TEMP:?}/pg-su-pw")" "$name" \
-      "$psql" -X -w -h "$pg" -U "$su" -d postgres -tAc 'SELECT current_user, inet_server_addr() IS NOT NULL' 2>&1 </dev/null) \
-      || fail "the superuser cannot enter $pg from pgAdmin: $out"
+    # shellcheck disable=SC2016  # expanded by sh inside the container
+    out=$("$as" podman exec -i "$name" sh -c 'read -r PGPASSWORD; export PGPASSWORD; exec "$0" "$@"' \
+      "$psql" -X -w -h "$pg" -U "$su" -d postgres -tAc 'SELECT current_user, inet_server_addr() IS NOT NULL' \
+      <"${RUNNER_TEMP:?}/pg-su-pw" 2>&1) || fail "the superuser cannot enter $pg from pgAdmin: $out"
     [[ $out == "$su|t" ]] || fail "unexpected answer: $out"
     # From anywhere else, rejected by pg_hba.conf before any password (127.0.0.1 inside pg-main).
     if out=$("$as" podman exec "$pg" psql -X -w -h 127.0.0.1 -U "$su" -d postgres -c 'SELECT 1' 2>&1 </dev/null); then
