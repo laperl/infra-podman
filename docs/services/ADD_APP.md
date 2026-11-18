@@ -20,22 +20,31 @@ Ejemplo de pregunta bien hecha:
 
 ## 1. Antes de escribir nada: la ficha
 
+**Antes de la ficha:**
+- **Mira los PR abiertos** del repo que toquen este fichero, la skill o `roles/firefly/`: pueden cambiar el procedimiento que vas a seguir.
+- **Pídele al operador su inventario de DEV y de producción, sin secretos** (las carpetas `inventory/dev` y `inventory/prod` de su repo de datos). Así los ejemplos, las preguntas y los pasos de instalación usan sus nombres reales: sus máquinas, sus instancias de Postgres, su superusuario, sus puertos ocupados.
+
 Rellénala **solo con la documentación oficial** de la aplicación y cita la URL de cada dato. Lo que no encuentres, déjalo en «no verificado»: no lo supongas. Enséñasela al operador y **espera su aprobación**.
+
+- **Con palabras llanas:** explica cada término técnico la primera vez que sale (el contrato, `providers` frente a `connects_to`, `egress`…). El operador decide sobre lo que entiende.
+- **Dónde se aplica:** para cada decisión, di también en qué fichero se escribirá (el contrato del rol, `apps.yml`, el inventario, otro rol). Si al escribir el código cambia de sitio, dilo en el PR.
 
 | Dato | Qué hay que saber |
 | --- | --- |
 | Nombres | De código (`^[a-z][a-z0-9_]*$`, el del rol) y corto, de 2 a 8 letras ([`NAMING.md`](../NAMING.md), apartado 2) |
-| Imagen | Registro, nombre, versión y **digest** del índice (SPEC, D6), y que tenga `linux/amd64` y `linux/arm64`. Sin suscripción ni registro de pago. Si no llegas al registro, déjalo en «no verificado» y dale al operador las dos órdenes: `skopeo inspect --raw docker://<repositorio>:<versión> \| sha256sum` (el digest) y `skopeo inspect --raw docker://<repositorio>:<versión> \| jq -r '.manifests[].platform \| "\(.os)/\(.architecture)"'` (las arquitecturas). Sin el digest no se escribe `images.yml` |
-| Actualizaciones | La etiqueta que seguirá `# track:`: una versión exacta con la forma que entiende `scripts/image-updates.sh` (cabecera de `images.yml`), nunca una que se mueve. Si una versión nueva migra los datos sin vuelta atrás. Si la aplicación busca sola versiones nuevas o manda telemetría, cómo se apaga: de las versiones avisa la plataforma (workflow `image-updates`, un correo cada lunes) |
+| Imagen | Registro, nombre, versión y **digest** del índice (SPEC, D6). La versión es **la última del registro**, no la que dice la documentación, que va por detrás: `skopeo list-tags docker://<repositorio> \| jq -r '.Tags[]' \| sort -V \| tail` (sin `sort -V`, la 9.9 sale después de la 9.19), y que tenga `linux/amd64` y `linux/arm64`. Sin suscripción ni registro de pago. Si no llegas al registro, déjalo en «no verificado» y dale al operador las dos órdenes: `skopeo inspect --raw docker://<repositorio>:<versión> \| sha256sum` (el digest) y `skopeo inspect --raw docker://<repositorio>:<versión> \| jq -r '.manifests[].platform \| "\(.os)/\(.architecture)"'` (las arquitecturas). Sin el digest no se escribe `images.yml` |
+| Actualizaciones | Las notas de versión de la que propones: qué vulnerabilidades corrige y si afectan a este montaje, y los avisos para quien instala o actualiza ([`IMAGE_UPDATES.md`](../IMAGE_UPDATES.md), apartado 2). La etiqueta que seguirá `# track:`: una versión exacta con la forma que entiende `scripts/image-updates.sh` (cabecera de `images.yml`), nunca una que se mueve. Si una versión nueva migra los datos sin vuelta atrás. Si la aplicación busca sola versiones nuevas o manda telemetría, cómo se apaga: de las versiones avisa la plataforma (workflow `image-updates`, un correo cada lunes) |
 | Usuario del contenedor | Con qué UID corre **dentro** del contenedor, si arranca como root para cambiar de usuario, y si vale con `ReadOnly=true`, sin capacidades y sin privilegios nuevos. Cómo queda en Podman sin root: apartado 2. Si no vale, hace falta una excepción aprobada (SPEC 4.14, R51) |
 | Contrato | ¿Guarda datos en Postgres? ¿Con qué otros contenedores habla? ¿Necesita salir a internet? ([`README.md`](README.md), apartado 9) |
 | Entrada | Puerto interno (1024 o más: apartado 2) y protocolo. Qué responde cuando está sana (orden o URL del healthcheck) y si esa orden (`curl`, `wget`…) existe dentro de la imagen |
 | Lanzador | Si el operador la abre desde el escritorio: lleva un lanzador en su menú, como Firefly (SPEC 4.14, R47) |
 | Datos | Qué directorios guardan datos (serán volúmenes) y cuáles pueden ser `tmpfs` |
-| Secretos | Cuáles necesita y si los lee de un fichero (`*_FILE`) o solo de una variable. **Siempre en KeePassXC** (SPEC 4.5): una entrada `<infra_site>/<corto>-<instancia>-<qué>` ([`NAMING.md`](../NAMING.md), apartado 5), declarada en `infra_secrets` y montada como fichero. Si la aplicación solo lo acepta en una variable, o lo guarda ella misma en su volumen, pregunta antes |
+| Secretos | Cuáles necesita y, de cada uno: **para qué sirve, cuándo lo lee** la aplicación (solo en el primer arranque o en cada uno) **y cómo se cambia después** (en KeePassXC y `--rotate`, o dentro de la aplicación). Si lo lee de un fichero (`*_FILE`) o solo de una variable. **Siempre en KeePassXC** (SPEC 4.5): una entrada `<infra_site>/<corto>-<instancia>-<qué>` ([`NAMING.md`](../NAMING.md), apartado 5), declarada en `infra_secrets` y montada como fichero. Si la aplicación solo lo acepta en una variable, o lo guarda ella misma en su volumen, pregunta antes |
 | Copias | Qué hay que copiar además de su base: volúmenes enteros o una orden propia de la aplicación ([`README.md`](README.md), apartado 8) |
 | Primer arranque | Migraciones, usuario inicial, tareas programadas |
 | Configuración | El enlace a la página oficial con **todas** las opciones y, de ellas, las más importantes para esta plataforma: cada una con el valor que propones y por qué (sin salida, sin guardar contraseñas, registros…). Di cuáles solo se leen en el primer arranque |
+| Navegador | Si su web hace que **el navegador del operador** pida algo fuera de `127.0.0.1` (avatares como Gravatar, fuentes, analítica, comprobación de versiones). `egress` limita al contenedor, no al navegador: di cómo se apaga cada cosa |
+| ¿Siempre en marcha? | Si tiene que estar en marcha todo el día o se usa de vez en cuando ([`ROADMAP.md`](../ROADMAP.md), «Arrancar al usar y parar sin uso»). Hoy todas arrancan con la máquina: dilo si para esta no tendría sentido |
 | Recursos | Memoria, CPU y procesos razonables |
 | Lo que no encaja | Red del host, GPU, dispositivos, ventana propia: está fuera del contrato; para y dilo |
 
@@ -52,6 +61,7 @@ La plataforma usa **siempre Podman sin root con Quadlet** (SPEC, D1), con Podman
   - **Los secretos se montan con el UID de dentro:** `Secret=<nombre>,type=mount,target=/run/secrets/<x>,uid=<uid>,gid=<gid>,mode=0400`, como `roles/firefly/templates/firefly.container.j2`.
   - **No cambies el usuario de la imagen** (`User=`, `UserNS=`) salvo que la ficha diga por qué.
 - **Imágenes que arrancan como root y luego cambian de usuario** (`gosu`, `su-exec`, s6, las variables `PUID`/`PGID`): con `DropCapability=all` no arrancan. Necesitan `AddCapability=` con las imprescindibles, como Postgres (`roles/postgres/templates/pg.container.j2`). Ponlas en la ficha, cada una con su motivo, y pregunta.
+- **Binarios con capacidades de fichero** (`setcap`, como el Python de pgAdmin): con `NoNewPrivileges=true` no se pueden ejecutar. Míralo en la ficha (fila «Usuario del contenedor»): la imagen suele traer otro para este caso, y las comprobaciones de `lifecycle` dentro del contenedor tienen que usar ese.
 - **Dentro del contenedor, puertos de 1024 o más.** Sin capacidades, un proceso no puede abrir el 80 ni el 443. Si la imagen escucha ahí por defecto, busca su variable de puerto; pgAdmin, por ejemplo, la documenta para este caso.
 - **La red es la del inventario y nada más:** `PublishPort=` tal cual llega de `networking.inbound.publish`, y un `Network=` por cada red de la instancia ([`NETWORK.md`](../NETWORK.md)). Nunca la red del host, `-p` inventados ni opciones de slirp4netns o pasta (SPEC 4.4).
 - **Esperar a otro contenedor:** `depends_on` de Compose no existe, y `Notify=healthy` tampoco en 4.9. Se escribe `Requires=` y `After=` en `[Unit]`, más la espera con `ExecStartPre` hasta que el otro pasa su healthcheck, como Firefly (SPEC 4.3).
@@ -72,9 +82,9 @@ La plataforma usa **siempre Podman sin root con Quadlet** (SPEC, D1), con Podman
 | 7 | `playbooks/<app>.yml` | Un despliegue por elemento de `<app>_instances`, con `<app>_retire` y `<app>_purge` (así `deploy.sh` acepta `--retire` y `--purge`) | `playbooks/firefly.yml`; SPEC 4.10 |
 | 8 | `playbooks/group_vars/all/apps.yml` | Línea `<app>: <corto>` en `infra_apps`: con ella sus instancias salen en `check` y otras pueden nombrarlas en `connects_to` | La cabecera de ese fichero |
 | 9 | `tests/quadlet/ci_vars.yml` y `tests/quadlet/golden/` | Una instancia `ci`; después `tests/quadlet/run.sh --update-golden` y **revisar el diff**: solo deben aparecer las unidades nuevas | Cabecera de `tests/quadlet/run.sh` |
-| 10 | `tests/lifecycle/` y `.github/workflows/lifecycle.yml` | `check-<app>.sh`, sus variables y su job: rechazos, plan, apply, reaplicar sin cambios, salud, aislamiento, retirar y purgar | `check-firefly.sh` y el job `firefly` |
+| 10 | `tests/lifecycle/` y `.github/workflows/lifecycle.yml` | `check-<app>.sh`, sus variables y su job: rechazos, plan, apply, reaplicar sin cambios, salud, aislamiento, retirar y purgar. Sus instancias, **solo en sus variables** (`<app>-vars.yml`), nunca en `inventory.yml`: allí cambiarían la Postgres de los demás jobs. **Nunca un secreto en la línea de órdenes** de `as-svc.sh` (`podman exec -e`, argumentos): `sudo` la escribe en el journal y el job falla; va por la entrada estándar o un fichero | `check-firefly.sh` y el job `firefly`; `check-pgadmin.sh` y el job `pgadmin` |
 | 11 | `inventory.example/{dev,prod}/` | Grupo `<app>_hosts` en `hosts.yml`, `group_vars/<app>_hosts.yml` con ejemplo comentado, sus secretos en `infra_secrets` con `readers:`, y la fila de `README.md` | `README.md`, apartado 5; [`SECRETS_INVENTORY.md`](../SECRETS_INVENTORY.md) |
-| 12 | `docs/services/<app>.md` | Solo lo propio: uso, red, seguridad, actualizaciones, copias. Con las URL oficiales de la ficha | La forma de [`firefly.md`](firefly.md) |
+| 12 | `docs/services/<app>.md` | Solo lo propio: uso, red, seguridad, actualizaciones, copias. Con las URL oficiales de la ficha. En sus pasos de instalación, con los nombres del inventario del operador: **si algún `apply` corta otra aplicación** (el de Postgres reinicia a sus clientes unos segundos) y **cómo empezar de cero** si el primer arranque sale mal (por ejemplo `secrets --rotate`, `--retire`, borrar el volumen y aplicar de nuevo) | La forma de [`firefly.md`](firefly.md) |
 | 13 | Tablas de los demás documentos | Una fila en `README.md` (apartado 9), `ARCHITECTURE.md`, `OPERATIONS.md` (apartados 1 y 4), `SECRETS_INVENTORY.md`, y una sección en `TROUBLESHOOTING.md`. Sin copiar textos entre ellos | [`CLAUDE.md`](../../CLAUDE.md) |
 
 Si usa Postgres, el rol **no crea** ni la base ni el usuario ni la red: el operador declara la base y el usuario en `postgres_hosts.yml`, y en la instancia `connects_to` y `pg_hba`; los crea el rol `postgres` ([`POSTGRES.md`](../POSTGRES.md), apartado 6; [`NETWORK.md`](../NETWORK.md)). El rol de la aplicación solo comprueba que existen.
@@ -94,10 +104,11 @@ tests/deploy/run.sh && tests/images/run.sh
 
 - `tests/unit/test_app_contract.py` falla si falta el contrato, su fila en `README.md`, la línea de `infra_apps` o si las unidades no cuadran con lo declarado: es lo que dice si la aplicación está bien añadida.
 - Lo que no hayas podido ejecutar (por ejemplo `lifecycle`, que necesita systemd), dilo: no lo des por probado.
+- **Sin acceso a Galaxy**, `ansible-lint` no instala sus colecciones: usa `ansible-lint --offline` con las del paquete `ansible` de PyPI, copiadas a `~/.ansible/collections`. Son de otra versión que las de `requirements.yml`: dilo en el PR.
 
 ## 5. Entregar
 
-- **Varios PR pequeños, en este orden**, cada uno verde por sí solo: (a) ficha y página de la aplicación; (b) imagen, rol, playbook, unidades y tests; (c) `lifecycle` y el resto de documentos.
+- **Varios PR pequeños, en este orden**, cada uno verde por sí solo: (a) ficha y página de la aplicación, con **las respuestas del operador a la ficha escritas en su descripción**, para que no se pierdan entre sesiones; (b) imagen, rol, playbook, unidades y tests; (c) `lifecycle` y el resto de documentos.
 - Cada entrega dice **«Probado y no probado»** ([`WORKFLOW.md`](../WORKFLOW.md), «Si una IA escribe el cambio y otra lo aplica»).
 - La prueba en una máquina la hace el operador: `./deploy.sh plan <app> --env dev`, `apply`, y `./deploy.sh plan check --env dev`, que debe acabar en `RESUMEN: todo correcto`. Lo que tiene que escribir en su inventario va en la página de la aplicación.
 - **Mientras trabajas, anota** en la descripción de cada PR, en «Notas para mejorar el procedimiento», lo que este fichero no previó: preguntas del operador que la ficha no respondía, decisiones que costaron varias vueltas y pasos que sobraron.

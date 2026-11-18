@@ -1,6 +1,6 @@
 ---
 name: add-app
-description: Añade una aplicación nueva a la plataforma (rol, playbook, unidades Quadlet, tests y documentación). Úsala cuando el operador pida añadir, desplegar o integrar una aplicación o servicio nuevo.
+description: Añade una aplicación nueva a la plataforma (rol, playbook, unidades Quadlet, tests y documentación). Úsala cuando el operador pida añadir, instalar, montar, desplegar o integrar una aplicación o servicio nuevo, o meter uno en la plataforma (por ejemplo pgAdmin o el importador de Firefly).
 ---
 
 Sigue [`docs/services/ADD_APP.md`](../../../docs/services/ADD_APP.md) paso a paso: es la única fuente del procedimiento y aquí no se repite.
