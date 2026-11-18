@@ -168,13 +168,7 @@ Y después, desde tu copia del código, `plan` y `apply` como siempre (paso 6).
 
 ## Cuando hay una imagen nueva
 
-Cada lunes a las 10:00, el workflow `image-updates` mira si hay una versión nueva de las imágenes de `playbooks/group_vars/all/images.yml`. Si la hay, **falla y te llega un correo** de GitHub. Solo mira: nunca cambia nada.
-
-1. **Qué hay:** en GitHub, Actions → `image-updates` → la ejecución en rojo. La tabla del resumen dice qué imagen, qué versión hay, su digest y sus plataformas. Tienen que salir `linux/amd64` y `linux/arm64` (D6).
-2. **Pide el cambio a Claude**, con ese digest: un PR que lo pone en `images.yml` (y la versión nueva en `# track:`). Ese PR pasa por el CI y `lifecycle`, como cualquier otro (pasos 1 a 6). En DEV y después en producción, una máquina cada vez, con `--limit`.
-3. **Si es Postgres**, el `apply` hace antes una copia (`reason=pre-upgrade`) y, si falla, no cambia la imagen. Si el healthcheck no pasa tras el cambio, Ansible para el servicio y no vuelve atrás solo: vuelve al tag anterior (paso 6).
-
-Para mirarlo cuando quieras, sin esperar al lunes: Actions → `image-updates` → **Run workflow**.
+El aviso semanal de `image-updates`, qué mirar, el cambio, el despliegue, qué hacer si sale mal y el canario: [`IMAGE_UPDATES.md`](IMAGE_UPDATES.md).
 
 ## Versiones de los tags
 

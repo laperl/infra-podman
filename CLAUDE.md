@@ -31,6 +31,7 @@ No leas todo el repo: lee lo que pide la tarea. Cada cosa se explica en un solo 
 | Secretos | SPEC 4.5, `docs/SECRETS_INVENTORY.md` y `playbooks/secrets.yml` |
 | Escribir o aplicar una orden (un parche de otra IA) | `docs/WORKFLOW.md`, «Si una IA escribe el cambio y otra lo aplica»: quién prueba qué y cómo se deja escrito |
 | Despliegue o `deploy.sh` | SPEC 4.10, `deploy.sh` y `docs/WORKFLOW.md` |
+| Una imagen nueva (`image-updates`, digest, canario) | `docs/IMAGE_UPDATES.md` y `playbooks/group_vars/all/images.yml` |
 | Un fallo | `docs/TROUBLESHOOTING.md`, en la pieza que falla |
 | Cómo encaja todo | `docs/ARCHITECTURE.md` |
 | Por qué algo es así | `docs/DECISIONS.md`, solo la R que lo cita |
