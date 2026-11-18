@@ -58,7 +58,7 @@ Fuentes de lo que dice este documento:
   - Al pulsar «Authenticate», tu navegador va a Firefly, entras si hace falta y apruebas. Firefly devuelve un token al importer, que lo guarda **solo en su sesión**, dentro del contenedor (`TokenController.php`).
   - La sesión caduca a los 120 minutos (`SESSION_LIFETIME`). `/flush` la cierra en el momento.
 - **Sin token personal.** Un token personal de Firefly no caduca y da acceso a toda su API; solo hace falta para importar sin la web (por línea de órdenes o desde una carpeta). Aquí no se usa (apartado 7).
-- **Tus extractos, dentro del contenedor:** el CSV que subes y la sesión se guardan en `storage/`, en la capa propia del contenedor, sin volumen. Desaparecen cuando el contenedor se reinicia, porque Quadlet lo crea de nuevo en cada arranque. 🔍 Que Quadlet de Podman 4.9 lo arranca con `--rm`: lo comprueba `lifecycle`. No se ha encontrado en el código que el importer los borre al terminar de importar.
+- **Tus extractos, dentro del contenedor:** el CSV que subes y la sesión se guardan en `storage/`, en la capa propia del contenedor, sin volumen. Desaparecen cuando el contenedor se reinicia: Quadlet lo arranca con `podman run --rm --replace` y lo crea de nuevo cada vez (comprobado con el generador de Podman 4.9.3, `quadlet -dryrun`). No se ha encontrado en el código que el importer los borre al terminar de importar.
 - **Sin clave de aplicación:** la de Laravel viene fija en `config/app.php`, y su comentario dice que no se usa. No hace falta un secreto `APP_KEY`.
 - **Registros sin tus datos:**
   - Por defecto el `.env.example` trae `LOG_LEVEL=debug` y escribe también en un fichero diario. Aquí van a `stdout`, al journal, con `notice`.

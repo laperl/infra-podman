@@ -1,0 +1,89 @@
+---
+# Phase 2: the Firefly III Data Importer on each machine of firefly_importer_hosts
+# (docs/services/firefly_importer.md), one deployment per item of firefly_importer_instances
+# (R48, docs/services/README.md). Each instance needs the base playbook and the Firefly
+# instances of its connects_to. It writes the network of each pair itself; apply firefly
+# afterwards (or before) joins Firefly to it, restarting it once (docs/NETWORK.md, 6).
+#   ./deploy.sh plan firefly_importer --env dev --limit <vm>
+# An instance removed from the inventory is never stopped by removing it: it is only
+# reported. Retiring one while it is still declared (it has no data to keep):
+#   ./deploy.sh apply firefly_importer --retire <name>   (-e firefly_importer_retire=<name>)
+# CI removes every instance with -e firefly_importer_state=absent.
+- name: Instances of the Firefly III Data Importer
+  hosts: firefly_importer_hosts
+  gather_facts: false
+  tasks:
+    - name: Check the instances of this machine
+      ansible.builtin.assert:
+        that:
+          - firefly_importer_instances is sequence and firefly_importer_instances is not string
+          - firefly_importer_instances | rejectattr('name', 'defined') | list | length == 0
+          - firefly_importer_instances | map(attribute='name') | unique | list | length == firefly_importer_instances | length
+          - firefly_importer_listening | unique | list | length == firefly_importer_listening | length
+          - firefly_importer_retire | default('') | length == 0 or firefly_importer_retire in firefly_importer_instances | map(attribute='name')
+          - firefly_importer_purge | default('') | length == 0 or firefly_importer_purge in firefly_importer_instances | map(attribute='name')
+        fail_msg: >-
+          firefly_importer_instances of {{ inventory_hostname }} (group_vars/firefly_importer_hosts.yml of the data
+          repository): each instance with a name, and neither a name nor an address and port of
+          networking.inbound.publish repeated on the same machine (docs/services/README.md). --retire and
+          --purge only for an instance that is still declared.
+        quiet: true
+      vars:
+        # <address>:<host port> of every instance, without the container port.
+        firefly_importer_listening: >-
+          {{ firefly_importer_instances | map(attribute='networking', default={})
+             | map(attribute='inbound', default={}) | map(attribute='publish', default=[]) | flatten
+             | map('regex_replace', ':[0-9]+$', '') | list }}
+
+    - name: Deploy each instance
+      ansible.builtin.include_role:
+        name: firefly_importer
+      loop: "{{ firefly_importer_instances }}"
+      loop_control:
+        loop_var: firefly_importer_item
+        label: ffimport-{{ firefly_importer_item.name }}
+      vars:
+        # firefly_importer_retire <name>: only that one is removed; -e firefly_importer_state,
+        # as an extra variable, still wins over this for every instance.
+        firefly_importer_state: >-
+          {{ 'absent' if firefly_importer_item.name in [firefly_importer_retire | default(''), firefly_importer_purge | default('')] else 'present' }}
+        # firefly_importer_purge <name>: retired as above; it has no volume or secret to delete
+        # (roles/firefly_importer/tasks/purge.yml).
+        firefly_importer_purging: "{{ firefly_importer_item.name == firefly_importer_purge | default('') }}"
+
+    # An instance removed from the inventory is never stopped or removed by removing it:
+    # only reported, on every run (as PostgreSQL's, docs/POSTGRES.md, section 7).
+    - name: Read the service user
+      ansible.builtin.include_role:
+        name: service_user
+
+    - name: Read the Data Importer instances running on this machine
+      ansible.builtin.command:
+        argv:
+          - podman
+          - ps
+          - --all
+          - --filter
+          - label=infra.component=app
+          - --filter
+          - label=infra.managed-by=infra-podman
+          - --format
+          - '{% raw %}{{ index .Labels "infra.app" }}{% endraw %}'
+      environment: "{{ service_user_env }}"
+      become: true
+      become_user: "{{ service_user }}"
+      register: firefly_importer_found
+      changed_when: false
+      check_mode: false
+
+    - name: Report instances that are not in the inventory (left as they are)
+      ansible.builtin.debug:
+        msg: >-
+          Not in the inventory of {{ inventory_hostname }}, left running as they are:
+          {{ firefly_importer_undeclared | join(', ') }}. To retire one, declare it again
+          and run ./deploy.sh apply firefly_importer --retire <name> (docs/services/INSTALL.md, section 10).
+      when: firefly_importer_undeclared | length > 0
+      vars:
+        firefly_importer_undeclared: >-
+          {{ firefly_importer_found.stdout_lines | select('match', '^ffimport-') | reject('in', firefly_importer_instances
+             | map(attribute='name') | map('regex_replace', '^', 'ffimport-') | list) | list }}
