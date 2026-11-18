@@ -11,6 +11,7 @@ infra-podman/                      # tu repo de datos (solo en el portátil, com
         all.yml                    # variables de todas las máquinas del entorno
         postgres_hosts.yml         # instancias de Postgres, con las bases y los usuarios de las aplicaciones
         firefly_hosts.yml          # instancias de Firefly III (fase 2)
+        pgadmin_hosts.yml          # instancias de pgAdmin 4 (fase 2, R37)
       host_vars/                   # variables de una sola máquina: <alias>.yml
     prod/                          # --env prod, igual
       ...
@@ -26,6 +27,7 @@ infra-podman/                      # tu repo de datos (solo en el portátil, com
 | `group_vars/all.yml` | Entorno (`infra_env`), usuario de servicio, **nombres** de los secretos que hay en KeePassXC (`infra_secrets`), tope del servidor de copias y opciones de SSH | [`prod/group_vars/all.yml`](prod/group_vars/all.yml) |
 | `group_vars/postgres_hosts.yml` | Las instancias de Postgres de cada máquina del grupo. Desde la fase 2, también las bases y los usuarios de cada aplicación ([`POSTGRES.md`](../docs/POSTGRES.md), sección 6) | [`prod/group_vars/postgres_hosts.yml`](prod/group_vars/postgres_hosts.yml) |
 | `group_vars/firefly_hosts.yml` | Las instancias de Firefly III de cada máquina del grupo: nombre, puerto, idioma, navegador del lanzador… Paso a paso en [`docs/services/INSTALL.md`](../docs/services/INSTALL.md) | [`prod/group_vars/firefly_hosts.yml`](prod/group_vars/firefly_hosts.yml) |
+| `group_vars/pgadmin_hosts.yml` | Las instancias de pgAdmin 4 de cada máquina del grupo: nombre, email de su usuario, puerto y las Postgres que administra. Lo propio de pgAdmin en [`docs/services/pgadmin.md`](../docs/services/pgadmin.md), apartado 7 | [`prod/group_vars/pgadmin_hosts.yml`](prod/group_vars/pgadmin_hosts.yml) |
 | `host_vars/<alias>.yml` | Lo que cambie solo en una máquina. Hoy, en el portátil: que su backup copie también el repo de datos, el aviso de escritorio y adónde va la copia externa (`backup_remote_url`). En la VM DEV, que no tiene Tailscale: servidor de copias sin exponer y copia en la misma VM | [`prod/host_vars/example-laptop.yml`](prod/host_vars/example-laptop.yml), [`dev/host_vars/example-vm.yml`](dev/host_vars/example-vm.yml) |
 
 Lo que llegue en fases siguientes (pgAdmin, qué guarda cada aplicación en los backups) también son datos: cada PR dice qué añadir y dónde, y actualiza este ejemplo.
@@ -38,6 +40,7 @@ Todo contenedor tiene tope de memoria, de procesador y de procesos (R46). Cada u
 | --- | --- | --- |
 | Postgres (todas las instancias de la máquina) | `postgres_memory` (`1g`), `postgres_cpus` (`"2"`), `postgres_pids_limit` (`500`) | `group_vars/postgres_hosts.yml` |
 | Firefly III (cada instancia) | `memory` (`512m`), `cpus` (`"1"`), `pids_limit` (`200`), dentro de la instancia | `group_vars/firefly_hosts.yml` |
+| pgAdmin 4 (cada instancia) | `memory` (`512m`), `cpus` (`"1"`), `pids_limit` (`256`), dentro de la instancia | `group_vars/pgadmin_hosts.yml` |
 | Backup local y copia al servidor (`<entorno>-backup`, `<entorno>-backup-copy`) | `backup_memory` (`1g`), `backup_cpus` (`"2"`), `backup_pids_limit` (`500`) | `host_vars/<alias>.yml` de la máquina que hace copias |
 | Servidor de copias (`<entorno>-backup-server`) | `backup_server_memory` (`512m`), `backup_server_cpus` (`"1"`), `backup_server_pids_limit` (`200`) | `host_vars/<alias>.yml` de la máquina que las guarda |
 

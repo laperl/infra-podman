@@ -103,7 +103,7 @@ El orden general está en [`INSTALL.md`](INSTALL.md). Lo de pgAdmin, cuando lleg
        email: admin@example.com        # el tuyo, solo aquí
        networking:
          inbound:
-           publish: ["127.0.0.1:18101:8080"]
+           publish: ["127.0.0.1:18110:8080"]
          connects_to: [pg-main]        # una o varias Postgres de esta máquina
        # backup: [data]
    ```

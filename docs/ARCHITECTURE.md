@@ -43,6 +43,7 @@ flowchart LR
     subgraph lsvc["usuario svc_runner"]
       pg[("prod-pg-main<br/>PostgreSQL")]
       ff["prod-ff-casa, …<br/>Firefly III, una por instancia"]
+      pa["prod-pgadmin-laptop<br/>pgAdmin 4"]
       bk["prod-backup"]
       repo[("prod-backup-repo<br/>copias cifradas")]
       cp["prod-backup-copy"]
@@ -72,6 +73,8 @@ flowchart LR
   hub -- "descarga por digest" --> gsvc
   br -- "127.0.0.1:181xx" --> ff
   ff -- "red interna, sin salida" --> pg
+  br -- "127.0.0.1:181xx" --> pa
+  pa -- "red interna, superusuario (R37)" --> pg
   pg -- "volcados" --> bk
   bk -- "cifra y guarda" --> repo
   repo -- "solo lectura" --> cp
@@ -81,7 +84,7 @@ flowchart LR
   cp -. "estado" .-> nt
 ```
 
-Las flechas de puntos son lecturas locales, sin red. Firefly no sale del portátil: su red solo llega a su Postgres. Lo único que sale del portátil hacia otra máquina es Ansible (por SSH) y la copia de los backups (por Tailscale), siempre cifrada.
+Las flechas de puntos son lecturas locales, sin red. Firefly y pgAdmin no salen del portátil: su red solo llega a su Postgres. Lo único que sale del portátil hacia otra máquina es Ansible (por SSH) y la copia de los backups (por Tailscale), siempre cifrada.
 
 ## 3. Las piezas
 
@@ -91,7 +94,7 @@ Las flechas de puntos son lecturas locales, sin red. Firefly no sale del portát
 | **GitHub: tags firmados** | El control de producción: `deploy.sh` solo despliega en prod un tag firmado con tu clave (R4) | Tags del repo; la lista de claves de confianza, fuera de los repos: `~/.config/infra-podman/allowed_signers` | `deploy.sh`, que los comprueba con `git verify-tag` |
 | **GitHub: CI** | Prueba cada cambio antes del merge: `lint` (sintaxis, política de Quadlet, generador de Podman 4.9), `lifecycle` (despliega de verdad en una máquina de GitHub con Podman 4.9) y `ee-image` (construye la imagen de Ansible). Cada lunes, `image-updates` avisa por correo si hay una versión nueva de una imagen. Nunca toca tus máquinas ni KeePassXC | GitHub Actions, máquinas Ubuntu 24.04 sin SELinux | Con GitHub y GHCR; `image-updates` lee además Docker Hub |
 | **GHCR: imagen de Ansible** (`infra-podman-ee`) | Ansible, sus colecciones y `keepassxc-cli`, con las versiones fijadas | Paquete privado en GHCR; fijada por digest en `ansible-navigator.yml` | La publica `ee-image`; la descarga tu Podman con un token de solo lectura |
-| **Docker Hub** | Las imágenes de los servicios: `pgvector/pgvector`, `fireflyiii/core`, `restic/restic` y `restic/rest-server` | `docker.io`; fijadas por digest en `playbooks/group_vars/all/images.yml` | Las descarga `svc_runner` en cada máquina durante un `apply` |
+| **Docker Hub** | Las imágenes de los servicios: `pgvector/pgvector`, `fireflyiii/core`, `dpage/pgadmin4`, `restic/restic` y `restic/rest-server` | `docker.io`; fijadas por digest en `playbooks/group_vars/all/images.yml` | Las descarga `svc_runner` en cada máquina durante un `apply` |
 | **Repo de datos** | Tu inventario: máquinas, instancias, superusuario, nombre de la instalación (`infra_site`), qué secretos hay. Sin contraseñas | `~/infra-podman-data`, solo en el portátil, en el volumen cifrado, sin GitHub. Commits firmados (R38) | `deploy.sh` lo lee y comprueba su firma en prod. Tras cada ejecución correcta deja una copia en `/var/lib/infra-podman/data-repo` para el backup |
 | **KeePassXC** | La copia maestra de los secretos (`infra-pro.kdbx`, y `infra-dev.kdbx` con valores falsos) y el agente SSH con tus claves de acceso y de firma | En el portátil, fuera de los repos. Grupo `<instalación>` (R42) | `deploy.sh secrets` lo lee con `keepassxc-cli`; `git` y SSH usan su agente |
 | **`deploy.sh`** | La única entrada: `plan`, `apply` y `secrets`. En prod exige tag firmado, código limpio, datos firmados y escribir `prod` | En la raíz del repo de código; configuración en `~/.config/infra-podman/deploy.conf`; registro en `~/.local/state/infra-podman/deploy.log` | Lanza el contenedor de Ansible y le pasa el inventario del repo de datos |
@@ -100,6 +103,7 @@ Las flechas de puntos son lecturas locales, sin red. Firefly no sale del portát
 | **Quadlet y systemd** | Cada contenedor es un fichero de Quadlet que systemd convierte en un servicio de `svc_runner`. Unos arrancan al encender; otros los despierta un temporizador | `~svc_runner/.config/containers/systemd/` (contenedores y volúmenes) y `~svc_runner/.config/systemd/user/` (temporizadores) | Los instala Ansible tras validarlos con el generador de Quadlet de la propia máquina (SPEC 4.2) |
 | **Postgres** (`prod-pg-main`) | La base de datos principal (PostgreSQL 18 con pgvector), según [`POSTGRES.md`](POSTGRES.md) | Portátil; datos en el volumen `prod-pg-main-data` | Sin puertos. Sin aplicaciones que se le conecten, `Network=none` (R30); con ellas, una red interna y aislada por aplicación, y cada una solo entra en las bases que nombra en su `pg_hba` ([`NETWORK.md`](NETWORK.md)). Se administra por su socket con `podman exec` |
 | **Firefly III** (`prod-ff-<instancia>`) | Tus finanzas personales, según [`services/firefly.md`](services/firefly.md). Una o varias instancias independientes (`casa`, `canary`…, R48, [`services/README.md`](services/README.md)). Siempre en marcha; las tareas diarias de cada una, con `prod-ff-<instancia>-cron.timer` | Portátil; cada instancia, su base `ff_<instancia>` en `prod-pg-main` y sus justificantes en el volumen `prod-ff-<instancia>-uploads`, que aún no entra en el backup (siguiente PR de la fase 2) | Cada instancia, solo con su Postgres, por su propia red interna `prod-ff-<instancia>-pg-<postgres>-net`, sin salida a internet ni camino a otra instancia. Tú entras con el navegador por su puerto de `127.0.0.1`, desde su lanzador del menú (R47) |
+| **pgAdmin 4** (`prod-pgadmin-<instancia>`) | Administrar a mano tus Postgres desde el navegador, según [`services/pgadmin.md`](services/pgadmin.md) (R37). Normalmente una instancia, que puede administrar varias Postgres. Siempre en marcha | Portátil; su usuario, los servidores registrados y sus preferencias en el volumen `prod-pgadmin-<instancia>-data`, que el backup copia solo si se pide | Una red interna con cada Postgres que administra, sin salida. Es lo único desde donde entra el superusuario por TCP. Tú entras con el navegador por su puerto de `127.0.0.1`, desde su lanzador |
 | **Backup local** (`prod-backup`) | Una copia diaria, cifrada con restic, de todas las bases y del repo de datos. Cómo funciona y cuánto guarda: [`BACKUPS.md`](BACKUPS.md) | Portátil; copias en el volumen `prod-backup-repo` | Antes de arrancar, el servicio vuelca las bases desde `prod-pg-main`. El contenedor no tiene red |
 | **Copia al servidor principal** (`prod-backup-copy`) | Cada hora, envía al servidor principal las copias que le faltan | Portátil | Lee `prod-backup-repo` en solo lectura y habla por Tailscale con el servidor de copias. Su red, `prod-backup-copy-egress-net`, solo tiene ruta a la IP del servidor: no llega a internet ni a la red local, si la máquina tiene netavark 1.7.0 o posterior (R59; `plan check` dice si limita) |
 | **Servidor de copias** (`prod-backup-server`) | rest-server de restic: recibe las copias y solo deja añadir, nunca borrar (R44). Pide usuario y contraseña; tope de 30 GB | Servidor principal; copias en el volumen `prod-backup-server-data`, carpeta `<instalación>/prod-laptop` | Solo escucha en `127.0.0.1`; le llega la copia a través de `tailscale serve`. En su propia red interna, `prod-backup-server-net`: sin salida a internet, a la red local ni al host (R58) |
@@ -118,6 +122,7 @@ Solo los de la infraestructura; los de cada aplicación se añadirán con ella.
 | Portátil | `127.0.0.1:22` | sshd, solo con clave (R23) | El contenedor de Ansible, desde el propio portátil |
 | Servidor principal | `:22` | sshd | Ansible desde el portátil, por Tailscale. Lo que escucha hoy fuera de Tailscale lo revisa la fase 1b (cortafuegos) |
 | Portátil | Lo que diga `networking.inbound.publish` de cada instancia; lo habitual, `127.0.0.1:<puerto>` desde el 18100 (R55) | `prod-ff-<instancia>` (dentro del contenedor, el 8080) | Tu navegador, en el portátil |
+| Portátil | Lo que diga `networking.inbound.publish`; lo habitual, `127.0.0.1:<puerto>` | `prod-pgadmin-<instancia>` (dentro, el 8080) | Tu navegador, en el portátil |
 | Servidor principal | `127.0.0.1:18000` | `prod-backup-server` (dentro del contenedor, el 8000) | Solo `tailscale serve` |
 | Servidor principal | `:18000` en la red de Tailscale | `tailscale serve --tcp=18000` | `prod-backup-copy`, desde el portátil |
 | VM DEV | `:22` en la red de la VM | sshd | Ansible desde el portátil |
@@ -171,6 +176,7 @@ flowchart TD
 | `secrets` (con `deploy.sh secrets`) | Sí | Sí | Sí |
 | `postgres` | Sí | No | Sí |
 | `firefly` | Sí | No | Sí |
+| `pgadmin` | Sí | No | Sí |
 | `backup` (copia diaria, envío y aviso) | Sí | No | Sí |
 | `backup-server` | No | Sí | Sí |
 
