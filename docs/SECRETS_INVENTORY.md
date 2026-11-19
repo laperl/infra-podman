@@ -14,6 +14,7 @@ Lista de los secretos que usa la plataforma (SPEC 4.5). **Nunca valores**: solo 
 - Un rol no puede usar un secreto que no lo nombre en `readers:`: el `plan` se para y dice qué línea falta.
 - Un secreto que leen dos (la contraseña de un usuario la leen Postgres y su aplicación) es **una sola línea con los dos** en `readers:`. El mismo nombre en dos líneas se rechaza.
 - Los nombres de lector van sin el entorno: `pg-<instancia>`, `ff-<instancia>`, `pgadmin-<instancia>` (el identificador de la instancia que usa ese usuario de Postgres), `backup` y `backup-server`.
+- **El Data Importer de Firefly no tiene secretos.** Se entra con OAuth, como cliente público con PKCE: su `client_id` va en la instancia del inventario porque no es un secreto (RFC 6749, apartado 2.2). El token que da Firefly vive solo en la sesión del importer y caduca. Un token personal de Firefly sí lo sería: no se usa ([`services/firefly_importer.md`](services/firefly_importer.md), apartado 4).
 
 | Nombre del secreto en Podman | Ruta en KeePassXC | Consumidores (lo que va en `readers:`) | Rotación |
 | --- | --- | --- | --- |

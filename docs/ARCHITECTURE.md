@@ -14,11 +14,10 @@ El portátil hace dos papeles a la vez (R18):
 **En qué se apoya:** Fedora Atomic Sway 44 con SELinux activo, Podman 5 sin root, el disco cifrado y KeePassXC con su agente SSH.
 
 **Qué se despliega:**
-- en el portátil: el usuario de servicio, Postgres, Firefly III y los backups;
+- en el portátil: el usuario de servicio, Postgres, Firefly III, pgAdmin 4, el Data Importer de Firefly y los backups;
 - en el servidor principal: el usuario de servicio y el servidor que guarda la copia de los backups;
 - en la VM DEV: lo mismo que en las dos máquinas juntas, para probar antes.
 
-pgAdmin llega más adelante en la fase 2.
 
 ## 2. Mapa de la plataforma
 
@@ -44,6 +43,7 @@ flowchart LR
       pg[("prod-pg-main<br/>PostgreSQL")]
       ff["prod-ff-casa, …<br/>Firefly III, una por instancia"]
       pa["prod-pgadmin-laptop<br/>pgAdmin 4"]
+      fi["prod-ffimport-laptop<br/>Data Importer de Firefly"]
       bk["prod-backup"]
       repo[("prod-backup-repo<br/>copias cifradas")]
       cp["prod-backup-copy"]
@@ -75,6 +75,8 @@ flowchart LR
   ff -- "red interna, sin salida" --> pg
   br -- "127.0.0.1:181xx" --> pa
   pa -- "red interna, superusuario (R37)" --> pg
+  br -- "127.0.0.1:181xx" --> fi
+  fi -- "red interna, API de Firefly" --> ff
   pg -- "volcados" --> bk
   bk -- "cifra y guarda" --> repo
   repo -- "solo lectura" --> cp
@@ -84,7 +86,7 @@ flowchart LR
   cp -. "estado" .-> nt
 ```
 
-Las flechas de puntos son lecturas locales, sin red. Firefly y pgAdmin no salen del portátil: su red solo llega a su Postgres. Lo único que sale del portátil hacia otra máquina es Ansible (por SSH) y la copia de los backups (por Tailscale), siempre cifrada.
+Las flechas de puntos son lecturas locales, sin red. Firefly, pgAdmin y el Data Importer no salen del portátil: la red de los dos primeros solo llega a su Postgres, y la del importer, a su Firefly. Lo único que sale del portátil hacia otra máquina es Ansible (por SSH) y la copia de los backups (por Tailscale), siempre cifrada.
 
 ## 3. Las piezas
 
@@ -104,6 +106,7 @@ Las flechas de puntos son lecturas locales, sin red. Firefly y pgAdmin no salen 
 | **Postgres** (`prod-pg-main`) | La base de datos principal (PostgreSQL 18 con pgvector), según [`POSTGRES.md`](POSTGRES.md) | Portátil; datos en el volumen `prod-pg-main-data` | Sin puertos. Sin aplicaciones que se le conecten, `Network=none` (R30); con ellas, una red interna y aislada por aplicación, y cada una solo entra en las bases que nombra en su `pg_hba` ([`NETWORK.md`](NETWORK.md)). Se administra por su socket con `podman exec` |
 | **Firefly III** (`prod-ff-<instancia>`) | Tus finanzas personales, según [`services/firefly.md`](services/firefly.md). Una o varias instancias independientes (`casa`, `canary`…, R48, [`services/README.md`](services/README.md)). Siempre en marcha; las tareas diarias de cada una, con `prod-ff-<instancia>-cron.timer` | Portátil; cada instancia, su base `ff_<instancia>` en `prod-pg-main` y sus justificantes en el volumen `prod-ff-<instancia>-uploads`, que aún no entra en el backup (siguiente PR de la fase 2) | Cada instancia, solo con su Postgres, por su propia red interna `prod-ff-<instancia>-pg-<postgres>-net`, sin salida a internet ni camino a otra instancia. Tú entras con el navegador por su puerto de `127.0.0.1`, desde su lanzador del menú (R47) |
 | **pgAdmin 4** (`prod-pgadmin-<instancia>`) | Administrar a mano tus Postgres desde el navegador, según [`services/pgadmin.md`](services/pgadmin.md) (R37). Normalmente una instancia, que puede administrar varias Postgres. Siempre en marcha | Portátil; su usuario, los servidores registrados y sus preferencias en el volumen `prod-pgadmin-<instancia>-data`, que el backup copia solo si se pide | Una red interna con cada Postgres que administra, sin salida. Es lo único desde donde entra el superusuario por TCP. Tú entras con el navegador por su puerto de `127.0.0.1`, desde su lanzador |
+| **Data Importer de Firefly** (`prod-ffimport-<instancia>`) | Pasar a Firefly tus extractos del banco en CSV, a mano y desde el navegador, según [`services/firefly_importer.md`](services/firefly_importer.md). Normalmente uno, que puede importar en varios Firefly. Siempre en marcha | Portátil; sin volumen ni secretos: lo que subes se borra al reiniciar el contenedor. Las configuraciones de cada banco (JSON) las guardas tú en el repo de datos | Una red interna con cada Firefly en el que importa, sin salida: no conecta con el banco. Tú entras con el navegador por su puerto de `127.0.0.1`, desde su lanzador, y autorizas con OAuth en Firefly |
 | **Backup local** (`prod-backup`) | Una copia diaria, cifrada con restic, de todas las bases y del repo de datos. Cómo funciona y cuánto guarda: [`BACKUPS.md`](BACKUPS.md) | Portátil; copias en el volumen `prod-backup-repo` | Antes de arrancar, el servicio vuelca las bases desde `prod-pg-main`. El contenedor no tiene red |
 | **Copia al servidor principal** (`prod-backup-copy`) | Cada hora, envía al servidor principal las copias que le faltan | Portátil | Lee `prod-backup-repo` en solo lectura y habla por Tailscale con el servidor de copias. Su red, `prod-backup-copy-egress-net`, solo tiene ruta a la IP del servidor: no llega a internet ni a la red local, si la máquina tiene netavark 1.7.0 o posterior (R59; `plan check` dice si limita) |
 | **Servidor de copias** (`prod-backup-server`) | rest-server de restic: recibe las copias y solo deja añadir, nunca borrar (R44). Pide usuario y contraseña; tope de 30 GB | Servidor principal; copias en el volumen `prod-backup-server-data`, carpeta `<instalación>/prod-laptop` | Solo escucha en `127.0.0.1`; le llega la copia a través de `tailscale serve`. En su propia red interna, `prod-backup-server-net`: sin salida a internet, a la red local ni al host (R58) |
@@ -123,6 +126,7 @@ Solo los de la infraestructura; los de cada aplicación se añadirán con ella.
 | Servidor principal | `:22` | sshd | Ansible desde el portátil, por Tailscale. Lo que escucha hoy fuera de Tailscale lo revisa la fase 1b (cortafuegos) |
 | Portátil | Lo que diga `networking.inbound.publish` de cada instancia; lo habitual, `127.0.0.1:<puerto>` desde el 18100 (R55) | `prod-ff-<instancia>` (dentro del contenedor, el 8080) | Tu navegador, en el portátil |
 | Portátil | Lo que diga `networking.inbound.publish`; lo habitual, `127.0.0.1:<puerto>` | `prod-pgadmin-<instancia>` (dentro, el 8080) | Tu navegador, en el portátil |
+| Portátil | Lo que diga `networking.inbound.publish`; lo habitual, `127.0.0.1:<puerto>` | `prod-ffimport-<instancia>` (dentro, el 8080) | Tu navegador, en el portátil |
 | Servidor principal | `127.0.0.1:18000` | `prod-backup-server` (dentro del contenedor, el 8000) | Solo `tailscale serve` |
 | Servidor principal | `:18000` en la red de Tailscale | `tailscale serve --tcp=18000` | `prod-backup-copy`, desde el portátil |
 | VM DEV | `:22` en la red de la VM | sshd | Ansible desde el portátil |
@@ -177,6 +181,7 @@ flowchart TD
 | `postgres` | Sí | No | Sí |
 | `firefly` | Sí | No | Sí |
 | `pgadmin` | Sí | No | Sí |
+| `firefly_importer` | Sí | No | Sí |
 | `backup` (copia diaria, envío y aviso) | Sí | No | Sí |
 | `backup-server` | No | Sí | Sí |
 

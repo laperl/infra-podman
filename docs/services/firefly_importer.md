@@ -1,8 +1,8 @@
-# Firefly III Data Importer (`firefly_importer`): requisitos (fase 2)
+# Firefly III Data Importer (`firefly_importer`), fase 2
 
 **`ffimport` es el Data Importer de Firefly III:** su nombre corto en todo lo que se crea en la máquina. Su nombre de código es `firefly_importer` (`roles/firefly_importer`, `firefly_importer_instances`). La instancia `laptop` es `prod-ffimport-laptop`. Instalarla, paso a paso: [`INSTALL.md`](INSTALL.md); lo propio del importer está en el apartado 8.
 
-Qué tiene que cumplir el importer antes de escribir su código. Es una propuesta: lo que esté aquí y no en SPEC, sección 3, se aprueba con este PR. Lo marcado 🔍 no está verificado en la documentación oficial o en una máquina: se comprueba en DEV o en `lifecycle`, y el PR que lo verifique lo deja escrito.
+Qué cumple el importer y cómo se usa. Requisitos aprobados por el operador el 2026-11-18 (PR #62). Desplegado y comprobado por el operador en DEV el 2026-11-19, de punta a punta: autorización OAuth, importación, duplicados y la pestaña «Red» del navegador. Lo demás lo comprueba el job `firefly_importer` de `lifecycle` en cada cambio.
 
 **Para qué:** pasar a Firefly los extractos del banco en CSV, a mano y desde el navegador del portátil, sin que nada salga a internet. **La conexión directa con el banco no entra** (GoCardless, Enable Banking, SimpleFIN…): exige internet y dar acceso a las cuentas a un tercero, y se decide aparte ([`ROADMAP.md`](../ROADMAP.md)).
 
@@ -21,14 +21,14 @@ Fuentes de lo que dice este documento:
 | Nombres | De código `firefly_importer`; corto `ffimport` (8 letras, R52; `ffimporter` no cabe) |
 | Imagen | `docker.io/fireflyiii/data-importer`, la oficial, en Docker Hub; sin suscripción. Se sigue la versión exacta: `# track: version-2.3.5`, la última publicada el 2026-09-23. Digest del índice calculado por el operador el 2026-11-18 con `skopeo inspect --raw \| sha256sum`, con `linux/amd64` y `linux/arm64`. Exige Firefly 6.6.0 o posterior (`minimum_version` en `config/importer.php`) |
 | Usuario del contenedor | `www-data`, UID 33, como Firefly: las dos imágenes salen de la misma base (`serversideup/php:8.5-fpm-nginx`, que termina en `USER www-data`; `Dockerfile.web` de `base-image`). Sin `User=` ni `UserNS=` |
-| Endurecimiento | `DropCapability=all` y `NoNewPrivileges=true`, sin excepción, como Firefly. Sin `ReadOnly=true`: escribe sesiones y ficheros subidos en `storage/`, igual que Firefly. 🔍 Que arranca así: el script de arranque propio del importer no es público; lo comprueba `lifecycle` |
+| Endurecimiento | `DropCapability=all` y `NoNewPrivileges=true`, sin excepción, como Firefly. Sin `ReadOnly=true`: escribe sesiones y ficheros subidos en `storage/`, igual que Firefly. Comprobado en DEV y en `lifecycle`: arranca y sirve así |
 | Contrato | `database: none` (no tiene base de datos), `providers: [firefly]` (al menos un Firefly en `connects_to`; apartado 2), `egress: false` |
 | Entrada | HTTP en el 8080, publicado en `127.0.0.1:<puerto>`. Salud: `GET /health` responde `OK` (`routes/web.php`, `HealthcheckController`). No mira si Firefly responde. Con el `curl` de la imagen base |
 | Datos | Ninguno que guardar: sin volúmenes (apartado 4) |
 | Secretos | Ninguno: se entra con OAuth (apartado 4) |
 | Copias | Nada: `firefly_importer_backup_available: {}`. Las configuraciones de cada banco (los JSON) las guardas tú (apartado 6.4) |
 | Primer arranque | Sin base, sin migraciones y sin tareas programadas. Después, una vez: el cliente OAuth en Firefly (apartado 6.1) |
-| Recursos | 512 MB, 1 CPU y 200 procesos, como Firefly. 🔍 Se miden en DEV y en `lifecycle` |
+| Recursos | 512 MB, 1 CPU y 200 procesos. Medido en DEV el 2026-11-19: 86 MB y 12 procesos en reposo; 115 MB y 15 procesos importando |
 | Lanzador | «Firefly Importer (<instancia>)» en el menú de Sway (rofi `drun`, R47): todo se maneja desde la web |
 | ¿Siempre en marcha? | Arranca con la máquina, como las demás, aunque se use de vez en cuando. «Arrancar al usar» sigue en el [`ROADMAP.md`](../ROADMAP.md) |
 | Lo que no encaja | Nada |
@@ -42,7 +42,7 @@ Fuentes de lo que dice este documento:
 - **Añadir o quitar un Firefly reinicia el importer y ese Firefly** una vez, al cambiar sus redes. Hacen falta los dos `apply`, en cualquier orden: `apply firefly_importer` y `apply firefly` ([`NETWORK.md`](../NETWORK.md), apartado 6).
 - **`providers: [firefly]`** es un tipo de proveedor nuevo: hasta ahora solo existía `postgres`. No cambia nada en marcha. Hace que el contrato diga la verdad, porque sin un Firefly el importer no sirve para nada. Lo que de verdad para el `plan` si falta es la comprobación del rol: «al menos un `ff-*` en `connects_to`». Supone una línea en `tests/unit/test_app_contract.py` (`PROVIDERS`), la fila del apartado 9 de [`README.md`](README.md) y el «Hoy» de R56 en [`DECISIONS.md`](../DECISIONS.md). Va en el PR del rol.
 - **Se llega solo desde la propia máquina**, por un puerto en `127.0.0.1`, como Firefly y pgAdmin.
-- **Lo que pediría tu navegador:** `egress` limita al contenedor, no a tu navegador. En el código, la interfaz carga sus estilos y scripts desde el propio importer (`resources/views/v2/layout/v2.blade.php`, con Vite), y la analítica Matomo solo se activa con `TRACKER_*`, que se dejan vacías. 🔍 Que no quede ninguna otra petición externa: prueba del apartado 8.
+- **Lo que pediría tu navegador:** `egress` limita al contenedor, no a tu navegador. En el código, la interfaz carga sus estilos y scripts desde el propio importer (`resources/views/v2/layout/v2.blade.php`, con Vite), y la analítica Matomo solo se activa con `TRACKER_*`, que se dejan vacías. Comprobado en DEV con la pestaña «Red» del navegador: solo peticiones a `127.0.0.1`.
 
 ## 3. Cómo llega a Firefly
 
@@ -60,9 +60,10 @@ Fuentes de lo que dice este documento:
 - **Sin token personal.** Un token personal de Firefly no caduca y da acceso a toda su API; solo hace falta para importar sin la web (por línea de órdenes o desde una carpeta). Aquí no se usa (apartado 7).
 - **Tus extractos, dentro del contenedor:** el CSV que subes y la sesión se guardan en `storage/`, en la capa propia del contenedor, sin volumen. Desaparecen cuando el contenedor se reinicia: Quadlet lo arranca con `podman run --rm --replace` y lo crea de nuevo cada vez (comprobado con el generador de Podman 4.9.3, `quadlet -dryrun`). No se ha encontrado en el código que el importer los borre al terminar de importar.
 - **Sin clave de aplicación:** la de Laravel viene fija en `config/app.php`, y su comentario dice que no se usa. No hace falta un secreto `APP_KEY`.
-- **Registros sin tus datos:**
+- **Registros sin tus datos, al journal:**
   - Por defecto el `.env.example` trae `LOG_LEVEL=debug` y escribe también en un fichero diario. Aquí van a `stdout`, al journal, con `notice`.
   - `LOG_RETURN_JSON` sigue apagado: el propio fichero avisa de que vuelca muchos datos privados.
+  - Se leen con `sudo journalctl _SYSTEMD_USER_UNIT=<entorno>-ffimport-<instancia>.service -n 50`. Que vayan al journal depende de la configuración de Podman de la máquina (ni Quadlet ni el rol lo fijan): en DEV, `svc podman inspect <entorno>-ffimport-<instancia> --format '{{.HostConfig.LogConfig.Type}}'` dice `journald`, como los demás servicios.
 - **Contenedor endurecido**, como el resto: sin capacidades, sin privilegios nuevos y con límites (R46, R51).
 
 ## 5. Configuración
@@ -108,7 +109,7 @@ Así se usa, banco a banco. Las pantallas son las del importer v2.3.5 y la [guí
 
 ### 6.1. Una sola vez: el cliente OAuth en Firefly
 
-1. Abre Firefly (`127.0.0.1:18100`) y, en tu perfil, la sección OAuth. Crea un cliente nuevo 🔍 (los nombres exactos del menú, en DEV):
+1. Abre Firefly (`127.0.0.1:18100`) y, en tu perfil, la sección OAuth. Crea un cliente nuevo:
    - **Nombre:** el que quieras, por ejemplo `ffimport-laptop`.
    - **Dirección de vuelta (redirect URL):** `http://127.0.0.1:<puerto del importer>/callback`. En el portátil, `http://127.0.0.1:18115/callback`.
    - **«Confidential»: desmarcado.** Si se queda marcado, Firefly devuelve una página que solo dice «Empty» (FAQ oficial).
@@ -209,7 +210,7 @@ El orden general está en [`INSTALL.md`](INSTALL.md). Lo del importer, cuando ll
 4. **`./deploy.sh plan firefly_importer`** y **`apply firefly_importer`**. Después **`plan firefly`** y **`apply firefly`**. Ese segundo `apply` **reinicia Firefly** una vez, unos segundos, al unirlo a la red de la pareja.
 5. **Primer acceso**, desde el lanzador: «Authenticate», apruebas en Firefly y vuelves al importer.
 6. **Prueba con un fichero falso (DEV):** un CSV inventado de tres líneas con una cuenta de prueba. Impórtalo dos veces: la segunda no debe crear nada (apartado 6.6). Es la prueba de duplicados de [`firefly.md`](firefly.md), apartado 6.
-7. **Prueba de que nada sale (DEV, dos minutos):** abre las herramientas del navegador, pestaña «Red», recarga el importer y haz una importación. Ninguna petición puede ir a un dominio que no sea `127.0.0.1`.
+7. **Prueba de que nada sale (DEV, dos minutos; hecha el 2026-11-19):** abre las herramientas del navegador, pestaña «Red», recarga el importer y haz una importación. Ninguna petición puede ir a un dominio que no sea `127.0.0.1`.
 
 **Si algo sale mal y quieres empezar de cero:** no hay datos ni secretos que perder. `--retire` y `apply` de nuevo; si el cliente OAuth está mal (la dirección de vuelta, «Confidential»), bórralo en Firefly y créalo otra vez, con su nuevo Client ID en la instancia.
 

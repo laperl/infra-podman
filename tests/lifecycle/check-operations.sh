@@ -9,6 +9,8 @@
 #   healthy         4    the laptop and the main server look healthy
 #   firefly         1, 4 Firefly III, its instance casa: deployed and healthy (firefly job)
 #   pgadmin         1, 4 pgAdmin 4, its instance ci: deployed and healthy (pgadmin job)
+#   firefly_importer 1, 4 the Data Importer, its instance ci: deployed and healthy
+#                   (firefly_importer job)
 #   restore-local   5.1  a broken database restored under another name, checked, swapped
 #   restore-server    5.2  a database restored from the main server's volume, with only the restic key
 #   data-repo       5.3  the data repository from the local copy
@@ -150,6 +152,17 @@ case $step in
     count_is healthy-pgadmin '8080/tcp -> 127.0.0.1:18102' 1
     expect healthy-pgadmin '^PING$'
     ;;
+  firefly_importer)
+    export OPS_INSTANCE=ci OPS_PORT=18115
+    run deployed-ffimport
+    expect deployed-ffimport 'dev-ffimport-ci'
+    expect deployed-ffimport '\(healthy\)'
+    run healthy-ffimport
+    count_is healthy-ffimport 'active' 1
+    expect healthy-ffimport '^sano$'
+    count_is healthy-ffimport '8080/tcp -> 127.0.0.1:18115' 1
+    expect healthy-ffimport '^OK$'
+    ;;
   restore-local)
     # Break the database after the last backup; restore it under another name; swap.
     sql "DELETE FROM app.t WHERE n <= 10" "$db"
@@ -190,7 +203,7 @@ case $step in
     rm -rf "$work/data-lost"
     echo "::notice title=Lost laptop (5.4)::data repository recovered from the main server's volume with only the restic key"
     ;;
-  *) echo "usage: $0 deployed|status|run-now|healthy|firefly|pgadmin|restore-local|restore-server|data-repo|lost-laptop" >&2; exit 2 ;;
+  *) echo "usage: $0 deployed|status|run-now|healthy|firefly|pgadmin|firefly_importer|restore-local|restore-server|data-repo|lost-laptop" >&2; exit 2 ;;
 esac
 rm -f "$work/key"
 echo "ok: $step"

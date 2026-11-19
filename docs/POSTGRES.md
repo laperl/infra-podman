@@ -206,7 +206,7 @@ Se crea el usuario con la contraseña de su secreto, en `app2_owner`, y solo pue
 3. Borra la base y sus tres grupos.
 4. Borra sus usuarios que ya no estén en ninguna otra base, como en el caso anterior.
 
-**Todas las bases.** Si falta `databases:` o está vacío (`databases: []`) y hay bases que borrar, **se para** y te enseña la lista. Para confirmarlo, repites la orden así:
+**Todas las bases.** Si falta `databases:` o está vacío (`databases: []`, o `databases:` sin nada debajo) y hay bases que borrar, **se para** y te enseña la lista. Para confirmarlo, repites la orden así:
 ```
 ./deploy.sh apply postgres --limit <máquina> --confirm-drop <instancia>
 ```
