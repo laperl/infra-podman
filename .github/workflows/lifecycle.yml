@@ -855,18 +855,18 @@ jobs:
           $CHECK restart
           $CHECK standard
 
-      - name: It reaches Firefly by the network of the pair
-        run: $CHECK firefly
-
-      # docs/NETWORK.md, 6: the other side joins the pair on its own apply, once.
+      # docs/NETWORK.md, 6: the other side joins the pair on its own apply, once. Until then
+      # the importer runs but does not reach Firefly.
       - name: Apply firefly joins Firefly to the pair (it restarts once), then without changes
         run: |
+          if $CHECK firefly >/dev/null 2>&1; then echo "::error::the importer reached Firefly before apply firefly"; exit 1; fi
           tests/lifecycle/playbook.sh -i "$INV" $IM playbooks/firefly.yml --diff 2>&1 | tee -a all.log
           tests/lifecycle/playbook.sh -i "$INV" $IM playbooks/firefly.yml 2>&1 | tee second.log | tee -a all.log
           grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply of firefly changed something"; exit 1; }
           $CHECK pair
           tests/lifecycle/check-firefly.sh running casa
           $CHECK running
+          $CHECK firefly
 
       - name: "End to end: OAuth with the client ID of the inventory, up to Firefly's login"
         run: $CHECK oauth

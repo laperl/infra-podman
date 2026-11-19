@@ -24,7 +24,7 @@ Fuentes de lo que dice este documento:
 | Endurecimiento | `DropCapability=all` y `NoNewPrivileges=true`, sin excepción, como Firefly. Sin `ReadOnly=true`: escribe sesiones y ficheros subidos en `storage/`, igual que Firefly. Comprobado en DEV y en `lifecycle`: arranca y sirve así |
 | Contrato | `database: none` (no tiene base de datos), `providers: [firefly]` (al menos un Firefly en `connects_to`; apartado 2), `egress: false` |
 | Entrada | HTTP en el 8080, publicado en `127.0.0.1:<puerto>`. Salud: `GET /health` responde `OK` (`routes/web.php`, `HealthcheckController`). No mira si Firefly responde. Con el `curl` de la imagen base |
-| Datos | Ninguno que guardar: sin volúmenes (apartado 4) |
+| Datos | Ninguno que guardar: sin volúmenes con nombre. La imagen declara uno anónimo en `/var/www/html/storage/upload`, la carpeta de lo que subes, que se borra con el contenedor (apartado 4) |
 | Secretos | Ninguno: se entra con OAuth (apartado 4) |
 | Copias | Nada: `firefly_importer_backup_available: {}`. Las configuraciones de cada banco (los JSON) las guardas tú (apartado 6.4) |
 | Primer arranque | Sin base, sin migraciones y sin tareas programadas. Después, una vez: el cliente OAuth en Firefly (apartado 6.1) |
@@ -58,7 +58,7 @@ Fuentes de lo que dice este documento:
   - Al pulsar «Authenticate», tu navegador va a Firefly, entras si hace falta y apruebas. Firefly devuelve un token al importer, que lo guarda **solo en su sesión**, dentro del contenedor (`TokenController.php`).
   - La sesión caduca a los 120 minutos (`SESSION_LIFETIME`). `/flush` la cierra en el momento.
 - **Sin token personal.** Un token personal de Firefly no caduca y da acceso a toda su API; solo hace falta para importar sin la web (por línea de órdenes o desde una carpeta). Aquí no se usa (apartado 7).
-- **Tus extractos, dentro del contenedor:** el CSV que subes y la sesión se guardan en `storage/`, en la capa propia del contenedor, sin volumen. Desaparecen cuando el contenedor se reinicia: Quadlet lo arranca con `podman run --rm --replace` y lo crea de nuevo cada vez (comprobado con el generador de Podman 4.9.3, `quadlet -dryrun`). No se ha encontrado en el código que el importer los borre al terminar de importar.
+- **Tus extractos, dentro del contenedor:** el CSV que subes va a `/var/www/html/storage/upload`, un volumen anónimo que declara la propia imagen; la sesión, a `storage/`, en la capa del contenedor. Los dos desaparecen cuando el contenedor se reinicia: Quadlet lo arranca con `podman run --rm --replace` (comprobado con el generador de Podman 4.9.3, `quadlet -dryrun`), y `--rm` borra también sus volúmenes anónimos. Lo comprueba `lifecycle` en cada cambio: tras reiniciar, contenedor nuevo y el volumen anterior borrado. No se ha encontrado en el código que el importer los borre al terminar de importar.
 - **Sin clave de aplicación:** la de Laravel viene fija en `config/app.php`, y su comentario dice que no se usa. No hace falta un secreto `APP_KEY`.
 - **Registros sin tus datos, al journal:**
   - Por defecto el `.env.example` trae `LOG_LEVEL=debug` y escribe también en un fichero diario. Aquí van a `stdout`, al journal, con `notice`.
