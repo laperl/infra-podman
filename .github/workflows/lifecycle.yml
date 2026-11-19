@@ -847,8 +847,13 @@ jobs:
       - name: Running, healthy, only on its port of 127.0.0.1
         run: $CHECK running
 
-      - name: Hardened, with its limits, its one network, no volume and its environment
+      - name: Hardened, with its limits, its one network, no named volume and its environment
         run: $CHECK standard
+
+      - name: What you upload goes when it restarts (new container, anonymous volume removed)
+        run: |
+          $CHECK restart
+          $CHECK standard
 
       - name: It reaches Firefly by the network of the pair
         run: $CHECK firefly

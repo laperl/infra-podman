@@ -5,7 +5,8 @@
 # Usage: check-firefly_importer.sh <step>
 #   running    healthy, published only on 127.0.0.1:18115, /health answers OK
 #   standard   its user (www-data, 33), hardening, not read-only, limits, its one network, no
-#              volume, and the environment the role writes (its Firefly, OAuth, logs)
+#              named volume (the anonymous one of the image is noted), and the environment the
+#              role writes (its Firefly, OAuth, logs)
 #   firefly    from the importer, Firefly casa answers by the network of the pair
 #   pair       Firefly casa is on the network of the pair too (after apply firefly)
 #   oauth      end to end up to the login: with the client ID of the inventory and no session
@@ -16,7 +17,9 @@
 #   launcher   the operator's .desktop file is valid and opens 127.0.0.1:18115
 #   report     playbooks/check.yml shows it running and healthy, only on 127.0.0.1 (the log of
 #              that playbook, the second word)
-#   destroyed  container and launcher gone (it has no volume to keep)
+#   destroyed  container and launcher gone, and its anonymous volume (it has nothing to keep)
+#   restart    a restart makes a new container and its old anonymous volume goes: what you
+#              uploaded does not survive it
 #   no-pair    the importer no longer declared and apply firefly done: Firefly casa has left
 #              the network of the pair, and the network is gone
 set -euo pipefail
@@ -34,6 +37,14 @@ launcher=$HOME/.local/share/applications/infra-podman-$name.desktop
 fail() { local m="$*"; echo "::error title=check-firefly_importer $step::${m//$'\n'/ | }"; exit 1; }
 inspect() { "$as" podman inspect "$name" --format "$1"; }
 in_imp() { "$as" podman exec "$name" sh -c "$1" </dev/null; }
+# The anonymous volumes seen by 'standard' are gone.
+anon_gone() {
+  local v
+  while read -r v; do
+    [[ -z $v ]] && continue
+    if "$as" podman volume exists "$v"; then fail "its anonymous volume $v is still there"; fi
+  done < "${RUNNER_TEMP:?}/ffimport-anon"
+}
 # shellcheck disable=SC2016  # a Go template, not a shell expansion
 networks_of() { "$as" podman inspect "$1" --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}'; }
 
@@ -58,8 +69,15 @@ case $step in
     [[ $(inspect '{{.HostConfig.PidsLimit}}') == 200 ]] || fail "pids limit: $(inspect '{{.HostConfig.PidsLimit}}')"
     nets=$(networks_of "$name")
     [[ $nets == "$net " ]] || fail "networks: '$nets', expected only $net"
-    vols=$(inspect '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}')
-    [[ -z $vols ]] || fail "it has volumes: $vols"
+    # No named volume. The image declares an anonymous one (VOLUME in its Dockerfile): Podman
+    # makes it on each start and, with --rm (Quadlet), removes it with the container. Its
+    # names are kept to check that in 'destroyed' and 'restart'.
+    vols=$(inspect '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}={{.Destination}} {{end}}{{end}}')
+    for v in $vols; do
+      [[ ${v%%=*} =~ ^[0-9a-f]{64}$ ]] || fail "it has a named volume: $v"
+      echo "::notice title=Data Importer anonymous volume::${v#*=}"
+    done
+    tr ' ' '\n' <<<"$vols" | sed 's/=.*//' | grep . > "${RUNNER_TEMP:?}/ffimport-anon" || true
     env=$(inspect '{{range .Config.Env}}{{println .}}{{end}}')
     for want in "FIREFLY_III_URL=http://$ff:8080" "VANITY_URL=http://127.0.0.1:$ff_port" \
                 "FIREFLY_III_CLIENT_ID=$client_id" FALLBACK_LOCALE=es_ES LOG_CHANNEL=stdout LOG_LEVEL=notice \
@@ -124,12 +142,22 @@ case $step in
   destroyed)
     if "$as" podman container exists "$name"; then fail "the container still exists"; fi
     if [[ -e $launcher ]]; then fail "the launcher is still installed"; fi
+    anon_gone
+    ;;
+  restart)
+    # What you upload goes when it restarts: a new container, and the old anonymous volume gone.
+    old=$(inspect '{{.Id}}')
+    "$as" systemctl --user restart "$name.service"
+    for _ in $(seq 1 60); do "$as" podman healthcheck run "$name" >/dev/null 2>&1 && break; sleep 2; done
+    "$as" podman healthcheck run "$name" >/dev/null || fail "$name is not healthy after a restart"
+    [[ $(inspect '{{.Id}}') != "$old" ]] || fail "the restart kept the same container"
+    anon_gone
     ;;
   no-pair)
     nets=$(networks_of "$ff")
     [[ " $nets" != *" $net "* ]] || fail "$ff is still on $net"
     if "$as" podman network exists "$net"; then fail "the network $net is still there"; fi
     ;;
-  *) echo "usage: $0 running|standard|firefly|pair|oauth|isolation|launcher|report <log>|destroyed|no-pair" >&2; exit 2 ;;
+  *) echo "usage: $0 running|standard|firefly|pair|oauth|isolation|launcher|report <log>|restart|destroyed|no-pair" >&2; exit 2 ;;
 esac
 echo "ok: $step"
