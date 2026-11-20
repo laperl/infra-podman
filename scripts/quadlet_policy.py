@@ -266,6 +266,9 @@ def check_file(path: Path) -> list[str]:
         if key == "Image" and not DIGEST_RE.search(value):
             errors.append(f"{where}: image '{value}' must be pinned by digest @sha256:<64 hex> (D6)")
     if path.suffix == ".container":
+        if [v.lower() for v in values.get("LogDriver", [])] != ["journald"]:
+            errors.append(f"{path}: LogDriver=journald is required: every container logs to the "
+                          "journal of its service user, whatever Podman's default (SPEC 4.8, R60)")
         errors += check_exposure_and_limits(path, values)
         allowed, exception_errors = policy_exceptions(path, text)
         errors += exception_errors + check_hardening(path, values, allowed)

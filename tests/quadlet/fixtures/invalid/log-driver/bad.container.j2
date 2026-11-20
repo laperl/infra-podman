@@ -1,0 +1,13 @@
+[Container]
+ContainerName={{ infra_env }}-demo
+Image={{ demo_image }}
+Label=infra.env={{ infra_env }}
+Label=infra.app=demo
+Label=infra.component=app
+Label=infra.managed-by=infra-podman
+LogDriver=k8s-file
+Network=none
+PodmanArgs=--memory=512m --cpus=1
+PidsLimit=200
+DropCapability=all
+NoNewPrivileges=true

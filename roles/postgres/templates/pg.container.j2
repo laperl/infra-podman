@@ -9,6 +9,9 @@ Label=infra.env={{ infra_env }}
 Label=infra.app=pg-{{ postgres_instance }}
 Label=infra.component=db
 Label=infra.managed-by=infra-podman
+# Logs to the journal of the service user, whatever the default of Podman on the machine
+# (SPEC 4.8, R60).
+LogDriver=journald
 
 # PostgreSQL 18 images keep PGDATA in /var/lib/postgresql/18/docker: mount the parent.
 Volume={{ postgres_volume }}.volume:/var/lib/postgresql:Z

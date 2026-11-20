@@ -12,6 +12,9 @@ Label=infra.env=dev
 Label=infra.app=pgadmin-ci
 Label=infra.component=app
 Label=infra.managed-by=infra-podman
+# Logs to the journal of the service user, whatever the default of Podman on the machine
+# (SPEC 4.8, R60).
+LogDriver=journald
 
 # Its working directory: sessions, its SQLite database with its user and the servers you
 # register, and config_distro.py (below). Podman fills the empty volume with what the image

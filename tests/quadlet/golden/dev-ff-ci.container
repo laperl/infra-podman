@@ -13,6 +13,9 @@ Label=infra.env=dev
 Label=infra.app=ff-ci
 Label=infra.component=app
 Label=infra.managed-by=infra-podman
+# Logs to the journal of the service user, whatever the default of Podman on the machine
+# (SPEC 4.8, R60).
+LogDriver=journald
 
 # Attachments: the volume the official image declares (docs/services/firefly.md, 5).
 Volume=dev-ff-ci-uploads.volume:/var/www/html/storage/upload:Z
