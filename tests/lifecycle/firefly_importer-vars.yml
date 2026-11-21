@@ -1,0 +1,21 @@
+---
+# Extra variables of the firefly_importer job: PostgreSQL main with the database of Firefly
+# casa only, Firefly casa alone (no canary: its database is not here), and the instance ci of
+# the Data Importer importing into ff-casa, with a fictitious OAuth client. Only this job
+# declares the importer, so the other jobs keep Firefly without the network of the pair.
+postgres_instances:
+  - name: main
+    superuser: ci_admin
+    databases:
+      - name: ff_casa
+        users:
+          - {name: ff_casa, group: owner}
+firefly_instances:
+  - name: casa
+    networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}, connects_to: [pg-main]}
+    pg_hba: [{instance: pg-main, database: ff_casa}]
+firefly_importer_instances:
+  - name: ci
+    networking: {inbound: {publish: ["127.0.0.1:18115:8080"]}, connects_to: [ff-casa]}
+    client_id: 7
+    locale: es_ES

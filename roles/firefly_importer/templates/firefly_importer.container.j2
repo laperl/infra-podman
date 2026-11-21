@@ -15,8 +15,9 @@ Label=infra.app={{ firefly_importer_id }}
 Label=infra.component=app
 Label=infra.managed-by=infra-podman
 
-# No volume: the files you upload and your session stay in the container's own layer and
-# go when it restarts (docs/services/firefly_importer.md, section 4).
+# No named volume: the files you upload go to the anonymous volume the image declares
+# (/var/www/html/storage/upload), and your session to the container's own layer. Both go
+# when it restarts: --rm removes the anonymous volume too (docs/services/firefly_importer.md, 4).
 
 # Only internal networks: one to each Firefly of connects_to, and one per other pair
 # (docs/NETWORK.md). No way out (SPEC 4.4): no bank connections. It is published where the

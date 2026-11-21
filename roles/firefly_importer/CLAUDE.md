@@ -16,7 +16,7 @@ El Data Importer de Firefly III en contenedores Quadlet sin root, para pasar a F
 - **Sin token personal ni secretos:** se entra con OAuth y un Client ID, que no es secreto. Nada en `infra_secrets`.
 - **Solo desde la web:** `CAN_POST_AUTOIMPORT`, `CAN_POST_FILES`, `IMPORT_DIR_ALLOWLIST` y `JSON_CONFIGURATION_DIR`, apagadas o sin poner. Importar desde una carpeta está en el ROADMAP.
 - **Registros sin tus datos:** `LOG_CHANNEL=stdout`, `LOG_RETURN_JSON=false` y `notice` por defecto (el de la imagen es `debug`).
-- **Sin volumen:** lo que se sube se va al reiniciar el contenedor. No añadas uno sin decidirlo en su página (copias, datos de extractos).
+- **Sin volumen con nombre:** lo que se sube va al volumen anónimo que declara la imagen (`/var/www/html/storage/upload`) y se borra con el contenedor (`--rm`) al reiniciar; lo comprueba `lifecycle`. No añadas uno con nombre sin decidirlo en su página (copias, datos de extractos).
 
 ## Tests
 

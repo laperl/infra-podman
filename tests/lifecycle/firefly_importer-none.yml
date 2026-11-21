@@ -1,0 +1,4 @@
+---
+# After tests/lifecycle/firefly_importer-vars.yml: the importer no longer declared, the rest
+# the same.
+firefly_importer_instances: []

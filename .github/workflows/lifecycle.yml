@@ -295,6 +295,15 @@ jobs:
           cat drop.log >> all.log
           grep -q -- '--confirm-drop main' drop.log || { echo "::error::unexpected refusal"; exit 1; }
           $C db demo present
+          # databases: left with nothing under it is null in YAML, not a list: the same as
+          # empty, not a refusal of its shape (the operator's case of 2026-11-19).
+          printf 'postgres_instances:\n  - name: main\n    superuser: ci_admin\n    databases:\n' > nulldb.yml
+          if tests/lifecycle/playbook.sh -i "$INV" -e @nulldb.yml playbooks/postgres.yml > drop.log 2>&1; then
+            echo "::error::every database went without confirmation (databases: null)"; exit 1
+          fi
+          cat drop.log >> all.log
+          grep -q -- '--confirm-drop main' drop.log || { echo "::error::databases: null was not taken as empty"; exit 1; }
+          $C db demo present
 
       - name: What was made by hand is only reported
         env:
@@ -757,6 +766,167 @@ jobs:
         run: |
           tests/lifecycle/diagnose.sh
           tests/lifecycle/as-svc.sh podman logs --tail 50 dev-pgadmin-ci 2>&1 | sed 's/^/pgadmin-ci: /' || true
+
+  # Firefly III Data Importer (docs/services/firefly_importer.md): its own job, with PostgreSQL
+  # main and Firefly casa to import into. The real images: the pair network written by either
+  # side, OAuth up to Firefly's login, no way out.
+  firefly_importer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      INV: tests/lifecycle/inventory.yml
+      IM: -e @tests/lifecycle/firefly_importer-vars.yml
+      # The same, but the importer no longer declared: what Firefly sees before and after it.
+      NOIM: -e @tests/lifecycle/firefly_importer-vars.yml -e @tests/lifecycle/firefly_importer-none.yml
+      CHECK: tests/lifecycle/check-firefly_importer.sh
+      AS: tests/lifecycle/as-svc.sh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same reason as in the base job.
+      - name: Make the runner look like a normal server
+        run: sudo sed -i '/^XDG_/d' /etc/environment
+
+      - name: Install Podman 4.9 from Ubuntu 24.04, and desktop-file-utils
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq -o Acquire::Retries=5 podman desktop-file-utils
+          podman --version | grep -Eq ' 4\.9\.' || { echo "Expected Podman 4.9"; exit 1; }
+
+      - name: Install pinned ansible-core
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --requirement scripts/requirements-lint.txt
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      # Random, thrown away with the runner. Never KeePassXC (SPEC 5.4). Firefly first,
+      # without the importer: no network of the pair yet.
+      - name: Service user, PostgreSQL and Firefly casa, without the importer
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/base.yml > base.log
+          for name in dev-pg-main-superuser-password dev-ff-casa-db-password dev-ff-casa-app-key; do
+            v=$(openssl rand -hex 16)
+            echo "::add-mask::$v"
+            echo "$v" >> "$RUNNER_TEMP/pw"
+            printf '%s' "$v" | $AS podman secret create "$name" -
+          done
+          tests/lifecycle/playbook.sh -i "$INV" $NOIM playbooks/postgres.yml 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" $NOIM playbooks/firefly.yml 2>&1 | tee -a all.log
+          tests/lifecycle/check-firefly.sh running casa
+
+      - name: Settings it does not take are refused
+        run: |
+          IN='inbound: {publish: ["127.0.0.1:18115:8080"]}'
+          printf 'firefly_importer_instances: [{name: ci, networking: {%s}}]\n' "$IN" > noff.yml
+          printf 'firefly_importer_instances: [{name: ci, networking: {%s, connects_to: [ff-nope]}}]\n' "$IN" > nope.yml
+          printf 'firefly_importer_instances: [{name: ci, networking: {%s, connects_to: [ff-casa], egress: [1.1.1.1]}}]\n' "$IN" > egress.yml
+          printf 'firefly_importer_instances: [{name: ci, networking: {%s, connects_to: [ff-casa]}, %s}]\n' "$IN" \
+            'pg_hba: [{instance: pg-main, database: ff_casa}]' > hba.yml
+          printf 'firefly_importer_instances: [{name: ci, networking: {%s, connects_to: [ff-casa]}, client_id: "7; rm"}]\n' "$IN" > client.yml
+          printf 'firefly_importer_instances: [{name: ci, networking: {%s, connects_to: [ff-casa]}, locale: es}]\n' "$IN" > locale.yml
+          printf 'firefly_importer_instances: [{name: ci, networking: {%s, connects_to: [ff-casa]}, backup: [data]}]\n' "$IN" > backup.yml
+          for bad in noff nope egress hba client locale backup; do
+            if ansible-playbook -i "$INV" $IM -e @$bad.yml playbooks/firefly_importer.yml --check > refusal.log 2>&1; then
+              echo "::error::the importer accepted $bad.yml"; exit 1
+            fi
+            grep -q 'Instance ci of firefly_importer_instances' refusal.log || { cat refusal.log; echo "::error::unexpected refusal of $bad.yml"; exit 1; }
+          done
+
+      - name: Plan, apply, apply again (zero changes), plan again (zero changes)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" $IM playbooks/firefly_importer.yml --check --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" $IM playbooks/firefly_importer.yml --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" $IM playbooks/firefly_importer.yml 2>&1 | tee second.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply changed something"; exit 1; }
+          tests/lifecycle/playbook.sh -i "$INV" $IM playbooks/firefly_importer.yml --check 2>&1 | tee plan.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' plan.log || { echo "::error::the plan after apply shows changes"; exit 1; }
+
+      - name: Running, healthy, only on its port of 127.0.0.1
+        run: $CHECK running
+
+      - name: Hardened, with its limits, its one network, no named volume and its environment
+        run: $CHECK standard
+
+      - name: What you upload goes when it restarts (new container, anonymous volume removed)
+        run: |
+          $CHECK restart
+          $CHECK standard
+
+      # docs/NETWORK.md, 6: the other side joins the pair on its own apply, once. Until then
+      # the importer runs but does not reach Firefly.
+      - name: Apply firefly joins Firefly to the pair (it restarts once), then without changes
+        run: |
+          if $CHECK firefly >/dev/null 2>&1; then echo "::error::the importer reached Firefly before apply firefly"; exit 1; fi
+          tests/lifecycle/playbook.sh -i "$INV" $IM playbooks/firefly.yml --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" $IM playbooks/firefly.yml 2>&1 | tee second.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply of firefly changed something"; exit 1; }
+          $CHECK pair
+          tests/lifecycle/check-firefly.sh running casa
+          $CHECK running
+          $CHECK firefly
+
+      - name: "End to end: OAuth with the client ID of the inventory, up to Firefly's login"
+        run: $CHECK oauth
+
+      - name: No way out (internet, host)
+        run: $CHECK isolation
+
+      - name: Its launcher in the operator's menu (R47)
+        run: $CHECK launcher
+
+      - name: "Monitoring: the check playbook reports it running and healthy"
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" $IM playbooks/check.yml > check.log 2>&1
+          $CHECK report check.log
+
+      - name: "Manual: deployed and healthy (docs/OPERATIONS.md, 1 and 4)"
+        run: tests/lifecycle/check-operations.sh firefly_importer
+
+      - name: Retire it; Firefly keeps running, still on the network of the pair
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" $IM -e firefly_importer_retire=ci playbooks/firefly_importer.yml 2>&1 | tee -a all.log
+          $CHECK destroyed
+          $CHECK pair
+          tests/lifecycle/check-firefly.sh running casa
+
+      - name: No longer declared, apply firefly leaves the pair and removes its network
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" $NOIM playbooks/firefly.yml 2>&1 | tee -a all.log
+          $CHECK no-pair
+          tests/lifecycle/check-firefly.sh running casa
+
+      - name: Declared again, deployed and healthy again
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" $IM playbooks/firefly_importer.yml 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" $IM playbooks/firefly.yml 2>&1 | tee -a all.log
+          $CHECK running
+          $CHECK pair
+          $CHECK oauth
+
+      - name: Purge it (nothing else to delete), then remove all
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" $IM -e firefly_importer_purge=ci playbooks/firefly_importer.yml 2>&1 | tee -a all.log
+          $CHECK destroyed
+          tests/lifecycle/playbook.sh -i "$INV" $IM playbooks/firefly_importer.yml 2>&1 | tee -a all.log
+          $CHECK running
+          tests/lifecycle/playbook.sh -i "$INV" $IM -e firefly_importer_state=absent playbooks/firefly_importer.yml 2>&1 | tee -a all.log
+          $CHECK destroyed
+
+      - name: The secrets never appear in the output or the journal (SPEC 4.5)
+        run: |
+          if grep -qF -f "$RUNNER_TEMP/pw" all.log; then echo "::error::a secret appears in the Ansible output"; exit 1; fi
+          if sudo journalctl --no-pager | grep -qF -f "$RUNNER_TEMP/pw"; then echo "::error::a secret appears in the journal"; exit 1; fi
+          echo "ok"
+
+      - name: Diagnose
+        if: failure()
+        run: |
+          tests/lifecycle/diagnose.sh
+          tests/lifecycle/as-svc.sh podman logs --tail 50 dev-ffimport-ci 2>&1 | sed 's/^/ffimport-ci: /' || true
+          tests/lifecycle/as-svc.sh podman logs --tail 30 dev-ff-casa 2>&1 | sed 's/^/firefly-casa: /' || true
 
   backup:
     runs-on: ubuntu-24.04

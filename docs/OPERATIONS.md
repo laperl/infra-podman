@@ -19,6 +19,7 @@ El día a día: qué hay en marcha, cómo van las copias, cómo lanzar algo a ma
 | `prod-ff-<instancia>` (Firefly III, uno por instancia) | Portátil | **Siempre** | systemd, al encender, cuando Postgres está sano |
 | `prod-ff-<instancia>-cron` (tareas de esa instancia) | Portátil | No es un contenedor: lanza una orden dentro de su Firefly | `prod-ff-<instancia>-cron.timer`, cada día a las 05:30 |
 | `prod-pgadmin-<instancia>` (pgAdmin 4, normalmente una) | Portátil | **Siempre** | systemd, al encender |
+| `prod-ffimport-<instancia>` (Data Importer de Firefly, normalmente uno) | Portátil | **Siempre** | systemd, al encender |
 | `prod-backup` (copia diaria) | Portátil | **Duerme** y despierta un rato | `prod-backup.timer`, cada día a las 13:00 |
 | `prod-backup-copy` (envío al servidor principal) | Portátil | **Duerme** y despierta un rato | `prod-backup-copy.timer`, cada hora a y media |
 | `prod-backup-server` (recibe las copias) | Servidor principal | **Siempre** | systemd, al encender |
@@ -56,6 +57,16 @@ svc podman port prod-pgadmin-<instancia>                     # su puerto: 8080/t
 ```
 
 Se abre desde su lanzador («pgAdmin 4 (<instancia>)») o en `http://127.0.0.1:<puerto>`.
+
+El Data Importer de Firefly, en el portátil ([`services/firefly_importer.md`](services/firefly_importer.md)):
+
+<!-- test: deployed-ffimport -->
+```bash
+svc podman ps --filter label=infra.app=ffimport-<instancia>   # en marcha, con (healthy)
+svc podman port prod-ffimport-<instancia>                     # su puerto: 8080/tcp -> 127.0.0.1:<puerto>
+```
+
+Se abre desde su lanzador («Firefly Importer (<instancia>)») o en `http://127.0.0.1:<puerto>`. Cómo importar un extracto: su página, apartado 6.
 
 ## 2. Estado de los backups
 
@@ -186,6 +197,23 @@ curl -s http://127.0.0.1:<puerto>/misc/ping; echo
 | `healthcheck` | `sano`: responde |
 | `podman port` | Una sola línea, `8080/tcp -> 127.0.0.1:<puerto>`: solo se llega desde el portátil |
 | `curl` | `PING` |
+
+**El Data Importer de Firefly, en el portátil:**
+
+<!-- test: healthy-ffimport -->
+```bash
+svc systemctl --user is-active prod-ffimport-<instancia>.service
+svc podman healthcheck run prod-ffimport-<instancia> && echo sano
+svc podman port prod-ffimport-<instancia>
+curl -s http://127.0.0.1:<puerto>/health; echo
+```
+
+| Orden | Lo que tiene que salir |
+| --- | --- |
+| `is-active` | `active` |
+| `healthcheck` | `sano`: responde. No mira si Firefly responde |
+| `podman port` | Una sola línea, `8080/tcp -> 127.0.0.1:<puerto>`: solo se llega desde el portátil |
+| `curl` | `OK` |
 
 Y el aviso de escritorio, en tu usuario: `systemctl --user is-active infra-podman-backup-notify.timer` → `active`.
 

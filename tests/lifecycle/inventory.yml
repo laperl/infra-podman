@@ -77,3 +77,10 @@ all:
         localhost: {}
       vars:
         pgadmin_instances: []
+    # The firefly_importer job declares its instance in tests/lifecycle/firefly_importer-vars.yml:
+    # here none, so the other jobs keep Firefly without the network of the importer.
+    firefly_importer_hosts:
+      hosts:
+        localhost: {}
+      vars:
+        firefly_importer_instances: []

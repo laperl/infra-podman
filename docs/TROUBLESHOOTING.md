@@ -219,3 +219,18 @@ Lo propio de pgAdmin está en [`services/pgadmin.md`](services/pgadmin.md). Sus 
 | Al registrar o conectar un servidor: `pg_hba.conf rejects connection for host …, user <superusuario>` | Esa Postgres no tiene la línea del superusuario para esta pgAdmin: falta en `connects_to`, o no se aplicó `postgres` después | Añade la Postgres a `connects_to` de la instancia, `./deploy.sh apply postgres` y `apply pgadmin` |
 | Al conectar: `password authentication failed for user <superusuario>` | La contraseña no es la del superusuario de esa Postgres | Cópiala de `pg-<instancia>-superuser-password` en KeePassXC. pgAdmin no la guarda: la pide cada vez |
 | `Not in the inventory of …, left running as they are: pgadmin-<instancia>` | Has quitado la instancia del inventario y sigue en marcha | Vuelve a declararla y `./deploy.sh apply pgadmin … --retire <instancia>` (apartado 11, la misma fila) |
+
+## 13. Data Importer de Firefly
+
+Lo propio del importer está en [`services/firefly_importer.md`](services/firefly_importer.md). Sus logs: `sudo journalctl _SYSTEMD_USER_UNIT=prod-ffimport-<instancia>.service -n 50`.
+
+| Lo que ves | Por qué | Qué hacer |
+| --- | --- | --- |
+| `Instance … of firefly_importer_instances (roles/firefly_importer/defaults/main.yml): name …` | Un ajuste de esa instancia no vale: nombre, `networking` (sin `egress` ni `pg_hba`), sin ningún Firefly en `connects_to` o uno que no existe en esa máquina, `client_id` con más de un Firefly, `locale`… | El mensaje dice el formato de cada uno. Lo normal: `connects_to: [ff-<instancia>]`, `client_id` y `locale: es_ES` |
+| Tras `apply firefly_importer`, Firefly no está en la red del importer | La red de la pareja la escribe el importer, pero Firefly solo se une en su propio `apply` | `./deploy.sh apply firefly --limit laptop`: Firefly se reinicia una vez ([`NETWORK.md`](NETWORK.md), apartado 6) |
+| Al pulsar «Authenticate», Firefly dice que el cliente no existe o no vuelve al importer | El `client_id` no es el de ese Firefly (cada Firefly tiene los suyos; el de DEV no vale en producción), o la dirección de vuelta del cliente no es la del importer | En Firefly, en tu perfil, sección OAuth: mira el número y la dirección de vuelta, `http://127.0.0.1:<puerto>/callback`. Corrige el `client_id` de la instancia y aplica |
+| Firefly devuelve una página que solo dice «Empty» | El cliente OAuth se creó con «Confidential» marcado | Bórralo y créalo de nuevo con la casilla desmarcada; pon su nuevo Client ID en la instancia y aplica |
+| El importer dice que no llega a Firefly | Firefly está parado, arrancando o no está en la red de la pareja | `svc podman healthcheck run prod-ff-<instancia> && echo sano`. Si está sano: `./deploy.sh apply firefly --limit laptop` |
+| Pide «Authenticate» cada poco | La sesión dura `session_lifetime` minutos (120 por defecto), y se borra al reiniciar el contenedor | Es lo esperado. Si te molesta, sube `session_lifetime` en la instancia |
+| Importes multiplicados por mil, o divididos | El locale no es el de tu banco: `14.000` se lee distinto en `en_US` y en `es_ES` | `locale: es_ES` en la instancia y aplica. Deshaz la importación por su etiqueta ([`services/firefly_importer.md`](services/firefly_importer.md), apartado 6.5) |
+| Movimientos que no se importan, «duplicados» | Firefly ya tiene uno con la misma huella, también si lo borraste | Lo explica el apartado 6.6 de su página: purga los borrados o cambia el método de duplicados en ese JSON |

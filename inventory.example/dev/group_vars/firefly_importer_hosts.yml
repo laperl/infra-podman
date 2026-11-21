@@ -1,0 +1,24 @@
+---
+# EXAMPLE (SPEC 4.13). The real file is inventory/dev/group_vars/firefly_importer_hosts.yml in
+# the data repository. The Firefly III Data Importer on each machine of firefly_importer_hosts,
+# as instances (docs/services/README.md); usually one, importing CSV files by hand from the
+# web into one or more Firefly instances of the machine. No secrets: you log in with OAuth
+# (docs/services/firefly_importer.md, sections 4 and 6.1). What an instance does not say comes
+# from roles/firefly_importer/defaults/main.yml. Apply firefly_importer and then firefly (or
+# the other way round): Firefly joins the network of the pair and restarts once.
+firefly_importer_instances:
+  - name: laptop                 # ^[a-z0-9]{1,14}$
+    networking:
+      inbound:                   # where it listens: <address>:<host port>:<container port>
+        publish: ["127.0.0.1:18115:8080"]   # the importer listens on 8080 inside the container
+      connects_to: [ff-casa]       # the Firefly instances it imports into; no pg_hba, no egress
+    client_id: 2                 # the Client ID of the OAuth client in that Firefly; not a secret
+    locale: es_ES                # how an ambiguous amount like 14.000 is read (default en_US)
+    # timezone: Europe/Madrid    # default UTC
+    # session_lifetime: 120      # minutes until you authorize again
+    # log_level: notice          # debug writes your transactions in the journal
+    # memory: 512m               # resource limits (R46); measured in DEV: 86 MB idle, 115 MB importing
+    # cpus: "1"
+    # pids_limit: 200
+    # launcher: false            # on a machine without a desktop
+    # launcher_command: [flatpak, run, org.mozilla.firefox, --new-window]   # default [xdg-open]
