@@ -22,7 +22,16 @@ Ejemplo de pregunta bien hecha:
 
 **Antes de la ficha:**
 - **Mira los PR abiertos** del repo que toquen este fichero, la skill o `roles/firefly/`: pueden cambiar el procedimiento que vas a seguir.
-- **Pídele al operador un resumen de su inventario de DEV y de producción, no los ficheros** (SPEC 4.13: el repo de datos no se le da a una IA). Basta con sus máquinas, sus instancias de cada aplicación, sus instancias de Postgres y su superusuario, y los puertos de `127.0.0.1` que ya usa. Así los ejemplos, las preguntas y los pasos de instalación usan sus nombres reales.
+- **Pídele al operador un resumen de su inventario de DEV y de producción, nunca los ficheros** (SPEC 4.13: el repo de datos no se le da a una IA; aunque no tenga secretos, tiene datos suyos, como su correo). Basta con sus máquinas, sus instancias de cada aplicación, sus instancias de Postgres y su superusuario, y los puertos de `127.0.0.1` que ya usa. Así los ejemplos, las preguntas y los pasos de instalación usan sus nombres reales. **Dale siempre estas órdenes,** que sacan solo eso; que lea la salida antes de pegarla:
+  ```bash
+  cd ~/infra-podman-data
+  for e in dev prod; do
+    echo "== $e"
+    ansible-inventory -i inventory/$e --graph                  # máquinas y grupos
+    grep -rE '^\s*(- )?(name|superuser|connects_to):|^\s*publish:' inventory/$e/group_vars \
+      | grep -v '@' | sed -E 's#inventory/[a-z]+/group_vars/##; s/#.*//; s/[[:space:]]+$//'   # instancias, puertos, parejas
+  done
+  ```
 - **Dile desde el principio las reglas de nombres** que le tocan: el nombre corto, de 2 a 8 letras (R52), y el de la instancia ([`NAMING.md`](../NAMING.md)). Así no propone uno que no cabe.
 
 Rellénala **solo con la documentación oficial** de la aplicación y cita la URL de cada dato. Lo que no encuentres, déjalo en «no verificado»: no lo supongas. Enséñasela al operador y **espera su aprobación**.
