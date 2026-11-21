@@ -17,6 +17,9 @@ Label=infra.env=dev
 Label=infra.app=backup
 Label=infra.component=backup
 Label=infra.managed-by=infra-podman
+# Logs to the journal of the service user, whatever the default of Podman on the machine
+# (SPEC 4.8, R60).
+LogDriver=journald
 
 Volume=dev-backup-repo.volume:/repo:Z
 Volume=/home/svc_runner/.local/state/infra-podman/backup/staging:/backup:ro,Z

@@ -159,7 +159,7 @@ vLLM sigue en Docker y Ansible no lo gestiona en esta etapa. LiteLLM lo alcanza 
 ### 4.8 Observabilidad
 
 - `prometheus-podman-exporter` como **servicio systemd de usuario**, no como contenedor con el socket de Podman montado. Escucha solo en `127.0.0.1`; si el Prometheus está en otra máquina, se expone con `tailscale serve` (R25). Se añade como objetivo al Prometheus existente.
-- Logs en journald. El análisis de logs con IA queda diferido.
+- Logs en journald: cada contenedor lleva `LogDriver=journald`, sea cual sea el valor por defecto de Podman en la máquina, y lo exige la política de `tests/quadlet` (R60). Las aplicaciones escriben sus registros en la salida estándar. El análisis de logs con IA queda diferido.
 
 ### 4.9 Endurecimiento de contenedores de agentes
 

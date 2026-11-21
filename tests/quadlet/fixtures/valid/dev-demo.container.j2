@@ -9,6 +9,9 @@ Label=infra.env={{ infra_env }}
 Label=infra.app=demo
 Label=infra.component=app
 Label=infra.managed-by=infra-podman
+# Logs to the journal of the service user, whatever the default of Podman on the machine
+# (SPEC 4.8, R60).
+LogDriver=journald
 Network={{ infra_env }}-demo-db-net.network
 Volume={{ infra_env }}-demo-data.volume:/data:Z
 PublishPort=127.0.0.1:{{ demo_port }}:8080
