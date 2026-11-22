@@ -28,6 +28,23 @@ tcp_rejected() { # tcp_rejected <role>: pg_hba.conf rejects it over TCP, before 
   grep -q 'pg_hba.conf rejects connection' <<<"$out" || fail "$1 over TCP failed for another reason: $out"
 }
 
+# listed <name> <podman command…>: the command, as the service user, lists exactly <name>
+# on a line of its own. Its output is read whole first: no grep -q on a pipe.
+listed() {
+  local want=$1 out
+  shift
+  out=$("$as" "$@" 2>/dev/null) || return 1
+  grep -qx -- "$want" <<<"$out"
+}
+# settled <check…>: right after a restart, Podman may still be removing the old container and
+# list containers or volumes incompletely for a moment (seen in CI on 2026-11-21: "Could not
+# find mount at destination"). Retry for up to 15 seconds before failing.
+settled() {
+  local _
+  for _ in $(seq 1 15); do "$@" && return 0; sleep 1; done
+  return 1
+}
+
 case $1 in
   running)
     "$as" podman healthcheck run "$name" || fail "$name is not healthy"
@@ -35,9 +52,9 @@ case $1 in
     ! ss -tlnH | grep -q ':5432 ' || fail "something listens on 5432 on the host"
     [[ $("$as" podman inspect "$name" --format '{{.HostConfig.NetworkMode}}') == none ]] || fail "$name is not on Network=none"
     for label in infra.env=dev infra.app=pg-main infra.component=db infra.managed-by=infra-podman; do
-      "$as" podman ps --filter "label=$label" --format '{{.Names}}' | grep -qx "$name" || fail "missing label $label"
+      settled listed "$name" podman ps --filter "label=$label" --format '{{.Names}}' || fail "missing label $label"
     done
-    "$as" podman volume ls --filter label=infra.component=data --format '{{.Name}}' | grep -qx "$name-data" \
+    settled listed "$name-data" podman volume ls --filter label=infra.component=data --format '{{.Name}}' \
       || fail "volume $name-data missing or unlabelled"
     "$as" test -e "/run/user/$(id -u svc_runner)/systemd/generator/default.target.wants/$name.service" \
       || fail "$name.service is not wanted by default.target: it would not start at boot"

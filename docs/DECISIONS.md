@@ -549,3 +549,11 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Fuera:** conexiones entre máquinas (son entrada en una y salida en la otra), salida filtrada por nombre de dominio, IPv6 y la red del host.
 - **Aprobada por:** el operador, el 2026-11-16; `pg_hba` y `connects_to` entre cualquier pareja, el 2026-11-17.
 - **SPEC:** 4.4; [`NETWORK.md`](NETWORK.md).
+
+### R60. Los registros de todos los contenedores, al journal, escrito en cada unidad
+
+- **Decisión:** cada `.container` lleva `LogDriver=journald`. La política de `tests/quadlet` (`scripts/quadlet_policy.py`) rechaza una unidad sin él o con otro valor, sin excepciones. Las aplicaciones escriben sus registros en la salida estándar (2026-11-20).
+- **Motivo:** SPEC 4.8 dice «logs en journald», pero ni Quadlet ni los roles lo fijaban: lo decidía la configuración de Podman de cada máquina (`containers.conf`). En una Ubuntu 24.04 mínima con Podman 4.9.3, por ejemplo, Podman guardaba por defecto los registros en un fichero propio (`podman info --format '{{.Host.LogDriver}}'` decía `k8s-file`, que es solo el nombre de ese formato de fichero de Podman; no hay Kubernetes), y con él `journalctl` no ve nada de la aplicación. En las máquinas del operador sale `journald` (comprobado en DEV con el importer de Firefly), y el operador quiere que sea así siempre, no por casualidad.
+- **Cómo:** la clave existe en Podman 4.9 (`podman-systemd.unit.5`, v4.9.3: «Equivalent to the Podman `--log-driver` option»), comprobada con su generador: `--log-driver journald`.
+- **Al aplicarlo:** cada contenedor cambia una línea de su unidad, así que el primer `apply` de cada aplicación tras este cambio la reinicia una vez.
+
