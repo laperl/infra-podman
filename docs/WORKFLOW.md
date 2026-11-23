@@ -49,6 +49,18 @@ Quién ejecuta cada comprobación:
 
 También puedes editar tú un fichero del PR con el lápiz de GitHub, eligiendo **Commit directly to the `<rama>` branch**.
 
+### Qué pruebas ves en el PR (R61)
+
+- **`lint` siempre,** en un par de minutos.
+- **De `lifecycle`, solo los jobs de lo que cambia el PR:**
+  - El primer job, `changes`, mira qué ficheros cambia y aplica las reglas de [`tests/lifecycle/jobs.yml`](../tests/lifecycle/jobs.yml). Dice qué ha elegido en una nota («lifecycle jobs»).
+  - Los demás jobs salen como **saltados** (*skipped*): no es un fallo.
+  - Ejemplos: un cambio en pgAdmin, o en su imagen, solo ejecuta `pgadmin`; uno en Firefly ejecuta también `firefly_importer`; uno en Postgres o en lo común, casi todo.
+  - Un PR solo de documentación no ejecuta `lifecycle`.
+- **El resultado que cuenta es `lifecycle-ok`:** está en verde si pasa todo lo que tenía que ejecutarse.
+- **Al hacer merge, `lifecycle` se ejecuta entero en `main`.** Espera a que pase antes de crear el tag (apartado 5). Si falla ahí y no en el PR, es que a las reglas les faltaba algo: pídele a Claude que lo arregle en el mapa.
+- **Para ejecutarlo todo a mano:** pestaña **Actions** → **lifecycle** → **Run workflow**, eligiendo la rama.
+
 ## 3. Probar en DEV (antes del merge)
 
 En el portátil, en tu copia del repo (`~/src/infra-podman`):
@@ -77,7 +89,7 @@ Antes de nada, lee el apartado **«Cómo desplegarlo»** de la descripción del 
 En el portátil, en tu copia del repo, con KeePassXC desbloqueado. **El orden importa:** primero traer el merge y después crear el tag. Un tag creado antes del `git pull` se queda en el commit anterior, y `deploy.sh` lo rechaza.
 
 ```bash
-git switch main && git pull                        # 1. trae el merge
+git switch main && git pull                        # 1. trae el merge (y mira en Actions que lifecycle pasó en main)
 git log --oneline -1 --decorate                    # 2. tiene que salir (HEAD -> main, origin/main, ...) con el título del PR
 git tag --sort=-v:refname | head -3                # 3. último tag, para elegir el siguiente número
 git tag -s v0.2.0 -m "fase 1: Postgres"            # 4. cambia número y descripción
