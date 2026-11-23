@@ -1,0 +1,143 @@
+---
+# Which lifecycle jobs a pull request runs (R61, docs/WORKFLOW.md). scripts/lifecycle-jobs.py
+# reads this file; tests/unit/test_lifecycle_jobs.py checks that it is complete: every job of
+# .github/workflows/lifecycle.yml is here, and each job's rules cover what it really uses (the
+# playbooks and files its steps name, the roles of those playbooks and the roles they include,
+# and the images of those roles).
+#
+# How it is read, for each file the pull request changes:
+#   0. Not in "watched" (the paths that trigger the workflow): ignored. Documentation such as
+#      docs/ROADMAP.md never makes lifecycle run, here as in GitHub.
+#   1. In "all": every job.
+#   2. playbooks/group_vars/all/images.yml: the jobs of each image whose line changed
+#      ("images"); comment-only changes, none; any other line, every job.
+#   3. Otherwise, the jobs of every rule whose paths match it ("rules").
+#   4. A file no rule knows: every job. A gap in this map never leaves something untested.
+# A push to main and a manual run ("Run workflow") run every job.
+# Patterns: shell-style, and * also crosses /: roles/pgadmin/* is the whole role.
+
+jobs: [base, postgres, firefly, pgadmin, firefly_importer, backup, backup-copy]
+
+# The paths of "on: pull_request" in lifecycle.yml, with ** written *.
+watched:
+  - roles/*
+  - playbooks/*
+  - plugins/*
+  - ansible.cfg
+  - scripts/requirements-lint.txt
+  - scripts/lifecycle-jobs.py
+  - tests/lifecycle/*
+  - docs/OPERATIONS.md
+  - docs/POSTGRES.md
+  - docs/NETWORK.md
+  - .github/workflows/lifecycle.yml
+
+# What every job uses.
+all:
+  - roles/service_user/*
+  - roles/host_base/*
+  - playbooks/base.yml
+  - playbooks/group_vars/all/apps.yml
+  - plugins/*
+  - ansible.cfg
+  - scripts/requirements-lint.txt
+  - tests/lifecycle/inventory.yml
+  - tests/lifecycle/playbook.sh
+  - tests/lifecycle/as-svc.sh
+  - tests/lifecycle/diagnose.sh
+  - tests/lifecycle/jobs.yml
+  - scripts/lifecycle-jobs.py
+  - .github/workflows/lifecycle.yml
+
+images:
+  postgres_image: [postgres, firefly, pgadmin, firefly_importer, backup, backup-copy]
+  # The postgres role includes the backup role, which names restic_image: every job that
+  # deploys PostgreSQL. Careful rather than fine (the unit test asks for it).
+  restic_image: [postgres, firefly, pgadmin, firefly_importer, backup, backup-copy]
+  rest_server_image: [backup-copy]
+  firefly_image: [firefly, firefly_importer]
+  pgadmin_image: [pgadmin]
+  firefly_importer_image: [firefly_importer]
+
+rules:
+  - name: base
+    paths: [tests/lifecycle/check-base.sh]
+    jobs: [base]
+
+  # Every job but base deploys PostgreSQL, and the postgres role includes backup, podman_secrets,
+  # quadlet_deploy and user_units.
+  - name: PostgreSQL and the roles it includes
+    paths:
+      - roles/postgres/*
+      - playbooks/postgres.yml
+      - roles/backup/*
+      - roles/podman_secrets/*
+      - roles/quadlet_deploy/*
+      - roles/user_units/*
+    jobs: [postgres, firefly, pgadmin, firefly_importer, backup, backup-copy]
+
+  - name: PostgreSQL tests
+    paths:
+      - tests/lifecycle/check-postgres.sh
+    jobs: [postgres, pgadmin]
+
+  - name: Databases and users of the applications
+    paths:
+      - tests/lifecycle/check-postgres-apps.sh
+      - tests/lifecycle/apps-*.yml
+      - docs/POSTGRES.md
+    jobs: [postgres, backup]
+
+  - name: Networks of the pairs
+    paths: [docs/NETWORK.md]
+    jobs: [postgres, firefly, firefly_importer]
+
+  - name: Firefly III, and the Data Importer that needs it
+    paths:
+      - roles/firefly/*
+      - playbooks/firefly.yml
+      - tests/lifecycle/check-firefly.sh
+    jobs: [firefly, firefly_importer]
+
+  - name: Firefly III tests
+    paths: [tests/lifecycle/firefly-*.yml]
+    jobs: [firefly]
+
+  - name: pgAdmin 4
+    paths:
+      - roles/pgadmin/*
+      - playbooks/pgadmin.yml
+      - tests/lifecycle/check-pgadmin.sh
+      - tests/lifecycle/pgadmin-*
+    jobs: [pgadmin]
+
+  - name: Firefly III Data Importer
+    paths:
+      - roles/firefly_importer/*
+      - playbooks/firefly_importer.yml
+      - tests/lifecycle/check-firefly_importer.sh
+      - tests/lifecycle/firefly_importer-*.yml
+    jobs: [firefly_importer]
+
+  - name: Backup
+    paths:
+      - playbooks/backup.yml
+      - tests/lifecycle/check-backup.sh
+    jobs: [backup, backup-copy]
+
+  - name: Backup server and its copy
+    paths:
+      - roles/backup_server/*
+      - roles/tailscale_serve/*
+      - playbooks/backup-server.yml
+      - tests/lifecycle/check-backup-copy.sh
+      - tests/lifecycle/copy-vars.yml
+      - tests/lifecycle/remove-server.yml
+    jobs: [backup-copy]
+
+  - name: The check playbook and the manual (docs/OPERATIONS.md, run as written)
+    paths:
+      - playbooks/check.yml
+      - tests/lifecycle/check-operations.sh
+      - docs/OPERATIONS.md
+    jobs: [firefly, pgadmin, firefly_importer, backup-copy]
