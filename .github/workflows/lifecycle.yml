@@ -5,6 +5,8 @@
 # Never uses KeePassXC: any secret is generated here at random.
 name: lifecycle
 
+# A pull request runs only the jobs of what it changes (tests/lifecycle/jobs.yml, R61); a
+# merge to main and a manual run ("Run workflow") run them all.
 "on":
   pull_request:
     paths:
@@ -13,8 +15,25 @@ name: lifecycle
       - plugins/**
       - ansible.cfg
       - scripts/requirements-lint.txt
+      - scripts/lifecycle-jobs.py
       - tests/lifecycle/**
       - docs/OPERATIONS.md
+      - docs/POSTGRES.md
+      - docs/NETWORK.md
+      - .github/workflows/lifecycle.yml
+  push:
+    branches: [main]
+    paths:
+      - roles/**
+      - playbooks/**
+      - plugins/**
+      - ansible.cfg
+      - scripts/requirements-lint.txt
+      - scripts/lifecycle-jobs.py
+      - tests/lifecycle/**
+      - docs/OPERATIONS.md
+      - docs/POSTGRES.md
+      - docs/NETWORK.md
       - .github/workflows/lifecycle.yml
   workflow_dispatch:
 
@@ -31,7 +50,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Decides which jobs run (R61): on a pull request, those of the files it changes, by the
+  # rules of tests/lifecycle/jobs.yml; on a push to main or a manual run, all of them.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      jobs: ${{ steps.pick.outputs.jobs }}
+    steps:
+      - name: Checkout, with the history to compare
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install PyYAML (pinned with ansible-core)
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --requirement scripts/requirements-lint.txt
+
+      - name: Pick the jobs
+        id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [[ $EVENT == pull_request ]]; then
+            jobs=$(.venv/bin/python scripts/lifecycle-jobs.py --base "$BASE")
+          else
+            jobs=$(.venv/bin/python scripts/lifecycle-jobs.py --all)
+          fi
+          echo "jobs=$jobs" >> "$GITHUB_OUTPUT"
+          echo "::notice title=lifecycle jobs::$jobs"
+
   base:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.jobs), 'base')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -80,6 +134,8 @@ jobs:
         run: tests/lifecycle/check-base.sh svc_runner
 
   postgres:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.jobs), 'postgres')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -346,6 +402,8 @@ jobs:
         run: tests/lifecycle/diagnose.sh
 
   firefly:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.jobs), 'firefly')
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
@@ -602,6 +660,8 @@ jobs:
   # pgAdmin 4 (docs/services/pgadmin.md, R37): its own job, with PostgreSQL main and no
   # Firefly. The real image, end to end: the login of its user and the superuser over TCP.
   pgadmin:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.jobs), 'pgadmin')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -771,6 +831,8 @@ jobs:
   # main and Firefly casa to import into. The real images: the pair network written by either
   # side, OAuth up to Firefly's login, no way out.
   firefly_importer:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.jobs), 'firefly_importer')
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
@@ -929,6 +991,8 @@ jobs:
           tests/lifecycle/as-svc.sh podman logs --tail 30 dev-ff-casa 2>&1 | sed 's/^/firefly-casa: /' || true
 
   backup:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.jobs), 'backup')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -1108,6 +1172,8 @@ jobs:
   # Phase 1e2 (R44): the server for the copy of the backups and the hourly copy, with
   # server and client on the same runner, as in DEV. Tailscale is not tested here.
   backup-copy:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.jobs), 'backup-copy')
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -1309,3 +1375,21 @@ jobs:
           done
           out=$(sed -e 's/%/%25/g' /var/lib/infra-podman/backup-status/dev-backup-copy.status 2>&1 | awk 'BEGIN{ORS="%0A"} {print}')
           echo "::warning title=copy status::${out:-<empty>}"
+
+  # The one result to require, if main is ever protected: it fails when a job that had to
+  # run failed or was cancelled; jobs skipped because the change does not touch them pass.
+  lifecycle-ok:
+    needs: [changes, base, postgres, firefly, pgadmin, firefly_importer, backup, backup-copy]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every job that had to run passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | python3 -c '
+          import json, sys
+          bad = {k: v["result"] for k, v in json.load(sys.stdin).items() if v["result"] in ("failure", "cancelled")}
+          print(bad or "all passed or skipped")
+          sys.exit(1 if bad else 0)'

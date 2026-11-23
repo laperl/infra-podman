@@ -557,3 +557,18 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
 - **Cómo:** la clave existe en Podman 4.9 (`podman-systemd.unit.5`, v4.9.3: «Equivalent to the Podman `--log-driver` option»), comprobada con su generador: `--log-driver journald`.
 - **Al aplicarlo:** cada contenedor cambia una línea de su unidad, así que el primer `apply` de cada aplicación tras este cambio la reinicia una vez.
 
+### R61. `lifecycle` ejecuta en cada PR solo los jobs de lo que cambia
+
+- **Decisión:** en un PR, el job `changes` de `lifecycle` mira los ficheros que cambia y ejecuta solo los jobs que les afectan, según las reglas escritas en `tests/lifecycle/jobs.yml` y aplicadas por `scripts/lifecycle-jobs.py`. En cada merge a `main` y a mano («Run workflow») se ejecutan todos. El resultado que cuenta es el job `lifecycle-ok` (2026-11-23).
+- **Motivo:** cada aplicación nueva añade un job de unos 10 minutos. Probarlas todas por un cambio en una sola obligaba a esperar y enseñaba fallos ajenos. El operador lo pidió el 2026-11-20 y aprobó las reglas el 2026-11-23, con una condición: escritas en un sitio y comprobadas, para que se hagan siempre igual.
+- **Las reglas** (las razones de cada una, en el propio fichero):
+  - Un fichero fuera de las rutas que activan el workflow se ignora.
+  - Lo común ejecuta todo.
+  - Cada aplicación ejecuta su job y los de las que dependen de ella.
+  - En `images.yml`, solo los jobs de la imagen cuya línea cambia.
+  - **Un fichero que las reglas no conocen ejecuta todo:** un olvido del mapa nunca deja algo sin probar.
+- **Cómo se mantiene al día:** `tests/unit/test_lifecycle_jobs.py`, en `lint`, comprueba que el mapa y el workflow nombran los mismos jobs. Comprueba también que las reglas de cada job cubren todo lo que el job usa: los ficheros que nombran sus pasos, los roles de sus playbooks con los que estos incluyen, y sus imágenes. Lo calcula del repo, no de una lista escrita a mano.
+- **Descartado:**
+  - Una ejecución semanal completa: sobra con la de cada merge a `main`. Las versiones nuevas de las imágenes ya las avisa `image-updates`.
+  - Acciones de terceros como `dorny/paths-filter`: una dependencia más para algo que hacen unas líneas de Python.
+
