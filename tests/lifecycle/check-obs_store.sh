@@ -64,9 +64,16 @@ case ${1:?step} in
     # (-search.latencyOffset), and the query looks 5 minutes back.
     ts=$(( ($(date +%s) - 120) * 1000 ))
     curl -fsS --data-binary "ci_obs_metric{job=\"ci\"} 42 $ts" "$vm/api/v1/import/prometheus"
-    curl -fsS -X POST "$vl/insert/jsonline?_stream_fields=app" --data-binary '{"_msg":"ci_obs_line from lifecycle","app":"ci"}'
+    # One JSON object per line, the line ended (the jsonline format).
+    printf '%s\n' '{"_msg":"ci_obs_line from lifecycle","app":"ci"}' \
+      | curl -fsS -w 'insert: HTTP %{http_code}\n' -X POST "$vl/insert/jsonline?_stream_fields=app" --data-binary @-
     eventually has_metric || fail "the metric written is not readable"
-    eventually has_log || fail "the log line written is not readable"
+    if ! eventually has_log; then
+      echo "what VictoriaLogs holds:"
+      curl -sS "$vl/select/logsql/query" --data-urlencode 'query=*' --data-urlencode 'limit=5' || true
+      curl -sS "$vl/select/logsql/query" --data-urlencode 'query=ci_obs_line' || true
+      fail "the log line written is not readable"
+    fi
     echo "ok: one metric and one log line in and out"
     ;;
   kept)
