@@ -36,7 +36,7 @@ Eres el ingeniero que implementa esta plataforma para un operador único. Eres e
 | --- | --- | --- | --- | --- |
 | Nodo de control y servicios personales (PRO) | Portátil, solo CPU, 16 GB RAM | Fedora Atomic Sway 44 | El de Fedora 44 (Podman 5). Podman 6 llega con Fedora 45 | Ejecuta Ansible y KeePassXC. Desde la versión 1.2 aloja también el Postgres principal y las aplicaciones personales, disponibles sin conexión (R18). Disco cifrado: **no volver a preguntar**. Aloja la VM DEV |
 | DEV | VM dentro del portátil | Ubuntu Server 24.04 x86_64 | **4.9** (apt) | Misma versión de Podman y misma base que el servidor principal. El operador despliega a mano desde la rama del PR; opencode con IA local solo ejecuta pruebas. Sin credenciales de producción |
-| Servidor principal | Servidor ARM64 con GPU (CUDA 13) | Ubuntu 24.04, la versión de su fabricante | **4.9** | Docker con vLLM. Destino de las copias de backup (4.11). Se trata como **no fiable**: solo guarda datos cifrados en origen. Se queda en Ubuntu 24.04: es el único sistema que admite su fabricante |
+| Servidor principal | Servidor ARM64 con GPU (CUDA 13) | Ubuntu 24.04, la versión de su fabricante | **4.9** | Docker con vLLM. Destino de las copias de backup (4.11). Se trata como **no fiable**: solo guarda datos cifrados en origen, salvo la observabilidad, que guarda en un disco cifrado (4.8, R62). Se queda en Ubuntu 24.04: es el único sistema que admite su fabricante |
 | Servidor opcional | x86 con GPU | Fedora Atomic Sway 44 | 5 (6 con Fedora 45) | Parado. Solo se usará si hace falta. El diseño no debe depender de él |
 
 **Excepción Docker en el servidor principal:** vLLM corre en Docker porque Podman 4.9 no ve la GPU con CUDA 13 (comprobado por el operador). Fuera de alcance de migrar.
@@ -158,8 +158,19 @@ vLLM sigue en Docker y Ansible no lo gestiona en esta etapa. LiteLLM lo alcanza 
 
 ### 4.8 Observabilidad
 
-- `prometheus-podman-exporter` como **servicio systemd de usuario**, no como contenedor con el socket de Podman montado. Escucha solo en `127.0.0.1`; si el Prometheus está en otra máquina, se expone con `tailscale serve` (R25). Se añade como objetivo al Prometheus existente.
-- Logs en journald: cada contenedor lleva `LogDriver=journald`, sea cual sea el valor por defecto de Podman en la máquina, y lo exige la política de `tests/quadlet` (R60). Las aplicaciones escriben sus registros en la salida estándar. El análisis de logs con IA queda diferido.
+Métricas y logs de todas las máquinas, guardados en el servidor principal (R62). Se instala desde cero; el Prometheus, el Grafana y los exporters que hoy corren en Docker en el servidor se apagan cuando lo nuevo funcione.
+
+- **Almacén, en el servidor principal:** VictoriaMetrics (métricas) y VictoriaLogs (logs), una instancia de cada una, como contenedores Quadlet de `svc_runner` (D1, D3), con imagen por digest. Sin base de datos externa: cada una guarda sus datos en su directorio. Se consultan con la interfaz web que trae cada una; Grafana, solo si un día se echa en falta.
+- **Retención:** 1 año de métricas y 90 días de logs, como parámetros del inventario.
+- **Dónde se guardan:** en un directorio que es parámetro del inventario. Su sitio definitivo es un disco USB externo cifrado con LUKS2, que el operador prepara a mano ([`OPERATIONS.md`](OPERATIONS.md), cuando llegue el disco): se abre solo al arrancar con el TPM del servidor y, en cualquier otra máquina, con una clave de recuperación guardada en KeePassXC. Ansible no formatea ni cifra discos: comprueba que el directorio está montado y, si está configurado como cifrado, que lo está. Mientras no haya disco, el directorio vive en el disco interno y solo recibe lo del propio servidor.
+- **Todo va de cada máquina al servidor**, nunca al revés: el servidor no se conecta a ninguna máquina y estas no abren puertos. El servidor expone solo las rutas de entrada y las interfaces web, en `127.0.0.1` y con `tailscale serve` (R25).
+- **Métricas de cada máquina:** `node_exporter` para el sistema y `prometheus-podman-exporter` para los contenedores, como paquetes del sistema o, si no los hay, como servicios systemd (este último, de usuario, no como contenedor con el socket de Podman montado). Escuchan solo en `127.0.0.1`.
+  - En el servidor, VictoriaMetrics los lee directamente.
+  - En las máquinas que no están siempre conectadas (el portátil), `vmagent` los lee y los envía. Si el servidor no está alcanzable, los guarda en una cola en disco con tamaño máximo y los manda en bloque al volver la conexión: no se pierden datos ni se reintenta sin pausa.
+  - La GPU del servidor, con `nvidia-smi` en un temporizador systemd que deja sus valores en el recolector de ficheros de texto de `node_exporter`. El exporter de NVIDIA basado en DCGM no es compatible con esa GPU.
+- **Logs:** cada contenedor lleva `LogDriver=journald`, sea cual sea el valor por defecto de Podman en la máquina, y lo exige la política de `tests/quadlet` (R60). Las aplicaciones escriben sus registros en la salida estándar. Cada máquina los envía con `systemd-journal-upload`, la herramienta de systemd: el propio journal es la cola y el programa recuerda por dónde iba (cursor), así que al volver la conexión envía lo pendiente.
+- **Los logs del portátil llevan datos personales.** Solo se envían cuando el directorio del servidor está en el disco cifrado.
+- **Fuera de esta fase:** alertas, trazas y el análisis con IA (fase 6). Las dos bases tienen una API HTTP de consulta, que es por donde entrará la fase 6.
 
 ### 4.9 Endurecimiento de contenedores de agentes
 
@@ -293,7 +304,7 @@ Cada fase termina en un PR (o varios pequeños) y no se pasa a la siguiente sin 
 | 1b. Cortafuegos (cuando el operador lo decida, antes de la fase 5) | Auditoría de solo lectura de lo que escucha cada servidor; ensayo en `vm` con Docker y Tailscale; firewalld en dos pasos (primero con SSH también desde la red local como puerta de emergencia, después solo por Tailscale); ufw desactivado | Solo se entra por Tailscale; vLLM sigue funcionando; el operador no pierde el acceso en ningún paso |
 | **2. Firefly III y pgAdmin** | En el portátil, con los requisitos de [`services/firefly.md`](services/firefly.md): en la Postgres `main` de la plataforma, sin salida a internet, solo en `127.0.0.1` y copia de sus justificantes. Bases y usuarios declarados como datos según [`POSTGRES.md`](POSTGRES.md), con `pg_hba` generado; red propia con `isolate=true` para cada aplicación que se conecta; espera a Postgres según 4.3; pgAdmin solo en `127.0.0.1` (R37) | Firefly solo arranca con Postgres sano; no alcanza otras redes; al destruirlo se conserva su volumen; `_reader` no puede modificar datos; pgAdmin administra la instancia |
 | **2b. Contrato de aplicaciones** (R53) | Lo común para añadir aplicaciones sin copiar código de otra: guardarraíles en el CI (copia de referencia de las unidades, puertos, límites y endurecimiento), piezas comunes de los roles, perfiles de base de datos y de red, lista de puertos, copias por aplicación, retirar y purgar, y la skill que guía el alta. pgAdmin se añade después, con ella | Las unidades de Postgres, Firefly y los backups son idénticas a `tests/quadlet/golden` salvo los cambios que anuncie cada PR; `lifecycle` en verde; `plan` en producción sin cambios no anunciados; una aplicación nueva se añade con la skill sin tocar `deploy.sh` ni los demás roles |
-| **3. Observabilidad** | `prometheus-podman-exporter` como servicio de usuario y objetivo en el Prometheus existente | Métricas visibles en el Grafana actual |
+| **3. Observabilidad** (R62) | Según 4.8, en PR pequeños. **3a:** VictoriaMetrics y VictoriaLogs en el servidor principal, con sus métricas, las de su GPU y sus logs; se apaga lo de Docker. **3b, cuando el disco USB cifrado esté montado:** traslado del directorio al disco, y métricas y logs del portátil | **3a:** métricas y logs del servidor visibles en las interfaces web; la retención es la del inventario; sobrevive a un reinicio; nada escucha fuera de `127.0.0.1` salvo lo expuesto con `tailscale serve`; un segundo `apply` sin cambios; Prometheus y Grafana de Docker apagados. **3b:** con el portátil sin conexión unas horas, al volver llegan sus métricas y sus logs de ese tiempo sin huecos; el directorio está en el disco cifrado y se abre en otra máquina con la clave de recuperación |
 | 4. LiteLLM (más adelante) | Pasar LiteLLM a Quadlet con `vllm_host` y `vllm_port`; su base en una instancia de Postgres en el servidor principal cuando lleguen las virtual keys | LiteLLM responde igual que hoy |
 | 5. Agentes (más adelante) | OpenClaw, SearXNG y audio con el endurecimiento de 4.9; control de salida por usuario tras una prueba previa (sección 7); evaluar el disparador del segundo usuario | Un contenedor de agente no alcanza la LAN, Tailscale ni Postgres salvo lo permitido |
 | 6. Análisis de logs (más adelante) | Exportar journald, limpiar datos sensibles y analizar con el vLLM local en solo lectura, sin herramientas | Un log con instrucciones maliciosas no provoca ninguna acción |
@@ -321,7 +332,11 @@ Son supuestos razonables pero no comprobados. Si alguno falla, detente y propón
 | 1 | Que `pgvector/pgvector:pg18` admite `initdb --locale-provider=builtin --builtin-locale=C.UTF-8`, deja los checksums de datos activados y arranca con el endurecimiento de [`POSTGRES.md`](POSTGRES.md) en Podman 4.9 (R34). **Comprobado** el 2026-11-03 en `lifecycle` (fase 1d): `b\|C.UTF-8\|UTF8`, checksums `on`, UTC, solo cinco capacidades y sistema de ficheros de solo lectura |
 | 2 | Que `ALTER ROLE … SET role = <app>_owner` hace que lo creado por un usuario de `_owner` quede a nombre del grupo, y que `_reader` no puede modificar datos (R35, R36). **Comprobado** el 2026-11-07 en `lifecycle` con PostgreSQL 18.6 y pgvector 0.8.7 (`tests/lifecycle/check-postgres-apps.sh access`): el usuario entra como `<app>_owner`, lo que crea es de `<app>_owner`, y `_reader` no puede insertar, modificar, borrar, vaciar, usar secuencias, crear tablas ni ejecutar una función `SECURITY DEFINER` |
 | 2 | Que el patrón de espera con `ExecStartPre` funciona en 4.9 y respeta `TimeoutStartSec`. **Comprobado** en cada ejecución de `lifecycle` con Podman 4.9 (`tests/lifecycle/check-firefly.sh wait`), la última en `main` el 2026-11-23: con Postgres en pausa, Firefly no arranca, se rinde al llegar a su `TimeoutStartSec` (60 s en el inventario de pruebas) y arranca solo cuando Postgres vuelve a estar sano |
-| 3 | Cómo se instala `prometheus-podman-exporter` en Ubuntu 24.04 ARM64 (paquete o binario) |
+| 3 | Cómo se instalan `node_exporter`, `prometheus-podman-exporter` y `systemd-journal-upload` en Ubuntu 24.04 ARM64 (paquetes de apt) y en el portátil con Fedora Atomic (paquetes en capa con `rpm-ostree` o, si no, otra vía que se proponga) |
+| 3 | Que las imágenes oficiales de VictoriaMetrics, VictoriaLogs y `vmagent` incluyen `linux/arm64` y arrancan sin root con Podman 4.9; y cómo lee `vmagent` los exporters de `127.0.0.1` sin opciones de slirp4netns ni pasta |
+| 3 | Qué valores da `nvidia-smi` para la GPU del servidor (la memoria es la del sistema y puede salir como «no disponible») |
+| 3 | Que `systemd-journal-upload` envía también el journal de usuario de `svc_runner` (los contenedores), que tras días sin conexión envía lo pendiente sin reintentar sin pausa, y qué campos identifican el contenedor en VictoriaLogs |
+| 3b | Que el servidor tiene TPM2 (`systemd-cryptenroll --tpm2-device=list`). Si no lo tiene, se propone otra forma de abrir el disco al arrancar |
 | 5 | Que una regla nftables por usuario captura el tráfico de salida de slirp4netns, y qué excepciones de DNS hacen falta (incluido el DNS de Tailscale, 100.100.100.100) |
 | 5 | Que las claves de endurecimiento de la sección 4.9 existen en Quadlet de Podman 4.9. Adelantado en la fase 0: todas existen salvo `Memory=` (ver `docs/COMPATIBILITY.md`) |
 
@@ -329,11 +344,10 @@ Son supuestos razonables pero no comprobados. Si alguno falla, detente y propón
 
 | Tema | Opciones conocidas |
 | --- | --- |
-| Prometheus y Grafana existentes | Dónde corren exactamente y si sus objetivos se gestionan desde Ansible o a mano |
 | Escáner de vulnerabilidades en CI | Propuesta: Trivy. Aplazado hasta después de la fase 3 (R21) |
 | Propuestas automáticas de actualización de digests | Propuesta: Dependabot para las actions y Python; los digests de imágenes, más adelante. Siempre como PR, nunca aplicación automática. Aplazado hasta después de la fase 3 (R21) |
 | Plan de GitHub | Gratuito ahora. GitHub Pro activaría la protección de `main` según la documentación oficial, pero el aviso de la interfaz menciona cuentas Team; comprobar que desaparece antes de dar por hecho que funciona. Comprobado el 2026-11-02 en este repo (cuenta personal gratuita): el formulario de rulesets avisa de que no se aplicarán «until you move to GitHub Team organization account». No se crean rulesets mientras tanto |
-| Cifrado de los datos propios del servidor principal | Cuando el servidor principal guarde datos que no le lleguen ya cifrados (por ejemplo, el Postgres de la fase 4): almacenamiento cifrado para esos datos, con desbloqueo automático al arrancar (TPM, Clevis/Tang u otra). Se decide en esa fase |
+| Cifrado de los datos propios del servidor principal | Para la observabilidad, decidido: disco USB con LUKS2, TPM y clave de recuperación (4.8, R62). Para lo que venga después (por ejemplo, el Postgres de la fase 4): el mismo disco u otro almacenamiento cifrado, que se decide en esa fase |
 
 ### 7.3 Disparador para un segundo usuario de servicio
 
@@ -370,6 +384,13 @@ Verificadas en noviembre de 2026. Para cualquier detalle técnico, manda la docu
 - [Opción `--secret`](https://docs.podman.io/en/v4.6.0/_sources/markdown/options/secret.md.txt): `target`, `uid`, `gid` y `mode`.
 - [Secretos de Podman](https://www.redhat.com/en/blog/new-podman-secrets-command): almacenamiento sin cifrar con el driver de ficheros.
 - [prometheus-podman-exporter](https://pkg.go.dev/github.com/containers/prometheus-podman-exporter).
+
+**Observabilidad**
+
+- [vmagent](https://docs.victoriametrics.com/vmagent/): cola en disco (`-remoteWrite.tmpDataPath`) y su límite (`-remoteWrite.maxDiskUsagePerURL`).
+- [VictoriaLogs: entrada desde journald](https://docs.victoriametrics.com/victorialogs/data-ingestion/journald/) y [lista para producción desde la v1.0.0](https://docs.victoriametrics.com/victorialogs/faq/).
+- [systemd-journal-upload](https://man7.org/linux/man-pages/man8/systemd-journal-upload.service.8.html) y [el cursor que guarda](https://fedoraproject.org/wiki/Changes/Remote_Journal_Logging).
+- [systemd-cryptenroll](https://man7.org/linux/man-pages/man1/systemd-cryptenroll.1.html): TPM2 y claves de recuperación en LUKS2.
 
 **Ansible**
 
