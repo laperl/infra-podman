@@ -64,9 +64,11 @@ case ${1:?step} in
     # (-search.latencyOffset), and the query looks 5 minutes back.
     ts=$(( ($(date +%s) - 120) * 1000 ))
     curl -fsS --data-binary "ci_obs_metric{job=\"ci\"} 42 $ts" "$vm/api/v1/import/prometheus"
-    # One JSON object per line, the line ended (the jsonline format).
+    # One JSON object per line, as the official example sends it: with curl's default
+    # content type (a web form) the server reads the body as form fields and stores nothing.
     printf '%s\n' '{"_msg":"ci_obs_line from lifecycle","app":"ci"}' \
-      | curl -fsS -w 'insert: HTTP %{http_code}\n' -X POST "$vl/insert/jsonline?_stream_fields=app" --data-binary @-
+      | curl -fsS -w 'insert: HTTP %{http_code}\n' -X POST -H 'Content-Type: application/stream+json' \
+          "$vl/insert/jsonline?_stream_fields=app" --data-binary @-
     eventually has_metric || fail "the metric written is not readable"
     if ! eventually has_log; then
       echo "what VictoriaLogs holds:"
