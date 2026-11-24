@@ -32,7 +32,7 @@ eventually() {
   done
   return 1
 }
-has_metric() { curl -fsS "$vm/api/v1/query?query=ci_obs_metric" | grep -q '"42"'; }
+has_metric() { curl -fsS "$vm/api/v1/query?query=ci_obs_metric&nocache=1" | grep -q '"42"'; }
 has_log() { curl -fsS "$vl/select/logsql/query" --data-urlencode 'query=ci_obs_line' | grep -q 'ci_obs_line'; }
 
 case ${1:?step} in
@@ -60,7 +60,10 @@ case ${1:?step} in
     echo "ok: running, hardened, only on 127.0.0.1, retention 1y and 90d, data in $dir"
     ;;
   write)
-    curl -fsS --data-binary 'ci_obs_metric{job="ci"} 42' "$vm/api/v1/import/prometheus"
+    # Two minutes in the past: VictoriaMetrics hides the last 30 s from queries
+    # (-search.latencyOffset), and the query looks 5 minutes back.
+    ts=$(( ($(date +%s) - 120) * 1000 ))
+    curl -fsS --data-binary "ci_obs_metric{job=\"ci\"} 42 $ts" "$vm/api/v1/import/prometheus"
     curl -fsS -X POST "$vl/insert/jsonline?_stream_fields=app" --data-binary '{"_msg":"ci_obs_line from lifecycle","app":"ci"}'
     eventually has_metric || fail "the metric written is not readable"
     eventually has_log || fail "the log line written is not readable"
