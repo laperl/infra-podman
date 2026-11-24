@@ -572,3 +572,36 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
   - Una ejecución semanal completa: sobra con la de cada merge a `main`. Las versiones nuevas de las imágenes ya las avisa `image-updates`.
   - Acciones de terceros como `dorny/paths-filter`: una dependencia más para algo que hacen unas líneas de Python.
 
+
+## 2026-11-24
+
+### R62. Observabilidad: VictoriaMetrics y VictoriaLogs en el servidor, enviado desde cada máquina
+
+- **Decisión:** métricas y logs de todas las máquinas se guardan en el servidor principal, en VictoriaMetrics y VictoriaLogs. Cada máquina los envía; el servidor no se conecta a ninguna. Retención: 1 año de métricas y 90 días de logs. Datos en un disco USB externo con LUKS2, que se abre con el TPM al arrancar y con una clave de recuperación en KeePassXC en cualquier otra máquina. Se instala desde cero y se apagan Prometheus, Grafana y sus exporters de Docker. Detalle: SPEC 4.8.
+- **Motivo:** el operador pidió (2026-11-24):
+  - Logs además de métricas.
+  - Que el portátil, que no siempre está conectado, envíe sus datos de forma eficiente, sin reintentar todo el rato.
+  - Software libre y gratuito, lo que usan hoy los expertos.
+  - Que la IA pueda analizarlo más adelante.
+  - Que se puedan añadir máquinas y mover el almacén a otra.
+  - Un procedimiento para las métricas y los logs de cada aplicación nueva, y buena documentación con diagrama: [`OBSERVABILITY.md`](OBSERVABILITY.md).
+  - Sin sobreingeniería: herramientas básicas de Linux salvo que otra mejore mucho.
+- **Cómo cumple cada petición:**
+  - **Envío eficiente:** `vmagent` guarda las métricas en una cola en disco mientras no hay conexión y las envía en bloque al volver. Para los logs, el propio journal es la cola y `systemd-journal-upload` recuerda por dónde iba.
+  - **Ligereza:** dos binarios sin dependencias, con su propio almacenamiento. VictoriaLogs está lista para producción desde su v1.0.0 (noviembre de 2024).
+  - **Herramientas básicas:** journald, `systemd-journal-upload`, `node_exporter`, un temporizador systemd con `nvidia-smi` para la GPU y LUKS con `systemd-cryptenroll`. Solo se añade `vmagent`, porque es lo que evita huecos y reintentos. Va en todas las máquinas, también en la del almacén, aunque allí podría leer VictoriaMetrics directamente: con todas iguales, añadir una máquina o mover el almacén es cambiar el inventario (petición del operador, 2026-11-24).
+  - **IA (fase 6):** las dos bases tienen API HTTP de consulta.
+- **Sin Postgres:** ninguna de las dos lo necesita (Grafana, si llega, usa SQLite por defecto). La Postgres del portátil no sirve: el servidor dependería de una máquina que no siempre está encendida, y D8 pone un Postgres en cada máquina que lo necesita.
+- **Lo que cambia de principio, a sabiendas:** el servidor se trataba como no fiable y solo guardaba datos cifrados en origen. Ahora guarda logs del portátil, que llevan datos personales, legibles para quien controle el servidor encendido. LUKS protege si se pierde o se roba el disco; no protege del propio servidor. Por eso los logs del portátil solo se envían cuando el directorio está en el disco cifrado.
+- **Sin copia de la observabilidad:** si el disco muere, se pierde la historia. Se acepta; copiarla se decidiría aparte.
+- **Descartado:**
+  - **Prometheus con Loki y Grafana (LGTM):** más piezas y más configuración para una sola persona. Prometheus solo lee (no recibe) salvo con opciones añadidas, y Loki pide más ajuste que VictoriaLogs.
+  - **SigNoz:** necesita ClickHouse y varios servicios: demasiado para este tamaño.
+  - **OpenObserve:** una sola pieza para todo, pero más joven; se prefieren dos herramientas maduras y ligeras del mismo proyecto.
+  - **Que el servidor lea las métricas del portátil:** obligaría a abrir un puerto en el portátil y perdería lo medido sin conexión.
+  - **Exporter de NVIDIA basado en DCGM:** no es compatible con la GPU del servidor.
+  - **Grafana desde el principio:** las interfaces web de VictoriaMetrics y VictoriaLogs bastan para empezar.
+  - **Que Ansible prepare el disco:** cifrar o formatear es irreversible y se hace una vez; queda como procedimiento manual escrito.
+- **Por fases:** 3a en el servidor, con sus propios datos y en el disco interno. 3b cuando llegue el disco: se traslada el directorio (parar, copiar, cambiar el parámetro, `apply`) y se añade el portátil.
+- **Aprobada por:** el operador, el 2026-11-24 (datos en el servidor con disco USB, LUKS con TPM y clave de recuperación, retención, VictoriaMetrics y VictoriaLogs sin Postgres; al hacer merge de este PR, el resto).
+- **SPEC:** 2 (servidor principal), 4.8, 6 (fase 3), 7.1, 7.2 y 9. Cómo funciona: [`OBSERVABILITY.md`](OBSERVABILITY.md).
