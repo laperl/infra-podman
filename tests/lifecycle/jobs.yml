@@ -16,7 +16,7 @@
 # A push to main and a manual run ("Run workflow") run every job.
 # Patterns: shell-style, and * also crosses /: roles/pgadmin/* is the whole role.
 
-jobs: [base, postgres, firefly, pgadmin, firefly_importer, backup, backup-copy]
+jobs: [base, postgres, firefly, pgadmin, firefly_importer, backup, backup-copy, obs-store]
 
 # The paths of "on: pull_request" in lifecycle.yml, with ** written *.
 watched:
@@ -58,23 +58,29 @@ images:
   firefly_image: [firefly, firefly_importer]
   pgadmin_image: [pgadmin]
   firefly_importer_image: [firefly_importer]
+  victoriametrics_image: [obs-store]
+  victorialogs_image: [obs-store]
 
 rules:
   - name: base
     paths: [tests/lifecycle/check-base.sh]
     jobs: [base]
 
-  # Every job but base deploys PostgreSQL, and the postgres role includes backup, podman_secrets,
-  # quadlet_deploy and user_units.
+  # Every job but base and obs-store deploys PostgreSQL, and the postgres role includes backup,
+  # podman_secrets, quadlet_deploy and user_units.
   - name: PostgreSQL and the roles it includes
     paths:
       - roles/postgres/*
       - playbooks/postgres.yml
       - roles/backup/*
       - roles/podman_secrets/*
-      - roles/quadlet_deploy/*
       - roles/user_units/*
     jobs: [postgres, firefly, pgadmin, firefly_importer, backup, backup-copy]
+
+  # Every job but base installs Quadlet units with it, the observability store too.
+  - name: Installing Quadlet units
+    paths: [roles/quadlet_deploy/*]
+    jobs: [postgres, firefly, pgadmin, firefly_importer, backup, backup-copy, obs-store]
 
   - name: PostgreSQL tests
     paths:
@@ -125,10 +131,21 @@ rules:
       - tests/lifecycle/check-backup.sh
     jobs: [backup, backup-copy]
 
+  - name: Observability store
+    paths:
+      - roles/obs_store/*
+      - playbooks/obs-store.yml
+      - tests/lifecycle/check-obs_store.sh
+    jobs: [obs-store]
+
+  - name: Backup server and its copy, and the observability store that also uses tailscale_serve
+    paths:
+      - roles/tailscale_serve/*
+    jobs: [backup-copy, obs-store]
+
   - name: Backup server and its copy
     paths:
       - roles/backup_server/*
-      - roles/tailscale_serve/*
       - playbooks/backup-server.yml
       - tests/lifecycle/check-backup-copy.sh
       - tests/lifecycle/copy-vars.yml
@@ -140,4 +157,4 @@ rules:
       - playbooks/check.yml
       - tests/lifecycle/check-operations.sh
       - docs/OPERATIONS.md
-    jobs: [firefly, pgadmin, firefly_importer, backup-copy]
+    jobs: [firefly, pgadmin, firefly_importer, backup-copy, obs-store]

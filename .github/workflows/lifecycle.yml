@@ -1376,10 +1376,103 @@ jobs:
           out=$(sed -e 's/%/%25/g' /var/lib/infra-podman/backup-status/dev-backup-copy.status 2>&1 | awk 'BEGIN{ORS="%0A"} {print}')
           echo "::warning title=copy status::${out:-<empty>}"
 
+  obs-store:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.jobs), 'obs-store')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      INV: tests/lifecycle/inventory.yml
+      CHECK: tests/lifecycle/check-obs_store.sh
+      AS: tests/lifecycle/as-svc.sh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same reason as in the base job.
+      - name: Make the runner look like a normal server
+        run: sudo sed -i '/^XDG_/d' /etc/environment
+
+      - name: Install Podman 4.9 from Ubuntu 24.04
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq podman
+          podman --version | grep -Eq ' 4\.9\.' || { echo "Expected Podman 4.9"; exit 1; }
+
+      - name: Install pinned ansible-core
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --requirement scripts/requirements-lint.txt
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Service user
+        run: tests/lifecycle/playbook.sh -i "$INV" playbooks/base.yml > base.log
+
+      # The runner's disk is not encrypted: asking for it must stop before changing anything.
+      - name: Asking for an encrypted disk that is not there, expecting a clear refusal
+        run: |
+          if ansible-playbook -i "$INV" playbooks/obs-store.yml -e obs_store_encrypted=true > refusal.log 2>&1; then
+            echo "::error::the store was installed on an unencrypted disk"; exit 1
+          fi
+          grep -q 'not on an open encrypted device' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+          if $AS test -e "$($AS sh -c 'echo $HOME')/.local/share/infra-podman/dev-obs"; then
+            echo "::error::the refusal created the data folder"; exit 1
+          fi
+
+      - name: Plan, apply, apply again (zero changes), plan again (zero changes)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/obs-store.yml --check --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/obs-store.yml --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/obs-store.yml 2>&1 | tee second.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply changed something"; exit 1; }
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/obs-store.yml --check 2>&1 | tee plan.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' plan.log || { echo "::error::the plan after apply shows changes"; exit 1; }
+
+      - name: Running, hardened, only on 127.0.0.1, with the retention of the inventory
+        run: $CHECK running
+
+      - name: A metric and a log line go in and come out
+        run: $CHECK write
+
+      # The check playbook also reports the Firefly instances of the shared inventory as not
+      # running: here only what it says of the store counts.
+      - name: The manual (docs/OPERATIONS.md, section 4) sees it healthy; the check playbook, declared
+        run: |
+          tests/lifecycle/check-operations.sh obs-store
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/check.yml 2>&1 | tee check.log
+          grep -q 'SOBRA' check.log || { echo "::error::the check playbook printed no report"; exit 1; }
+          if sed -n '/SOBRA/,/RESUMEN/p' check.log | grep -q 'de obs)'; then
+            echo "::error::the check playbook reports the store as left over"; exit 1
+          fi
+
+      - name: Survives a restart of both containers
+        run: |
+          $AS systemctl --user restart dev-obs-metrics.service dev-obs-logs.service
+          $CHECK kept
+
+      - name: Removed keeps its data; installed again, the data is there
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/obs-store.yml -e obs_store_state=absent 2>&1 | tee -a all.log
+          $CHECK destroyed
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/obs-store.yml 2>&1 | tee -a all.log
+          $CHECK kept
+
+      - name: Diagnose
+        if: failure()
+        run: |
+          tests/lifecycle/diagnose.sh
+          for u in dev-obs-metrics dev-obs-logs; do
+            out=$(sudo journalctl _SYSTEMD_USER_UNIT=$u.service --no-pager -o cat | grep -v -e '^[0-9-]* [0-9:.]* +0000 UTC' \
+              | tail -40 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::warning title=$u journal::${out:-<empty>}"
+          done
+
   # The one result to require, if main is ever protected: it fails when a job that had to
   # run failed or was cancelled; jobs skipped because the change does not touch them pass.
   lifecycle-ok:
-    needs: [changes, base, postgres, firefly, pgadmin, firefly_importer, backup, backup-copy]
+    needs: [changes, base, postgres, firefly, pgadmin, firefly_importer, backup, backup-copy, obs-store]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5

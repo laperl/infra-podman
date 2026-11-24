@@ -1,0 +1,17 @@
+---
+# Stop the store. The data folder, the network units and the tailscale serve forwarders stay
+# (SPEC 4.2, 8): removing the history is done by hand, on purpose.
+- name: Remove the container units with quadlet_deploy
+  ansible.builtin.include_role:
+    name: quadlet_deploy
+  vars:
+    quadlet_deploy_units: "{{ obs_store_quadlet_units }}"
+    quadlet_deploy_state: absent
+
+- name: Say what stays
+  ansible.builtin.debug:
+    msg: >-
+      {{ obs_store_metrics_name }} and {{ obs_store_logs_name }} are stopped and removed. Their
+      data stays in {{ obs_store_dir }}.{% for obs_store_served in obs_store_tailscale_serve %} The
+      Tailscale forwarder of {{ obs_store_served }} stays too; to remove it by hand: sudo tailscale
+      serve --tcp={{ obs_store_served }} tcp://localhost:{{ obs_store_served }} off{% endfor %}

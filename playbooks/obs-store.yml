@@ -1,0 +1,11 @@
+---
+# Phase 3a: the observability store (SPEC 4.8, R62, docs/OBSERVABILITY.md), VictoriaMetrics and
+# VictoriaLogs, on every machine in obs_store_hosts (the main server in prod). Needs the base
+# playbook. Asks for sudo: the data folder and tailscale serve run as root (R55).
+#   ./deploy.sh plan obs-store --limit servidor
+# Remove keeping the data: -e obs_store_state=absent (not through deploy.sh yet).
+- name: Observability store
+  hosts: obs_store_hosts
+  gather_facts: false
+  roles:
+    - obs_store

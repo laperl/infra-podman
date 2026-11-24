@@ -11,6 +11,7 @@
 #   pgadmin         1, 4 pgAdmin 4, its instance ci: deployed and healthy (pgadmin job)
 #   firefly_importer 1, 4 the Data Importer, its instance ci: deployed and healthy
 #                   (firefly_importer job)
+#   obs-store       4    the observability store looks healthy (obs-store job)
 #   restore-local   5.1  a broken database restored under another name, checked, swapped
 #   restore-server    5.2  a database restored from the main server's volume, with only the restic key
 #   data-repo       5.3  the data repository from the local copy
@@ -162,6 +163,11 @@ case $step in
     expect healthy-ffimport '^sano$'
     count_is healthy-ffimport '8080/tcp -> 127.0.0.1:18115' 1
     expect healthy-ffimport '^OK$'
+    ;;
+  obs-store)
+    run healthy-obs
+    count_is healthy-obs 'active' 2
+    count_is healthy-obs 'OK' 2
     ;;
   restore-local)
     # Break the database after the last backup; restore it under another name; swap.

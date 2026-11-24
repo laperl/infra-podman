@@ -1,0 +1,47 @@
+---
+# Observability store (SPEC 4.8, R62). See defaults/main.yml.
+
+- name: Check the store settings
+  ansible.builtin.assert:
+    that:
+      - obs_store_state in ['present', 'absent']
+      - victoriametrics_image is match('^[^ ]+@sha256:[0-9a-f]{64}$')
+      - victorialogs_image is match('^[^ ]+@sha256:[0-9a-f]{64}$')
+      - obs_store_dir is string and obs_store_dir is match('^/[^ ]*[^/ ]$')
+      - obs_store_encrypted is boolean
+      - obs_store_metrics_retention is match('^[0-9]+[hdwy]$')
+      - obs_store_logs_retention is match('^[0-9]+[hdwy]$')
+      - obs_store_metrics_networking is mapping and obs_store_metrics_networking.keys() | difference(['inbound']) | length == 0
+      - obs_store_logs_networking is mapping and obs_store_logs_networking.keys() | difference(['inbound']) | length == 0
+      - (obs_store_metrics_networking.inbound | default({})).keys() | difference(['publish', 'tailscale_serve']) | length == 0
+      - (obs_store_logs_networking.inbound | default({})).keys() | difference(['publish', 'tailscale_serve']) | length == 0
+      - obs_store_metrics_publish is sequence and obs_store_metrics_publish is not string and obs_store_metrics_publish | length > 0
+      - obs_store_logs_publish is sequence and obs_store_logs_publish is not string and obs_store_logs_publish | length > 0
+      - (obs_store_metrics_publish + obs_store_logs_publish) | map('string')
+        | select('match', '^[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{1,5}:[0-9]{1,5}$') | list | length
+        == (obs_store_metrics_publish + obs_store_logs_publish) | length
+    fail_msg: >-
+      victoriametrics_image and victorialogs_image pinned by digest (D6); obs_store_dir an
+      absolute path without spaces or a trailing /; obs_store_encrypted true or false; each
+      retention a number and h, d, w or y (1y, 90d); obs_store_metrics_networking and
+      obs_store_logs_networking with inbound (publish, tailscale_serve) inside and nothing else,
+      publish a list like ["127.0.0.1:18010:8428"] (roles/obs_store/defaults/main.yml).
+    quiet: true
+
+# Its home, ids and environment, read in one place (roles/service_user).
+- name: Read the service user
+  ansible.builtin.include_role:
+    name: service_user
+
+- name: Set the paths and environment of the service user
+  ansible.builtin.set_fact:
+    obs_store_home: "{{ service_user_home }}"
+    obs_store_env: "{{ service_user_env }}"
+
+- name: Install the store
+  ansible.builtin.include_tasks: install.yml
+  when: obs_store_state == 'present'
+
+- name: Remove the store, keeping its data
+  ansible.builtin.include_tasks: remove.yml
+  when: obs_store_state == 'absent'

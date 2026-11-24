@@ -11,7 +11,7 @@ Input, as JSON in the environment variable MACHINE_REPORT_INPUT:
   host      name of the machine in the inventory
   env       dev | prod
   declared  the instances the inventory declares for this machine, as <short>-<name>,
-            and "backup"
+            "backup" and, on the machine of the observability store, "obs"
   secrets   names of the Podman secrets the inventory installs on this machine
 """
 from __future__ import annotations

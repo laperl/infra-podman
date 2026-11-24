@@ -1,0 +1,41 @@
+# Ansible managed
+# Observability store, metrics (SPEC 4.8, R62): VictoriaMetrics, single node. The machines
+# send to it with vmagent (remote write); it connects to none. Its data is a folder of the
+# machine, obs_store_dir, not a Podman volume: it may live on an encrypted external disk.
+# Published where obs_store_metrics_networking says (R55): by default on 127.0.0.1, and the
+# other machines reach it through `tailscale serve`.
+[Unit]
+Description=Observability store, metrics, VictoriaMetrics (dev)
+
+[Container]
+ContainerName=dev-obs-metrics
+Image=docker.io/victoriametrics/victoria-metrics@sha256:322a7a92fdcc269280e9c38af94c83bc76827a31b792acbc60e44394e7f29c20
+Label=infra.env=dev
+Label=infra.app=obs
+Label=infra.component=metrics
+Label=infra.managed-by=infra-podman
+# Logs to the journal of the service user, whatever the default of Podman on the machine
+# (SPEC 4.8, R60).
+LogDriver=journald
+
+Volume=/home/svc_runner/.local/share/infra-podman/dev-obs/metrics:/storage:Z
+# The arguments of /victoria-metrics-prod, the image's entrypoint.
+Exec=-storageDataPath=/storage -retentionPeriod=1y -httpListenAddr=:8428
+# Its own internal network: no way out (R58). The ports are published from it.
+Network=dev-obs-metrics-net.network
+PublishPort=127.0.0.1:18010:8428
+
+# Resource limits (R46): the only place they are written.
+PodmanArgs=--memory=1g --cpus=2
+PidsLimit=500
+ReadOnly=true
+Tmpfs=/tmp
+DropCapability=all
+NoNewPrivileges=true
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

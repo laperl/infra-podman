@@ -43,8 +43,11 @@
   gather_facts: false
   vars:
     # Every instance declared for this machine, as <short>-<name> (infra_apps,
-    # group_vars/all/apps.yml), and the backup.
-    check_declared: "{{ ['backup'] + (infra_apps | instance_ids(hostvars[inventory_hostname])) }}"
+    # group_vars/all/apps.yml), the backup and, where the inventory puts it, the observability
+    # store (obs, R62).
+    check_declared: >-
+      {{ ['backup'] + (['obs'] if 'obs_store_hosts' in group_names else [])
+         + (infra_apps | instance_ids(hostvars[inventory_hostname])) }}
     # The Podman secrets the inventory installs on this machine (playbooks/secrets.yml).
     check_secrets: >-
       {%- set found = [] -%}
