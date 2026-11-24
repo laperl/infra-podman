@@ -1413,7 +1413,8 @@ jobs:
       # The runner's disk is not encrypted: asking for it must stop before changing anything.
       - name: Asking for an encrypted disk that is not there, expecting a clear refusal
         run: |
-          if ansible-playbook -i "$INV" playbooks/obs-store.yml -e obs_store_encrypted=true > refusal.log 2>&1; then
+          # As JSON: -e key=true would pass the text "true", not a boolean.
+          if ansible-playbook -i "$INV" playbooks/obs-store.yml -e '{"obs_store_encrypted": true}' > refusal.log 2>&1; then
             echo "::error::the store was installed on an unencrypted disk"; exit 1
           fi
           grep -q 'not on an open encrypted device' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
