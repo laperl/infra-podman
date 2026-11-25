@@ -110,17 +110,23 @@ infra_site: <instalación>
 service_user: svc_runner
 
 # Solo NOMBRES de las entradas de KeePassXC (grupo <instalación>), nunca valores.
+# readers: quién lee cada secreto; es el único sitio donde se escribe (SECRETS_INVENTORY.md).
 infra_secrets:
   - name: pg-laptop-superuser-password
     group: postgres_hosts
+    readers: [pg-laptop]
   - name: ff-laptop-db-password
     group: postgres_hosts
+    readers: [pg-laptop, ff-laptop]   # Postgres le pone la contraseña al usuario y Firefly entra con ella
   - name: ff-laptop-app-key
     group: firefly_hosts
+    readers: [ff-laptop]
   - name: backup-restic-password
     group: backup_clients
+    readers: [backup]
   - name: backup-server-password
     group: [backup_clients, backup_servers]
+    readers: [backup, backup-server]
 
 backup_server_max_size_gb: <el tuyo>
 
@@ -219,6 +225,8 @@ Desde tu copia del código, en el tag firmado ([`WORKFLOW.md`](../WORKFLOW.md), 
 - **Primero los secretos.** Sin ellos, Postgres y Firefly se paran diciendo cuál falta.
 - **Después Postgres.** Crea la base, el usuario y la red que Firefly necesita; si faltan, Firefly se para y dice qué declarar.
 - **El backup**, cada vez que añades o quitas una instancia de Postgres.
+
+**Si también vas a importar extractos**, el Data Importer es otra instancia, en `group_vars/firefly_importer_hosts.yml`, con este Firefly en su `connects_to` ([`firefly_importer.md`](firefly_importer.md), apartado 8). Hace falta un `apply firefly_importer` y un `apply firefly`, **uno de cada, en cualquier orden** ([`NETWORK.md`](../NETWORK.md), apartado 6). Cada rol escribe solo las unidades de su aplicación, así que cada lado tiene que unirse a la red de la pareja en su propio `apply`. Con un Firefly nuevo, si el importer ya está declarado antes del `apply firefly`, ese único `apply` lo crea ya con las dos redes. Con un Firefly que ya existe, su `apply` lo reinicia una vez.
 
 ## 8. Comprobar y entrar
 
