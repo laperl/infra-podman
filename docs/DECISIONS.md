@@ -615,7 +615,7 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
     - La configuración de `node_exporter` se escribe antes de instalar el paquete, para que nunca escuche en todas las interfaces.
     - Si otro programa ocupa su puerto (el `node_exporter` viejo de Docker), el `apply` se para antes de cambiar nada.
     - `systemd-journal-upload` se para cuando el almacén no responde. Un drop-in de systemd lo vuelve a arrancar cada minuto, sin límite de intentos, y sigue desde su cursor. Así se cumple «sin reintentar sin pausa».
-    - La GPU: `nvidia-smi` cada 30 s, como usuario `prometheus`, en métricas `obs_gpu_*`. Se omite lo que da `[N/A]`.
+    - La GPU: `nvidia-smi` cada 30 s, en métricas `obs_gpu_*`. Se omite lo que da `[N/A]`. Corre como root, porque la carpeta de `node_exporter` es de root tal como la deja el paquete. systemd solo le deja escribir en esa carpeta (`ProtectSystem=strict`, `ReadWritePaths=`) y le oculta los homes y `/tmp`.
     - VictoriaLogs agrupa los logs también por `_SYSTEMD_USER_UNIT` (`-journald.streamFields`). Si no, todos los contenedores de `svc_runner` serían un solo grupo, `user@<uid>.service`.
     - En una máquina que no es la del almacén, el `apply` se niega mientras el almacén no tenga `obs_store_encrypted: true` (SPEC 4.8): queda para la 3b.
     - Una configuración nueva de `vmagent` lo reinicia: su hash va en un comentario de su unidad.

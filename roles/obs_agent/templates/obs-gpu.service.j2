@@ -3,9 +3,10 @@
 [Unit]
 Description=NVIDIA GPU values for node_exporter (infra-podman)
 
+# As root: the folder of node_exporter is root's, as the package leaves it. systemd lets it
+# write only there, and hides the homes and /tmp.
 [Service]
 Type=oneshot
-User=prometheus
 Environment=NVIDIA_SMI={{ obs_agent_nvidia_smi }}
 Environment=TEXTFILE_DIR={{ obs_agent_textfile_dir }}
 ExecStart={{ obs_agent_gpu_script }}
@@ -14,3 +15,6 @@ ProtectSystem=strict
 ReadWritePaths={{ obs_agent_textfile_dir }}
 ProtectHome=true
 PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
