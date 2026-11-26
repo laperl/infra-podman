@@ -41,6 +41,15 @@ all:
       vars:
         # No tailscale_serve: no Tailscale on the runner, as in DEV.
         backup_server_networking: {inbound: {publish: ["127.0.0.1:18000:8000"]}}
+    # The observability store (playbook obs-store, R62): its own data folder in the home of
+    # svc_runner, unencrypted (obs_store_encrypted false), as on the main server before the disk.
+    obs_store_hosts:
+      hosts:
+        localhost: {}
+      vars:
+        # No tailscale_serve: no Tailscale on the runner, as in DEV.
+        obs_store_metrics_networking: {inbound: {publish: ["127.0.0.1:18010:8428"]}}
+        obs_store_logs_networking: {inbound: {publish: ["127.0.0.1:18011:9428"]}}
     postgres_hosts:
       hosts:
         localhost: {}

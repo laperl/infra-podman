@@ -1,0 +1,14 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Network of {{ obs_store_metrics_name }} alone (R58): internal, so the store has no way out
+# to the internet, the LAN or the host. It is reached only through its published ports.
+[Network]
+NetworkName={{ obs_store_metrics_name }}-net
+Internal=true
+Options=isolate=true
+# Podman's DNS would send any question to the host's servers, even on an internal
+# network: a way out for data. Sent here instead, where nothing answers (R45).
+DNS=127.0.0.1
+Label=infra.env={{ infra_env }}
+Label=infra.app=obs
+Label=infra.component=net
+Label=infra.managed-by=infra-podman

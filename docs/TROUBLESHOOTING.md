@@ -234,3 +234,16 @@ Lo propio del importer está en [`services/firefly_importer.md`](services/firefl
 | Pide «Authenticate» cada poco | La sesión dura `session_lifetime` minutos (120 por defecto), y se borra al reiniciar el contenedor | Es lo esperado. Si te molesta, sube `session_lifetime` en la instancia |
 | Importes multiplicados por mil, o divididos | El locale no es el de tu banco: `14.000` se lee distinto en `en_US` y en `es_ES` | `locale: es_ES` en la instancia y aplica. Deshaz la importación por su etiqueta ([`services/firefly_importer.md`](services/firefly_importer.md), apartado 6.5) |
 | Movimientos que no se importan, «duplicados» | Firefly ya tiene uno con la misma huella, también si lo borraste | Lo explica el apartado 6.6 de su página: purga los borrados o cambia el método de duplicados en ese JSON |
+
+## 14. Almacén de la observabilidad
+
+Cómo funciona: [`OBSERVABILITY.md`](OBSERVABILITY.md). Sus logs, en el servidor principal: `sudo journalctl _SYSTEMD_USER_UNIT=prod-obs-metrics.service` (o `prod-obs-logs.service`).
+
+| Lo que ves | Por qué | Qué hacer |
+| --- | --- | --- |
+| `obs_store_encrypted is true, but … is not on an open encrypted device` | Has pedido el disco cifrado y la carpeta no está en él: el disco no está conectado, no se ha abierto o no está montado | `lsblk` y `findmnt <carpeta>`. Ábrelo y móntalo, y vuelve a aplicar. No se ha cambiado nada |
+| `victoriametrics_image and victorialogs_image pinned by digest …` | Un ajuste de `obs_store_*` no vale | El mensaje dice cuál; los valores válidos, en `roles/obs_store/defaults/main.yml` |
+| `Wait until both bases answer` falla tras un minuto | Una de las dos no arranca | Sus logs (arriba). Si dice que no puede escribir en `/storage`, la carpeta no es de `svc_runner`: `sudo ls -ld <carpeta>/metrics <carpeta>/logs` |
+| `tailscale serve already uses port 18010 …` | Ese puerto ya lo usa otra cosa en `tailscale serve` | Como en el apartado 8: libéralo o cambia el puerto en `obs_store_metrics_networking` (y `obs_store_logs_networking`) |
+| La web no carga desde el portátil | No llega por Tailscale | En el servidor principal: `sudo tailscale serve status` debe mostrar 18010 y 18011, y `curl -s http://127.0.0.1:18010/health` debe decir `OK` |
+| Quieres quitarlo sin perder los datos | — | `deploy.sh` aún no tiene opción para esto: escribe `obs_store_state: absent` en `group_vars/obs_store_hosts.yml` del repo de datos y `./deploy.sh apply obs-store --limit servidor`. Para los dos contenedores y deja la carpeta. Borrar la historia se hace a mano: es irreversible |

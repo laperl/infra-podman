@@ -40,3 +40,10 @@ pgadmin_image: "docker.io/dpage/pgadmin4@sha256:3591b3d02910dcd817dec6fcaa681c27
 # Firefly 6.6.0 or newer. Read the release notes before updating: 2.3.1 to 2.3.3 warned of
 # possible duplicate transactions.
 firefly_importer_image: "docker.io/fireflyiii/data-importer@sha256:59f2f26ddf6eb55e84ce0d571259c9aabd6ddfcc23dd4d3825ab01ad79e34930"  # track: version-2.3.5
+
+# Observability store (phase 3a, SPEC 4.8, R62, docs/OBSERVABILITY.md). Digests of the index
+# computed by the operator on 2026-11-24 with skopeo inspect --raw | sha256sum. linux/amd64 and
+# linux/arm64 (and others), checked by the operator the same day (plus attestation manifests).
+# VictoriaMetrics' storage format only moves forward: read the release notes before updating.
+victoriametrics_image: "docker.io/victoriametrics/victoria-metrics@sha256:322a7a92fdcc269280e9c38af94c83bc76827a31b792acbc60e44394e7f29c20"  # track: v1.157.0
+victorialogs_image: "docker.io/victoriametrics/victoria-logs@sha256:ee4e820cac3721f5f5d91641b950c22439593adc4224f9655e5333d5a84c1dfe"  # track: v1.54.0

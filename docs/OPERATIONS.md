@@ -23,6 +23,7 @@ El día a día: qué hay en marcha, cómo van las copias, cómo lanzar algo a ma
 | `prod-backup` (copia diaria) | Portátil | **Duerme** y despierta un rato | `prod-backup.timer`, cada día a las 13:00 |
 | `prod-backup-copy` (envío al servidor principal) | Portátil | **Duerme** y despierta un rato | `prod-backup-copy.timer`, cada hora a y media |
 | `prod-backup-server` (recibe las copias) | Servidor principal | **Siempre** | systemd, al encender |
+| `prod-obs-metrics` y `prod-obs-logs` (el almacén de la observabilidad: VictoriaMetrics y VictoriaLogs, [`OBSERVABILITY.md`](OBSERVABILITY.md)) | Servidor principal | **Siempre** | systemd, al encender |
 
 Si el portátil estaba apagado a la hora de un temporizador, la tarea se hace al encenderlo. Además, en **tu** usuario del portátil, `infra-podman-backup-notify.timer` mira cada hora cómo van las copias y te avisa en el escritorio si algo falla. No es un contenedor.
 
@@ -35,7 +36,7 @@ svc systemctl --user list-timers       # los que duermen: cuándo despiertan (NE
 sudo ls ~svc_runner/.config/containers/systemd/ ~svc_runner/.config/systemd/user/   # todo lo desplegado
 ```
 
-En el servidor principal, la primera orden muestra `prod-backup-server`.
+En el servidor principal, la primera orden muestra `prod-backup-server`, `prod-obs-metrics` y `prod-obs-logs`.
 
 Firefly, en el portátil. Cada instancia (por ejemplo `casa` o `canary`, [`services/README.md`](services/README.md)) tiene su contenedor, su temporizador y su puerto; cambia `<instancia>` por la suya:
 
@@ -226,6 +227,17 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18000/
 ```
 
 Tiene que salir `active` y `401`: el servidor responde y pide contraseña. Además, `sudo tailscale serve status` tiene que mostrar el puerto 18000.
+
+El almacén de la observabilidad, también en el servidor principal:
+
+<!-- test: healthy-obs -->
+```bash
+svc systemctl --user is-active prod-obs-metrics.service prod-obs-logs.service
+curl -s http://127.0.0.1:18010/health; echo
+curl -s http://127.0.0.1:18011/health; echo
+```
+
+Tiene que salir `active` dos veces y `OK` dos veces. `sudo tailscale serve status` tiene que mostrar los puertos 18010 y 18011. Sus interfaces web, desde el portátil por Tailscale: `http://<servidor>:18010/vmui` (métricas) y `http://<servidor>:18011/select/vmui` (logs), con el nombre del servidor en tu red de Tailscale.
 
 Si algo no sale así: los logs del apartado 2 y [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
 

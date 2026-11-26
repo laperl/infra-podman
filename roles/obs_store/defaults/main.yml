@@ -1,0 +1,74 @@
+---
+# The observability store (SPEC 4.8, R62, docs/OBSERVABILITY.md): VictoriaMetrics for the
+# metrics and VictoriaLogs for the logs, on one machine (today the main server). Every machine
+# sends to it; it connects to none. The images live in playbooks/group_vars/all/images.yml
+# (victoriametrics_image, victorialogs_image).
+
+obs_store_state: present
+
+# Where the data lives: a folder of this machine, one subfolder per base (metrics/, logs/).
+# Default: the home of the service user, on the internal disk. Its final place is an external
+# disk encrypted with LUKS2 that the operator prepares by hand (docs/OPERATIONS.md): then
+# write its mount point here and set obs_store_encrypted to true. Moving it: docs/OBSERVABILITY.md,
+# section 6.
+obs_store_dir: "{{ obs_store_home }}/.local/share/infra-podman/{{ obs_store_name }}"
+
+# true: the apply stops unless obs_store_dir is on an encrypted device (dm-crypt, LUKS) that is
+# already open and mounted. Ansible never formats, encrypts or mounts disks (R62). The logs of
+# other machines carry personal data and only go to an encrypted store (SPEC 4.8).
+obs_store_encrypted: false
+
+# How long each base keeps its data (R62). VictoriaMetrics and VictoriaLogs syntax: a number
+# and h, d, w, y.
+obs_store_metrics_retention: 1y
+obs_store_logs_retention: 90d
+
+# Where each base listens (docs/services/README.md, section 4; R55). Inside the containers,
+# VictoriaMetrics listens on 8428 and VictoriaLogs on 9428, their own defaults. The machines
+# send to the tailscale_serve ports; leave tailscale_serve out where there is no Tailscale (the
+# DEV VM, CI). To change it, write the whole value in the data repository.
+# Infrastructure ports, below 18100: docs/ARCHITECTURE.md, section 4.
+obs_store_metrics_networking:
+  inbound:
+    publish: ["127.0.0.1:18010:8428"]
+    tailscale_serve: [18010]
+obs_store_logs_networking:
+  inbound:
+    publish: ["127.0.0.1:18011:9428"]
+    tailscale_serve: [18011]
+obs_store_metrics_publish: "{{ (obs_store_metrics_networking.inbound | default({})).publish | default([]) }}"
+obs_store_logs_publish: "{{ (obs_store_logs_networking.inbound | default({})).publish | default([]) }}"
+obs_store_tailscale_serve: >-
+  {{ ((obs_store_metrics_networking.inbound | default({})).tailscale_serve | default([]))
+     + ((obs_store_logs_networking.inbound | default({})).tailscale_serve | default([])) }}
+
+# Resource limits of each container (R46). Memory and CPU go through PodmanArgs=
+# (docs/COMPATIBILITY.md: no Memory= key in 4.9). Both size their caches from the memory limit.
+# Go starts a thread per CPU of the machine: the process limit leaves room for that.
+obs_store_metrics_memory: 1g
+obs_store_metrics_cpus: "2"
+obs_store_logs_memory: 1g
+obs_store_logs_cpus: "2"
+obs_store_pids_limit: 500
+
+# Home of the service user. Overwritten by the role with the real one (getent); this value
+# only serves to render the templates in CI.
+obs_store_home: /home/svc_runner
+
+# Names (SPEC 4.12, docs/NAMING.md: short name obs). Derived; do not override.
+obs_store_name: "{{ infra_env }}-obs"
+obs_store_metrics_name: "{{ obs_store_name }}-metrics"
+obs_store_logs_name: "{{ obs_store_name }}-logs"
+obs_store_metrics_dir: "{{ obs_store_dir }}/metrics"
+obs_store_logs_dir: "{{ obs_store_dir }}/logs"
+
+# What quadlet_deploy installs, and what CI renders (scripts/render-quadlets.yml).
+obs_store_quadlet_units:
+  - template: obs-metrics.container.j2
+    name: "{{ obs_store_metrics_name }}.container"
+  - template: obs-metrics.network.j2
+    name: "{{ obs_store_metrics_name }}-net.network"
+  - template: obs-logs.container.j2
+    name: "{{ obs_store_logs_name }}.container"
+  - template: obs-logs.network.j2
+    name: "{{ obs_store_logs_name }}-net.network"

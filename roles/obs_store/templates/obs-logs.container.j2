@@ -1,0 +1,43 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Observability store, logs (SPEC 4.8, R62): VictoriaLogs, single node. The machines
+# send to it with systemd-journal-upload; it connects to none. Its data is a folder of the
+# machine, obs_store_dir, not a Podman volume: it may live on an encrypted external disk.
+# Published where obs_store_logs_networking says (R55): by default on 127.0.0.1, and the
+# other machines reach it through `tailscale serve`.
+[Unit]
+Description=Observability store, logs, VictoriaLogs ({{ infra_env }})
+
+[Container]
+ContainerName={{ obs_store_logs_name }}
+Image={{ victorialogs_image }}
+Label=infra.env={{ infra_env }}
+Label=infra.app=obs
+Label=infra.component=logs
+Label=infra.managed-by=infra-podman
+# Logs to the journal of the service user, whatever the default of Podman on the machine
+# (SPEC 4.8, R60).
+LogDriver=journald
+
+Volume={{ obs_store_logs_dir }}:/storage:Z
+# The arguments of /victoria-logs-prod, the image's entrypoint.
+Exec=-storageDataPath=/storage -retentionPeriod={{ obs_store_logs_retention }} -httpListenAddr=:9428
+# Its own internal network: no way out (R58). The ports are published from it.
+Network={{ obs_store_logs_name }}-net.network
+{% for obs_store_published in obs_store_logs_publish %}
+PublishPort={{ obs_store_published }}
+{% endfor %}
+
+# Resource limits (R46): the only place they are written.
+PodmanArgs=--memory={{ obs_store_logs_memory }} --cpus={{ obs_store_logs_cpus }}
+PidsLimit={{ obs_store_pids_limit }}
+ReadOnly=true
+Tmpfs=/tmp
+DropCapability=all
+NoNewPrivileges=true
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

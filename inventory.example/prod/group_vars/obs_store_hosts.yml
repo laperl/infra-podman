@@ -1,0 +1,17 @@
+---
+# EXAMPLE (SPEC 4.13). The observability store (roles/obs_store/defaults/main.yml, R62,
+# docs/OBSERVABILITY.md). Everything has a default: write only what you change.
+
+# Where the data lives. Until the encrypted disk arrives, the default (the home of the service
+# user, on the internal disk) and only this machine's own data (phase 3a). With the disk
+# (phase 3b): its mount point, and obs_store_encrypted true.
+# obs_store_dir: /srv/obs
+# obs_store_encrypted: true
+
+# How long each base keeps its data.
+# obs_store_metrics_retention: 1y
+# obs_store_logs_retention: 90d
+
+# Where they listen; the other machines send to the tailscale_serve ports.
+# obs_store_metrics_networking: {inbound: {publish: ["127.0.0.1:18010:8428"], tailscale_serve: [18010]}}
+# obs_store_logs_networking: {inbound: {publish: ["127.0.0.1:18011:9428"], tailscale_serve: [18011]}}

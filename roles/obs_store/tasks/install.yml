@@ -1,0 +1,92 @@
+---
+# The data folder. With obs_store_encrypted, it must already be an open, mounted encrypted
+# device: Ansible never formats, encrypts or mounts a disk (R62; docs/OPERATIONS.md).
+- name: Find the device that holds the data folder
+  ansible.builtin.command:
+    argv: [findmnt, --noheadings, --nofsroot, --output, SOURCE, --target, "{{ obs_store_dir }}"]
+  register: obs_store_source
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: obs_store_encrypted
+
+# lsblk --inverse walks from the file system down to the disk: LUKS shows as a crypt layer,
+# also under LVM.
+- name: Read the layers of that device
+  ansible.builtin.command:
+    argv: [lsblk, --inverse, --noheadings, --output, TYPE, "{{ obs_store_source.stdout | trim }}"]
+  register: obs_store_layers
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: obs_store_encrypted and obs_store_source.rc == 0
+
+- name: Require the encrypted disk
+  ansible.builtin.assert:
+    that:
+      - obs_store_source.rc == 0
+      - obs_store_layers.rc == 0
+      - "'crypt' in obs_store_layers.stdout_lines | map('trim')"
+    fail_msg: >-
+      obs_store_encrypted is true, but {{ obs_store_dir }} is not on an open encrypted device
+      (found: {{ obs_store_source.stdout | default('') | trim | default('nothing', true) }}).
+      Is the disk connected, unlocked and mounted? Preparing it: docs/OPERATIONS.md. Nothing
+      was changed.
+    quiet: true
+  when: obs_store_encrypted
+
+# Owned by the service user, which is root inside the rootless containers. On an encrypted
+# disk the folder is its mount point, prepared by hand: only its subfolders are made here.
+- name: Create the data folder
+  ansible.builtin.file:
+    path: "{{ obs_store_dir }}"
+    state: directory
+    owner: "{{ service_user }}"
+    group: "{{ service_user }}"
+    mode: "0700"
+  become: true
+  when: not obs_store_encrypted
+
+- name: Create the folder of each base
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ service_user }}"
+    group: "{{ service_user }}"
+    mode: "0700"
+  become: true
+  loop:
+    - "{{ obs_store_metrics_dir }}"
+    - "{{ obs_store_logs_dir }}"
+
+- name: Deploy with quadlet_deploy
+  ansible.builtin.include_role:
+    name: quadlet_deploy
+  vars:
+    quadlet_deploy_units: "{{ obs_store_quadlet_units }}"
+    quadlet_deploy_images:
+      - "{{ victoriametrics_image }}"
+      - "{{ victorialogs_image }}"
+    quadlet_deploy_state: present
+
+# Both answer "OK" on /health once they can take data. Asked from the machine, on the first
+# <address>:<host port> of each publish list, so it does not depend on what each minimal image
+# carries inside (R62).
+- name: Wait until both bases answer
+  ansible.builtin.uri:
+    url: "http://{{ item.split(':')[0] }}:{{ item.split(':')[1] }}/health"
+    return_content: true
+  register: obs_store_health
+  until: obs_store_health.status == 200 and 'OK' in obs_store_health.content
+  retries: 30
+  delay: 2
+  loop:
+    - "{{ obs_store_metrics_publish[0] }}"
+    - "{{ obs_store_logs_publish[0] }}"
+  when: not ansible_check_mode
+
+- name: Expose them through Tailscale
+  ansible.builtin.include_role:
+    name: tailscale_serve
+  vars:
+    tailscale_serve_ports: "{{ obs_store_tailscale_serve }}"
