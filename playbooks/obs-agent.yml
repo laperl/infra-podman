@@ -1,0 +1,11 @@
+---
+# Phase 3a: the observability agents (SPEC 4.8, R62, docs/OBSERVABILITY.md) on every machine in
+# obs_agent_hosts: node_exporter, the GPU, vmagent and systemd-journal-upload. Needs the base
+# playbook, and the store (obs-store) installed first. Asks for sudo (packages, system units).
+#   ./deploy.sh plan obs-agent --limit servidor
+- name: Observability agents
+  hosts: obs_agent_hosts
+  gather_facts: true
+  gather_subset: [min]
+  roles:
+    - obs_agent

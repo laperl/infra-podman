@@ -24,6 +24,7 @@ El día a día: qué hay en marcha, cómo van las copias, cómo lanzar algo a ma
 | `prod-backup-copy` (envío al servidor principal) | Portátil | **Duerme** y despierta un rato | `prod-backup-copy.timer`, cada hora a y media |
 | `prod-backup-server` (recibe las copias) | Servidor principal | **Siempre** | systemd, al encender |
 | `prod-obs-metrics` y `prod-obs-logs` (el almacén de la observabilidad: VictoriaMetrics y VictoriaLogs, [`OBSERVABILITY.md`](OBSERVABILITY.md)) | Servidor principal | **Siempre** | systemd, al encender |
+| `prod-obs-agent` (`vmagent`) y, del sistema, `prometheus-node-exporter`, `systemd-journal-upload` e `infra-podman-obs-gpu.timer` (los agentes de la observabilidad) | Cada máquina de `obs_agent_hosts` (hoy, el servidor principal) | **Siempre** | systemd, al encender |
 
 Si el portátil estaba apagado a la hora de un temporizador, la tarea se hace al encenderlo. Además, en **tu** usuario del portátil, `infra-podman-backup-notify.timer` mira cada hora cómo van las copias y te avisa en el escritorio si algo falla. No es un contenedor.
 
@@ -238,6 +239,17 @@ curl -s http://127.0.0.1:18011/health; echo
 ```
 
 Tiene que salir `active` dos veces y `OK` dos veces. `sudo tailscale serve status` tiene que mostrar los puertos 18010 y 18011. Sus interfaces web, desde el portátil por Tailscale: `http://<servidor>:18010/vmui` (métricas) y `http://<servidor>:18011/select/vmui` (logs), con el nombre del servidor en tu red de Tailscale.
+
+Los agentes, en cada máquina que envía (hoy, el servidor principal):
+
+<!-- test: healthy-obs-agent -->
+```bash
+systemctl is-active prometheus-node-exporter.service systemd-journal-upload.service infra-podman-obs-gpu.timer
+svc systemctl --user is-active prod-obs-agent.service
+curl -s http://127.0.0.1:8429/health; echo
+```
+
+Tiene que salir `active` cuatro veces y `OK`. En la web de métricas, `node_load1{machine="<máquina>"}` muestra datos de los últimos minutos; en la de logs, `_SYSTEMD_USER_UNIT:"prod-obs-agent.service"` muestra sus líneas.
 
 Si algo no sale así: los logs del apartado 2 y [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
 

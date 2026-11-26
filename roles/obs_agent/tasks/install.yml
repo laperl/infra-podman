@@ -1,0 +1,186 @@
+---
+# 1. node_exporter, the Ubuntu package, only on 127.0.0.1.
+
+# Another node_exporter (for example in Docker) would hold the port: the new one would not
+# start. Said clearly, before installing anything.
+- name: See who listens on the node_exporter port
+  ansible.builtin.command:
+    argv: [ss, --listening, --tcp, --numeric, --processes, --no-header, "sport = :{{ obs_agent_node_exporter_port }}"]
+  register: obs_agent_port_owner
+  changed_when: false
+  check_mode: false
+  become: true
+
+- name: Require the port free, or ours
+  ansible.builtin.assert:
+    that: >-
+      obs_agent_port_owner.stdout | trim == ''
+      or 'prometheus-node' in obs_agent_port_owner.stdout
+    fail_msg: >-
+      Port {{ obs_agent_node_exporter_port }} is taken by another program: {{ obs_agent_port_owner.stdout | trim }}.
+      Usually the old node_exporter in Docker: stop it first (docs/OBSERVABILITY.md, section 8).
+      Nothing was changed.
+    quiet: true
+
+# Before the package: dpkg keeps an existing configuration file (force-confold, the default
+# of the apt module), so it never starts listening on every interface.
+- name: Configure node_exporter
+  ansible.builtin.template:
+    src: prometheus-node-exporter.default.j2
+    dest: /etc/default/prometheus-node-exporter
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Restart node_exporter (obs_agent)
+
+# Without its recommended collectors: they add timers this role does not need.
+- name: Install node_exporter and systemd-journal-upload
+  ansible.builtin.apt:
+    name: [prometheus-node-exporter, systemd-journal-remote]
+    install_recommends: false
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+  register: obs_agent_packages
+
+# In a plan on a machine without the packages, their services do not exist yet: what would
+# be started is said by the install above.
+- name: Note whether the services exist yet
+  ansible.builtin.set_fact:
+    obs_agent_services_exist: "{{ not (ansible_check_mode and obs_agent_packages is changed) }}"
+
+- name: Keep node_exporter on
+  ansible.builtin.systemd_service:
+    name: prometheus-node-exporter.service
+    enabled: true
+    state: started
+  become: true
+  when: obs_agent_services_exist
+
+# 2. The GPU, through the textfile collector.
+- name: Create the folder of the GPU script
+  ansible.builtin.file:
+    path: "{{ obs_agent_gpu_script | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: obs_agent_gpu
+
+- name: Install the GPU script
+  ansible.builtin.copy:
+    src: obs-gpu-metrics
+    dest: "{{ obs_agent_gpu_script }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: obs_agent_gpu
+
+- name: Install the GPU units
+  ansible.builtin.template:
+    src: "obs-gpu.{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ obs_agent_gpu_unit }}.{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [service, timer]
+  become: true
+  register: obs_agent_gpu_units
+  when: obs_agent_gpu
+
+- name: Keep the GPU timer on
+  ansible.builtin.systemd_service:
+    name: "{{ obs_agent_gpu_unit }}.timer"
+    enabled: true
+    state: started
+    daemon_reload: "{{ obs_agent_gpu_units is changed }}"
+  become: true
+  when: obs_agent_gpu and not ansible_check_mode
+
+# 3. systemd-journal-upload, to the store.
+- name: Create the configuration folders of systemd-journal-upload
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/systemd/journal-upload.conf.d
+    - /etc/systemd/system/systemd-journal-upload.service.d
+  become: true
+
+- name: Point systemd-journal-upload to the store, and start it again when it stops
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - {src: journal-upload.conf.j2, dest: /etc/systemd/journal-upload.conf.d/infra-podman.conf}
+    - {src: journal-upload.service.conf.j2, dest: /etc/systemd/system/systemd-journal-upload.service.d/infra-podman.conf}
+  become: true
+  notify: Restart systemd-journal-upload (obs_agent)
+
+- name: Keep systemd-journal-upload on
+  ansible.builtin.systemd_service:
+    name: systemd-journal-upload.service
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  when: obs_agent_services_exist
+
+# 4. vmagent, as a container of the service user.
+- name: Create the folders of vmagent
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ service_user }}"
+    group: "{{ service_user }}"
+    mode: "0700"
+  loop:
+    - "{{ obs_agent_config_dir }}"
+    - "{{ obs_agent_queue_dir }}"
+  become: true
+
+- name: Write what vmagent reads
+  ansible.builtin.template:
+    src: scrape.yml.j2
+    dest: "{{ obs_agent_config_dir }}/scrape.yml"
+    owner: "{{ service_user }}"
+    group: "{{ service_user }}"
+    mode: "0600"
+  become: true
+
+- name: Hash what vmagent reads, for its unit
+  ansible.builtin.set_fact:
+    obs_agent_config_hash: "{{ lookup('ansible.builtin.template', 'scrape.yml.j2') | hash('sha256') }}"
+
+- name: Deploy vmagent with quadlet_deploy
+  ansible.builtin.include_role:
+    name: quadlet_deploy
+  vars:
+    quadlet_deploy_units: "{{ obs_agent_quadlet_units }}"
+    quadlet_deploy_images: ["{{ vmagent_image }}"]
+    quadlet_deploy_state: present
+
+- name: Run the handlers of the agents
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait until node_exporter and vmagent answer
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ item }}"
+    return_content: true
+  register: obs_agent_answer
+  until: obs_agent_answer.status == 200
+  retries: 30
+  delay: 2
+  loop:
+    - "{{ obs_agent_node_exporter_port }}/metrics"
+    - "{{ obs_agent_vmagent_port }}/health"
+  when: not ansible_check_mode

@@ -1,0 +1,9 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# systemd-journal-upload exits when the store is unreachable. Started again after a pause,
+# without a limit of attempts; it resumes from its saved cursor (roles/obs_agent, R62).
+[Unit]
+StartLimitIntervalSec=0
+
+[Service]
+Restart=always
+RestartSec={{ obs_agent_upload_retry }}

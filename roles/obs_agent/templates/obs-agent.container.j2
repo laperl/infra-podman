@@ -1,0 +1,43 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Observability agent (SPEC 4.8, R62): vmagent reads the metrics of this machine on
+# 127.0.0.1 and sends them to the store. While the store is unreachable it keeps them in its
+# queue on disk and sends them when the connection comes back.
+# Scrape configuration: {{ obs_agent_config_hash }}
+# (its hash: a new configuration changes this unit, so the container restarts with it.)
+[Unit]
+Description=Observability agent, vmagent ({{ infra_env }})
+
+[Container]
+ContainerName={{ obs_agent_name }}
+Image={{ vmagent_image }}
+Label=infra.env={{ infra_env }}
+Label=infra.app=obs
+Label=infra.component=agent
+Label=infra.managed-by=infra-podman
+# Logs to the journal of the service user (SPEC 4.8, R60).
+LogDriver=journald
+
+# A rootless container does not reach the 127.0.0.1 of the machine, where the exporters
+# listen, without slirp4netns or pasta options, which are forbidden. Approved exception: it
+# listens only on 127.0.0.1, has no secrets and only connects to the store (R62).
+# policy-exception: host-network (R62)
+Network=host
+Volume={{ obs_agent_config_dir }}/scrape.yml:/etc/vmagent/scrape.yml:ro,Z
+Volume={{ obs_agent_queue_dir }}:/queue:Z
+# The arguments of /vmagent-prod, the image's entrypoint.
+Exec=-promscrape.config=/etc/vmagent/scrape.yml -remoteWrite.url=http://{{ obs_agent_store }}:{{ obs_agent_metrics_port }}/api/v1/write -remoteWrite.label=machine={{ obs_agent_machine }} -remoteWrite.tmpDataPath=/queue -remoteWrite.maxDiskUsagePerURL={{ obs_agent_queue_max }} -httpListenAddr=127.0.0.1:{{ obs_agent_vmagent_port }}
+
+# Resource limits (R46): the only place they are written.
+PodmanArgs=--memory={{ obs_agent_memory }} --cpus={{ obs_agent_cpus }}
+PidsLimit={{ obs_agent_pids_limit }}
+ReadOnly=true
+Tmpfs=/tmp
+DropCapability=all
+NoNewPrivileges=true
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Stands in for nvidia-smi on the runner, which has no GPU (obs-agent job). The values are the
+# ones the operator's server gave on 2026-11-24, memory left out as it is there ([N/A]).
+echo "0, 36, 0, 10.02, 2398"

@@ -41,3 +41,7 @@ firefly_importer_instances:
   - name: ci
     networking: {inbound: {publish: ["127.0.0.1:18115:8080"]}, connects_to: [ff-ci]}
     client_id: 9
+
+# The agent sends to a store on another machine, by its name in the Tailscale network.
+obs_agent_store: obs-store.example.ts.net
+obs_agent_machine: ci

@@ -1,0 +1,65 @@
+---
+# Observability agents of one machine (SPEC 4.8, R62). See defaults/main.yml.
+
+- name: Check the agent settings
+  ansible.builtin.assert:
+    that:
+      - obs_agent_state in ['present', 'absent']
+      - vmagent_image is match('^[^ ]+@sha256:[0-9a-f]{64}$')
+      - obs_agent_store is string and obs_agent_store is match('^[A-Za-z0-9.:-]+$')
+      - obs_agent_machine is match('^[A-Za-z0-9._-]+$')
+      - obs_agent_scrape_interval is match('^[0-9]+[smh]$')
+      - obs_agent_gpu_interval is match('^[0-9]+[smh]$')
+      - obs_agent_upload_retry is match('^[0-9]+[smh]$')
+      - obs_agent_queue_max is match('^[0-9]+[KMG]B$')
+      - obs_agent_gpu is boolean
+      - obs_agent_extra_targets is sequence and obs_agent_extra_targets is not string
+      - obs_agent_extra_targets | rejectattr('job', 'defined') | list | length == 0
+      - obs_agent_extra_targets | map(attribute='target') | map('string')
+        | select('match', '^127\.0\.0\.1:[0-9]{1,5}$') | list | length == obs_agent_extra_targets | length
+    fail_msg: >-
+      vmagent_image pinned by digest (D6); obs_agent_store the name or address of the store
+      (required on every machine but the store's own); obs_agent_machine letters, digits, ._-;
+      intervals like 30s; obs_agent_queue_max like 1GB; obs_agent_gpu true or false;
+      obs_agent_extra_targets a list of {job, target: "127.0.0.1:<port>", path}
+      (roles/obs_agent/defaults/main.yml).
+    quiet: true
+
+# The logs of other machines carry personal data: they only go to a store on an encrypted
+# disk (SPEC 4.8, R62). Phase 3b, once the disk is there.
+- name: Require an encrypted store for the logs of other machines
+  ansible.builtin.assert:
+    that: >-
+      inventory_hostname in groups.get('obs_store_hosts', [])
+      or (groups.get('obs_store_hosts', []) | length == 1
+          and hostvars[groups['obs_store_hosts'][0]].obs_store_encrypted | default(false) | bool)
+    fail_msg: >-
+      This machine is not the one of the store, and the store is not on an encrypted disk
+      (obs_store_encrypted). Its logs would leave the machine to an unencrypted disk: not
+      allowed (SPEC 4.8, R62). It comes in phase 3b, with the disk. Nothing was changed.
+    quiet: true
+  when: obs_agent_state == 'present'
+
+- name: Only Ubuntu for now
+  ansible.builtin.assert:
+    that: ansible_facts['distribution'] == 'Ubuntu'
+    fail_msg: >-
+      The agents install Ubuntu packages; Fedora Atomic (the laptop) comes in phase 3b
+      (SPEC 7.1). Nothing was changed.
+    quiet: true
+
+- name: Read the service user
+  ansible.builtin.include_role:
+    name: service_user
+
+- name: Set the paths of the service user
+  ansible.builtin.set_fact:
+    obs_agent_home: "{{ service_user_home }}"
+
+- name: Install the agents
+  ansible.builtin.include_tasks: install.yml
+  when: obs_agent_state == 'present'
+
+- name: Remove the agents
+  ansible.builtin.include_tasks: remove.yml
+  when: obs_agent_state == 'absent'

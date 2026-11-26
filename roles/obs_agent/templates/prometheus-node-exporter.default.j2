@@ -1,0 +1,4 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Options of node_exporter (roles/obs_agent, R62). Only on 127.0.0.1: vmagent reads it there.
+# Written before the package is installed, so it never starts listening everywhere.
+ARGS="--web.listen-address=127.0.0.1:{{ obs_agent_node_exporter_port }} --collector.textfile.directory={{ obs_agent_textfile_dir }}"

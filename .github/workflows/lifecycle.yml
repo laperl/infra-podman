@@ -1470,10 +1470,101 @@ jobs:
             echo "::warning title=$u journal::${out:-<empty>}"
           done
 
+  obs-agent:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.jobs), 'obs-agent')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      INV: tests/lifecycle/inventory.yml
+      CHECK: tests/lifecycle/check-obs_agent.sh
+      AS: tests/lifecycle/as-svc.sh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same reason as in the base job.
+      - name: Make the runner look like a normal server
+        run: sudo sed -i '/^XDG_/d' /etc/environment
+
+      - name: Install Podman 4.9 from Ubuntu 24.04
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq podman
+          podman --version | grep -Eq ' 4\.9\.' || { echo "Expected Podman 4.9"; exit 1; }
+
+      - name: Install pinned ansible-core
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --requirement scripts/requirements-lint.txt
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Service user
+        run: tests/lifecycle/playbook.sh -i "$INV" playbooks/base.yml > base.log
+
+      - name: The store, on this same machine, and the fake nvidia-smi
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/obs-store.yml > store.log
+          sudo install -m 0755 tests/lifecycle/fake-nvidia-smi /usr/local/bin/fake-nvidia-smi
+
+      # The old node_exporter of the server, in Docker, holds this port: a clear refusal first.
+      - name: With the node_exporter port taken, expecting a clear refusal
+        run: |
+          python3 -m http.server 9100 --bind 127.0.0.1 > /dev/null 2>&1 &
+          taker=$!
+          sleep 2
+          if ansible-playbook -i "$INV" playbooks/obs-agent.yml > refusal.log 2>&1; then
+            kill "$taker"; echo "::error::installed with the port taken"; exit 1
+          fi
+          kill "$taker"
+          grep -q 'is taken by another program' refusal.log || { cat refusal.log; echo "::error::unexpected refusal"; exit 1; }
+          if dpkg -s prometheus-node-exporter > /dev/null 2>&1; then echo "::error::the refusal installed packages"; exit 1; fi
+
+      - name: Plan, apply, apply again (zero changes), plan again (zero changes)
+        run: |
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/obs-agent.yml --check --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/obs-agent.yml --diff 2>&1 | tee -a all.log
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/obs-agent.yml 2>&1 | tee second.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' second.log || { echo "::error::the second apply changed something"; exit 1; }
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/obs-agent.yml --check 2>&1 | tee plan.log | tee -a all.log
+          grep -Eq 'changed=0 +unreachable=0 +failed=0' plan.log || { echo "::error::the plan after apply shows changes"; exit 1; }
+
+      - name: The four agents on, only on 127.0.0.1, GPU read
+        run: $CHECK running
+
+      - name: Metrics and logs of the machine reach the store
+        run: $CHECK arrived
+
+      - name: A minute without the store loses nothing
+        run: $CHECK offline
+
+      - name: The manual (docs/OPERATIONS.md, section 4) sees them healthy; the check playbook, declared
+        run: |
+          tests/lifecycle/check-operations.sh obs-agent
+          tests/lifecycle/playbook.sh -i "$INV" playbooks/check.yml 2>&1 | tee check.log
+          grep -q 'SOBRA' check.log || { echo "::error::the check playbook printed no report"; exit 1; }
+          if sed -n '/SOBRA/,/RESUMEN/p' check.log | grep -q 'de obs)'; then
+            echo "::error::the check playbook reports the agent as left over"; exit 1
+          fi
+
+      - name: Diagnose
+        if: failure()
+        run: |
+          tests/lifecycle/diagnose.sh
+          for u in prometheus-node-exporter systemd-journal-upload infra-podman-obs-gpu; do
+            out=$(sudo journalctl -u $u.service --no-pager -o cat | tail -30 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::warning title=$u journal::${out:-<empty>}"
+          done
+          out=$(sudo journalctl _SYSTEMD_USER_UNIT=dev-obs-agent.service --no-pager -o cat | tail -40 \
+            | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+          echo "::warning title=dev-obs-agent journal::${out:-<empty>}"
+
   # The one result to require, if main is ever protected: it fails when a job that had to
   # run failed or was cancelled; jobs skipped because the change does not touch them pass.
   lifecycle-ok:
-    needs: [changes, base, postgres, firefly, pgadmin, firefly_importer, backup, backup-copy, obs-store]
+    needs: [changes, base, postgres, firefly, pgadmin, firefly_importer, backup, backup-copy, obs-store, obs-agent]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5

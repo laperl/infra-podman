@@ -610,6 +610,15 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
   - **Nombres y puertos:** nombre corto `obs` ([`NAMING.md`](NAMING.md)): `<entorno>-obs-metrics` (VictoriaMetrics) y `<entorno>-obs-logs` (VictoriaLogs), en `127.0.0.1:18010` y `127.0.0.1:18011`, con `tailscale serve` en los mismos puertos.
   - **Los datos, una carpeta y no un volumen de Podman** (`obs_store_dir`): así pueden estar en un disco externo y moverse copiando una carpeta. Con `obs_store_encrypted: true`, el `apply` se para si esa carpeta no está en un dispositivo cifrado abierto y montado.
   - **Sin healthcheck dentro de los contenedores:** el rol espera a que `/health` responda desde la máquina. Así no depende de qué programas traiga cada imagen, que son mínimas (la de VictoriaLogs, sin shell).
+  - **Los agentes (rol `obs_agent`):**
+    - `node_exporter` y `systemd-journal-upload`, paquetes de Ubuntu, sin sus recomendados.
+    - La configuración de `node_exporter` se escribe antes de instalar el paquete, para que nunca escuche en todas las interfaces.
+    - Si otro programa ocupa su puerto (el `node_exporter` viejo de Docker), el `apply` se para antes de cambiar nada.
+    - `systemd-journal-upload` se para cuando el almacén no responde. Un drop-in de systemd lo vuelve a arrancar cada minuto, sin límite de intentos, y sigue desde su cursor. Así se cumple «sin reintentar sin pausa».
+    - La GPU: `nvidia-smi` cada 30 s, como usuario `prometheus`, en métricas `obs_gpu_*`. Se omite lo que da `[N/A]`.
+    - VictoriaLogs agrupa los logs también por `_SYSTEMD_USER_UNIT` (`-journald.streamFields`). Si no, todos los contenedores de `svc_runner` serían un solo grupo, `user@<uid>.service`.
+    - En una máquina que no es la del almacén, el `apply` se niega mientras el almacén no tenga `obs_store_encrypted: true` (SPEC 4.8): queda para la 3b.
+    - Una configuración nueva de `vmagent` lo reinicia: su hash va en un comentario de su unidad.
   - **Sin autenticación propia en las dos bases:** las alcanzan las máquinas de tu red de Tailscale, y desde ellas se puede leer y, en VictoriaMetrics, también borrar datos (su API de borrado). Se acepta, porque esa red es solo tuya. Si un día entra otra persona o un agente con más permisos, se protege con las claves que ofrecen (`-deleteAuthKey` y otras).
 - **Aprobada por:** el operador, el 2026-11-24 (datos en el servidor con disco USB, LUKS con TPM y clave de recuperación, retención, VictoriaMetrics y VictoriaLogs sin Postgres; al hacer merge de este PR, el resto).
 - **SPEC:** 2 (servidor principal), 4.8, 6 (fase 3), 7.1, 7.2 y 9. Cómo funciona: [`OBSERVABILITY.md`](OBSERVABILITY.md).

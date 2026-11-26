@@ -1,0 +1,16 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Writes the values of the NVIDIA GPU for node_exporter (roles/obs_agent, R62).
+[Unit]
+Description=NVIDIA GPU values for node_exporter (infra-podman)
+
+[Service]
+Type=oneshot
+User=prometheus
+Environment=NVIDIA_SMI={{ obs_agent_nvidia_smi }}
+Environment=TEXTFILE_DIR={{ obs_agent_textfile_dir }}
+ExecStart={{ obs_agent_gpu_script }}
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths={{ obs_agent_textfile_dir }}
+ProtectHome=true
+PrivateTmp=true

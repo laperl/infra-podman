@@ -2,7 +2,7 @@
 
 Para entender de un vistazo qué se mide, cómo llega al almacén, dónde se guarda y qué hacer al añadir una aplicación o una máquina. La regla es SPEC 4.8 y el porqué, R62. Las órdenes del día a día irán a [`OPERATIONS.md`](OPERATIONS.md) cuando se implante (fase 3a).
 
-> **Estado:** el almacén, en la fase 3a (rol `obs_store`, playbook `obs-store`). Los agentes de cada máquina llegan en el PR siguiente.
+> **Estado:** fase 3a. El almacén (rol `obs_store`, playbook `obs-store`) y los agentes del servidor principal (rol `obs_agent`, playbook `obs-agent`). Los de las demás máquinas, en la 3b, con el disco cifrado.
 
 ## 1. La idea en cinco líneas
 
@@ -62,10 +62,10 @@ El almacén no sabe cuántas máquinas hay: acepta lo que le llega. Cada máquin
 | Pieza | Qué hace | Dónde | Cómo se instala |
 | --- | --- | --- | --- |
 | journald | Guarda los logs de la máquina y de cada contenedor | Cada máquina | Ya está |
-| `systemd-journal-upload` | Envía el journal al almacén y recuerda por dónde iba | Cada máquina | Paquete del sistema (SPEC 7.1) |
-| `node_exporter` | Métricas del sistema: CPU, memoria, disco, red… | Cada máquina, solo en `127.0.0.1` | Paquete del sistema |
-| Temporizador con `nvidia-smi` | Métricas de la GPU, a través de `node_exporter` | Solo máquinas con GPU NVIDIA | Unidad systemd |
-| `vmagent` | Lee las métricas de la máquina y las envía; las guarda en disco si no hay conexión | Cada máquina | Contenedor Quadlet con la red del host (R62) |
+| `systemd-journal-upload` | Envía el journal al almacén y recuerda por dónde iba. Si el almacén no responde, se para; systemd lo arranca otra vez cada minuto (`obs_agent_upload_retry`) | Cada máquina | Paquete del sistema (`systemd-journal-remote`) |
+| `node_exporter` | Métricas del sistema: CPU, memoria, disco, red… | Cada máquina, `127.0.0.1:9100` | Paquete del sistema (`prometheus-node-exporter`) |
+| Temporizador con `nvidia-smi` (`infra-podman-obs-gpu.timer`) | Métricas de la GPU (`obs_gpu_*`: temperatura, uso, consumo y reloj), a través de `node_exporter` | Solo máquinas con GPU NVIDIA (`obs_agent_gpu: true`) | Unidad systemd del sistema |
+| `vmagent` (`<entorno>-obs-agent`) | Lee las métricas de la máquina y las envía con la etiqueta `machine`; las guarda en disco si no hay conexión (hasta `obs_agent_queue_max`, 1 GB) | Cada máquina, `127.0.0.1:8429` | Contenedor Quadlet con la red del host (R62) |
 | VictoriaMetrics (`<entorno>-obs-metrics`) | Guarda y sirve las métricas. Su web: `/vmui` | Solo en la máquina del almacén, `127.0.0.1:18010` | Contenedor Quadlet |
 | VictoriaLogs (`<entorno>-obs-logs`) | Guarda y sirve los logs. Su web: `/select/vmui` | Solo en la máquina del almacén, `127.0.0.1:18011` | Contenedor Quadlet |
 
@@ -75,10 +75,10 @@ Sin métricas por contenedor (`prometheus-podman-exporter`) en la fase 3: no tie
 
 Es un paso de [`services/ADD_APP.md`](services/ADD_APP.md) desde la fase 3a. Casi siempre no hay que hacer nada.
 
-1. **Logs: nada.** Con `LogDriver=journald` (R60), que ya exige el CI, sus logs llegan solos. En VictoriaLogs se buscan por la unidad del contenedor (por ejemplo `prod-ff-<instancia>.service`). Solo hay que comprobar en la ficha que la aplicación escribe sus registros en la salida estándar y no en un fichero dentro del contenedor. Si los escribe en un fichero, se configura para que no lo haga y se anota en su página.
+1. **Logs: nada.** Con `LogDriver=journald` (R60), que ya exige el CI, sus logs llegan solos. En VictoriaLogs se buscan por la unidad del contenedor: `_SYSTEMD_USER_UNIT:"prod-ff-<instancia>.service"`. Solo hay que comprobar en la ficha que la aplicación escribe sus registros en la salida estándar y no en un fichero dentro del contenedor. Si los escribe en un fichero, se configura para que no lo haga y se anota en su página.
 2. **¿La aplicación publica sus propias métricas** (una ruta `/metrics` en formato Prometheus)? Se mira en su documentación oficial, al hacer la ficha.
    - **No:** no se hace nada más.
-   - **Sí:** la aplicación publica ese puerto en `127.0.0.1`, como su web (`networking.inbound.publish`), y se añade a lo que lee `vmagent` en su máquina. No necesita `egress` ni otra red: `vmagent` tiene la red del host (R62).
+   - **Sí:** la aplicación publica ese puerto en `127.0.0.1`, como su web (`networking.inbound.publish`), y se añade a `obs_agent_extra_targets` de su máquina (`{job: <instancia>, target: "127.0.0.1:<puerto>"}`). No necesita `egress` ni otra red: `vmagent` tiene la red del host (R62).
 3. **Comprobarlo:** tras el `apply`, sus logs y, si las tiene, sus métricas aparecen en el almacén. El paso exacto irá a su página de servicio.
 
 Los datos sensibles de cada aplicación (cuentas, importes, contraseñas en un log) se revisan en la ficha: lo que no debe salir de la máquina se deja fuera.
@@ -123,3 +123,15 @@ En el repo de datos, una vez por entorno:
 3. `./deploy.sh plan obs-store --env dev`, `apply`, y la comprobación de [`OPERATIONS.md`](OPERATIONS.md), apartado 4. Después, lo mismo en `prod` con `--limit` a la máquina del almacén.
 
 No necesita secretos. Pide la contraseña de `sudo`: crea su carpeta y, en `prod`, configura `tailscale serve`.
+
+## 9. Instalar los agentes (fase 3a, en el servidor principal)
+
+Después del almacén.
+
+1. **Apaga lo viejo de Docker:** Prometheus, Grafana, su `node_exporter` y el exporter de la GPU. El `node_exporter` viejo ocupa el puerto 9100 y el `apply` se para si lo encuentra. No hay nada que conservar (R62).
+2. En el repo de datos, en `inventory/<entorno>/hosts.yml`, el grupo `obs_agent_hosts` con la misma máquina que `obs_store_hosts`. En `prod`, además, `obs_agent_gpu: true` para el servidor principal: en su `host_vars`, o en `group_vars/obs_agent_hosts.yml` si es la única máquina del grupo.
+3. `./deploy.sh plan obs-agent`, `apply`, y la comprobación de [`OPERATIONS.md`](OPERATIONS.md), apartado 4. Primero en `dev` (sin GPU) y después en `prod`.
+
+**La primera vez envía todo el journal que hay en la máquina,** no solo lo nuevo: puede tardar unos minutos. VictoriaLogs descarta lo que tenga más de 90 días.
+
+Las demás máquinas (el portátil) esperan a la 3b: el `apply` se niega mientras el almacén no esté en el disco cifrado, porque sus logs llevan datos personales (SPEC 4.8).

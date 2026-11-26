@@ -1,0 +1,36 @@
+#!/bin/sh
+# Writes the values of the NVIDIA GPUs in the textfile format of node_exporter
+# (roles/obs_agent, R62). Values that nvidia-smi gives as [N/A] are left out: on a GPU that
+# shares the memory of the system, the memory is measured by node_exporter.
+# Environment: NVIDIA_SMI (path to nvidia-smi), TEXTFILE_DIR (where node_exporter reads).
+set -eu
+out=${TEXTFILE_DIR:?}/obs-gpu.prom
+tmp=$out.$$
+if values=$("${NVIDIA_SMI:?}" --query-gpu=index,temperature.gpu,utilization.gpu,power.draw,clocks.sm \
+      --format=csv,noheader,nounits 2>/dev/null); then
+  ok=1
+else
+  ok=0
+  values=
+fi
+{
+  echo '# HELP obs_gpu_up 1 if nvidia-smi answered on the last run.'
+  echo '# TYPE obs_gpu_up gauge'
+  echo "obs_gpu_up $ok"
+  printf '%s\n' "$values" | awk -F', *' '
+    function num(v) { return v ~ /^[0-9.]+$/ }
+    NF >= 5 {
+      if (num($2)) t = t sprintf("obs_gpu_temperature_celsius{gpu=\"%s\"} %s\n", $1, $2)
+      if (num($3)) u = u sprintf("obs_gpu_utilization_ratio{gpu=\"%s\"} %s\n", $1, $3 / 100)
+      if (num($4)) p = p sprintf("obs_gpu_power_watts{gpu=\"%s\"} %s\n", $1, $4)
+      if (num($5)) c = c sprintf("obs_gpu_clock_sm_hertz{gpu=\"%s\"} %s\n", $1, $5 * 1000000)
+    }
+    END {
+      if (t != "") printf "# HELP obs_gpu_temperature_celsius GPU temperature.\n# TYPE obs_gpu_temperature_celsius gauge\n%s", t
+      if (u != "") printf "# HELP obs_gpu_utilization_ratio GPU use, 0 to 1.\n# TYPE obs_gpu_utilization_ratio gauge\n%s", u
+      if (p != "") printf "# HELP obs_gpu_power_watts GPU power draw.\n# TYPE obs_gpu_power_watts gauge\n%s", p
+      if (c != "") printf "# HELP obs_gpu_clock_sm_hertz GPU SM clock.\n# TYPE obs_gpu_clock_sm_hertz gauge\n%s", c
+    }'
+} > "$tmp"
+# Renamed in one step: node_exporter never reads half a file.
+mv "$tmp" "$out"

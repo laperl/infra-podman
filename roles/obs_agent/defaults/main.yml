@@ -1,0 +1,64 @@
+---
+# The observability agents of one machine (SPEC 4.8, R62, docs/OBSERVABILITY.md): node_exporter
+# for the system, the GPU through nvidia-smi, vmagent that reads and sends the metrics, and
+# systemd-journal-upload that sends the journal. Everything goes to the store; the store never
+# connects to the machine. Ubuntu for now; Fedora Atomic (the laptop) comes in phase 3b.
+
+obs_agent_state: present
+
+# Address of the store as seen from this machine. On the machine of the store, 127.0.0.1.
+# Elsewhere its name or address in the Tailscale network, written in the data repository.
+obs_agent_store: "{{ '127.0.0.1' if inventory_hostname in groups.get('obs_store_hosts', []) else '' }}"
+# The ports of the store (roles/obs_store, docs/ARCHITECTURE.md section 4).
+obs_agent_metrics_port: 18010
+obs_agent_logs_port: 18011
+
+# The name of this machine in the metrics (label machine). The logs carry its host name.
+obs_agent_machine: "{{ inventory_hostname }}"
+
+# How often vmagent reads the metrics, and the most the queue may keep on disk while the store
+# is unreachable (vmagent syntax: 500MB, 1GB). When full, the oldest data is dropped.
+obs_agent_scrape_interval: 30s
+obs_agent_queue_max: 1GB
+
+# Metrics that an application publishes itself (docs/OBSERVABILITY.md, section 4), on a port
+# it publishes on 127.0.0.1. Each: {job: <name>, target: "127.0.0.1:<port>", path: /metrics}.
+obs_agent_extra_targets: []
+
+# NVIDIA GPU, through nvidia-smi and the textfile collector of node_exporter.
+obs_agent_gpu: false
+obs_agent_nvidia_smi: /usr/bin/nvidia-smi
+obs_agent_gpu_interval: 30s
+
+# Where node_exporter and vmagent listen, only on 127.0.0.1.
+obs_agent_node_exporter_port: 9100
+obs_agent_vmagent_port: 8429
+
+# systemd-journal-upload stops when the store is unreachable: systemd starts it again after
+# this pause, as many times as needed. The journal keeps the logs meanwhile.
+obs_agent_upload_retry: 60s
+
+# Resource limits of vmagent (R46).
+obs_agent_memory: 256m
+obs_agent_cpus: "1"
+obs_agent_pids_limit: 200
+
+# Home of the service user. Overwritten by the role with the real one (getent); this value
+# only serves to render the templates in CI.
+obs_agent_home: /home/svc_runner
+
+# Names (SPEC 4.12, docs/NAMING.md: short name obs). Derived; do not override.
+obs_agent_name: "{{ infra_env }}-obs-agent"
+obs_agent_queue_dir: "{{ obs_agent_home }}/.local/share/infra-podman/{{ obs_agent_name }}"
+obs_agent_config_dir: "{{ obs_agent_home }}/.config/infra-podman/{{ obs_agent_name }}"
+obs_agent_textfile_dir: /var/lib/prometheus/node-exporter
+obs_agent_gpu_unit: infra-podman-obs-gpu
+obs_agent_gpu_script: /usr/local/libexec/infra-podman/obs-gpu-metrics
+
+# Hash of scrape.yml, written in the vmagent unit so that a new configuration restarts it.
+# Set by the role; this value only serves to render the templates in CI.
+obs_agent_config_hash: rendered-in-ci
+
+obs_agent_quadlet_units:
+  - template: obs-agent.container.j2
+    name: "{{ obs_agent_name }}.container"
