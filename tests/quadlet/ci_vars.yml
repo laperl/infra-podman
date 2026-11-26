@@ -8,7 +8,7 @@ demo_port: 8080
 postgres_superuser: ci_admin
 # The copy to a backup server on another machine, as in prod: the copy container gets its
 # own network with a route only to this address (R59).
-backup_remote_url: http://100.64.0.7:18000
+backup_remote_url: http://100.64.0.7:17000
 # Application databases of the instance main. Who enters them is said by the applications
 # (docs/NETWORK.md): Firefly's instance ci connects to pg-main and enters ff_ci, so the
 # postgres role renders the network of that pair, and roles/firefly renders ci joining it.
@@ -24,22 +24,22 @@ postgres_databases:
       - {name: ff_ci, group: owner}
 firefly_instances:
   - name: ci
-    networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}, connects_to: [pg-main, ff-peer]}
+    networking: {inbound: {publish: ["127.0.0.1:17100:8080"]}, connects_to: [pg-main, ff-peer]}
     pg_hba: [{instance: pg-main, database: ff_ci}]
   - name: peer
-    networking: {inbound: {publish: ["127.0.0.1:18101:8080"]}}
+    networking: {inbound: {publish: ["127.0.0.1:17101:8080"]}}
 # pgAdmin's instance ci administers pg-main (R37): the postgres role renders the network of
 # that pair, and roles/pgadmin renders ci joining it. Fictitious e-mail.
 pgadmin_instances:
   - name: ci
     email: admin@example.com
-    networking: {inbound: {publish: ["127.0.0.1:18102:8080"]}, connects_to: [pg-main]}
+    networking: {inbound: {publish: ["127.0.0.1:17110:8080"]}, connects_to: [pg-main]}
 # The Data Importer's instance ci imports into Firefly ci: roles/firefly_importer renders the
 # network of that pair from the common template, and roles/firefly renders ci joining it.
 # With one Firefly, it gets its address and a fictitious OAuth client.
 firefly_importer_instances:
   - name: ci
-    networking: {inbound: {publish: ["127.0.0.1:18115:8080"]}, connects_to: [ff-ci]}
+    networking: {inbound: {publish: ["127.0.0.1:17120:8080"]}, connects_to: [ff-ci]}
     client_id: 9
 
 # The agent sends to a store on another machine, by its name in the Tailscale network.

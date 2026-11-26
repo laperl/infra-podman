@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # The Firefly III Data Importer on the runner (docs/services/firefly_importer.md), the instance
 # ci as deployed by the firefly_importer job (tests/lifecycle/firefly_importer-vars.yml):
-# 127.0.0.1:18115, importing into Firefly casa (127.0.0.1:18100).
+# 127.0.0.1:17120, importing into Firefly casa (127.0.0.1:17100).
 # Usage: check-firefly_importer.sh <step>
-#   running    healthy, published only on 127.0.0.1:18115, /health answers OK
+#   running    healthy, published only on 127.0.0.1:17120, /health answers OK
 #   standard   its user (www-data, 33), hardening, not read-only, limits, its one network, no
 #              named volume (the anonymous one of the image is noted), and the environment the
 #              role writes (its Firefly, OAuth, logs)
@@ -14,7 +14,7 @@
 #              127.0.0.1 with that client, its own callback and PKCE (S256); Firefly answers
 #              there and asks for its login
 #   isolation  no way out: not to the internet, not to the host
-#   launcher   the operator's .desktop file is valid and opens 127.0.0.1:18115
+#   launcher   the operator's .desktop file is valid and opens 127.0.0.1:17120
 #   report     playbooks/check.yml shows it running and healthy, only on 127.0.0.1 (the log of
 #              that playbook, the second word)
 #   destroyed  container and launcher gone, and its anonymous volume (it has nothing to keep)
@@ -27,10 +27,10 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 as=$here/as-svc.sh
 step=${1:-}
 instance=ci
-port=18115
+port=17120
 name=dev-ffimport-$instance
 ff=dev-ff-casa
-ff_port=18100
+ff_port=17100
 client_id=7                 # fictitious, tests/lifecycle/firefly_importer-vars.yml
 net=dev-ffimport-$instance-ff-casa-net
 launcher=$HOME/.local/share/applications/infra-podman-$name.desktop

@@ -166,7 +166,7 @@ flowchart TD
 
 Son las conexiones con **fuera de la máquina**. El detalle, con ejemplos, está en [`services/README.md`](services/README.md), apartado 4.
 
-- **`inbound.publish`:** `<dirección>:<puerto>:<puerto interno>`, los tres obligatorios (R55). Lo habitual es `127.0.0.1` y puertos desde el 18100: así solo se entra desde la propia máquina. El puerto se publica desde la red interna del contenedor, sin darle salida.
+- **`inbound.publish`:** `<dirección>:<puerto>:<puerto interno>`, los tres obligatorios (R55). Lo habitual es `127.0.0.1` y un puerto del bloque de la aplicación ([`NAMING.md`](NAMING.md), apartado 10): así solo se entra desde la propia máquina. El puerto se publica desde la red interna del contenedor, sin darle salida.
 - **`inbound.tailscale_serve`:** puertos que Ansible sirve por Tailscale (`tailscale serve`), publicados antes en `127.0.0.1`. Hoy, el servidor de copias.
 - **`egress`:** nada (ningún sitio), una lista de direcciones o rangos IPv4 (solo a esos), o `true` (a todo). La lista es una red sin ruta por defecto, con una ruta por destino y sin DNS. **Solo limita con netavark 1.7.0 o posterior**: donde no lo hay (Ubuntu 24.04 trae el 1.4.0), la red sale a todo, y el `plan`, el `apply` y `check` lo dicen ([`COMPATIBILITY.md`](COMPATIBILITY.md)).
 - Un contenedor puede tener a la vez tubos, puertos y salida: sus tubos son internos, y solo la red de `egress` tiene ruta hacia fuera.

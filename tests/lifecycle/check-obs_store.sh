@@ -13,8 +13,8 @@ metrics=dev-obs-metrics
 logs=dev-obs-logs
 home=$(getent passwd svc_runner | cut -d: -f6)
 dir=$home/.local/share/infra-podman/dev-obs
-vm=http://127.0.0.1:18010
-vl=http://127.0.0.1:18011
+vm=http://127.0.0.1:17010
+vl=http://127.0.0.1:17011
 # fd 3 is the real stdout: a failure inside a command whose output is discarded must
 # still reach the annotations.
 exec 3>&1
@@ -45,8 +45,8 @@ case ${1:?step} in
     [[ $("$as" podman inspect -f '{{json .Config.Cmd}}' $metrics) == *'-retentionPeriod=1y'* ]] || fail "metrics retention is not 1y"
     [[ $("$as" podman inspect -f '{{json .Config.Cmd}}' $logs) == *'-retentionPeriod=90d'* ]] || fail "logs retention is not 90d"
     # Each listens only where the inventory says: 127.0.0.1, never every interface.
-    listening=$(ss -ltnH '( sport = :18010 or sport = :18011 )' | awk '{print $4}' | sort -u | tr '\n' ' ')
-    [[ $listening == '127.0.0.1:18010 127.0.0.1:18011 ' ]] || fail "listening on: $listening"
+    listening=$(ss -ltnH '( sport = :17010 or sport = :17011 )' | awk '{print $4}' | sort -u | tr '\n' ' ')
+    [[ $listening == '127.0.0.1:17010 127.0.0.1:17011 ' ]] || fail "listening on: $listening"
     # No way out: both containers are only on their own internal network.
     for c in $metrics $logs; do
       # shellcheck disable=SC2016  # a Go template, not a shell expansion

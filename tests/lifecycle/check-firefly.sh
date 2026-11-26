@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Firefly III on the runner (docs/services/firefly.md), two instances (R48) as deployed by
-# the firefly job: casa on 127.0.0.1:18100 and canary on 127.0.0.1:18101, each with its own
+# the firefly job: casa on 127.0.0.1:17100 and canary on 127.0.0.1:17101, each with its own
 # database (tests/lifecycle/firefly-vars.yml). Usage: check-firefly.sh <step> [instance]
 # (default casa):
 #   running    healthy, published only on 127.0.0.1:<its port>, /health and the login page answer
@@ -30,8 +30,8 @@ as=$here/as-svc.sh
 step=${1:-}
 instance=${2:-casa}
 case $instance in
-  casa) port=18100 other=canary ;;
-  canary) port=18101 other=casa ;;
+  casa) port=17100 other=canary ;;
+  canary) port=17101 other=casa ;;
   *) echo "unknown instance $instance" >&2; exit 2 ;;
 esac
 name=dev-ff-$instance

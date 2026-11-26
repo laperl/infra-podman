@@ -33,7 +33,7 @@ Secret=dev-backup-server-password,type=mount,target=/run/secrets/server-password
 Environment=RESTIC_PASSWORD_FILE=/run/secrets/restic-password
 Environment=RESTIC_CACHE_DIR=/tmp/restic-cache
 Environment=BACKUP_SITE=ci-site
-Environment=BACKUP_REMOTE_URL=http://100.64.0.7:18000
+Environment=BACKUP_REMOTE_URL=http://100.64.0.7:17000
 Environment=BACKUP_REMOTE_PATH=ci-site/dev-localhost
 Environment=BACKUP_REMOTE_MAX_BYTES=32212254720
 Environment=BACKUP_REMOTE_WARN_PERCENT=80

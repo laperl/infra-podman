@@ -4,12 +4,12 @@
 # (docs/NETWORK.md). Fictitious names only.
 firefly_instances:
   - name: casa
-    networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}, connects_to: [pg-main, ff-canary]}
+    networking: {inbound: {publish: ["127.0.0.1:17100:8080"]}, connects_to: [pg-main, ff-canary]}
     pg_hba: [{instance: pg-main, database: ff_casa}]
     timezone: Europe/Madrid
     start_timeout: 60
   - name: canary
-    networking: {inbound: {publish: ["127.0.0.1:18101:8080"]}, connects_to: [pg-main]}
+    networking: {inbound: {publish: ["127.0.0.1:17101:8080"]}, connects_to: [pg-main]}
     pg_hba: [{instance: pg-main, database: ff_canary}, {instance: pg-main, database: ff_casa}]
     image: firefly_ci_image
     memory: 768m

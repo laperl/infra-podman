@@ -24,13 +24,13 @@ LogDriver=journald
 # (docs/NETWORK.md). No way out (SPEC 4.4): no bank connections. It is published where the
 # operator wrote in inbound.publish (R55), from those internal networks.
 Network=dev-ffimport-ci-ff-ci-net.network
-PublishPort=127.0.0.1:18115:8080
+PublishPort=127.0.0.1:17120:8080
 
 # The image's variables, as documented in the importer's .env.example (v2.3.5).
 # Its only Firefly: by the network of the pair, and in your browser (section 3). With
 # several, both stay empty and the importer's form asks every session.
 Environment=FIREFLY_III_URL=http://dev-ff-ci:8080
-Environment=VANITY_URL=http://127.0.0.1:18100
+Environment=VANITY_URL=http://127.0.0.1:17100
 # The OAuth client of that Firefly: a number, not a secret. No personal access token.
 Environment=FIREFLY_III_CLIENT_ID=9
 Environment=FALLBACK_LOCALE=en_US

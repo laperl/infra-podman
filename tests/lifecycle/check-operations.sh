@@ -17,8 +17,8 @@
 #   restore-server    5.2  a database restored from the main server's volume, with only the restic key
 #   data-repo       5.3  the data repository from the local copy
 #   lost-laptop     5.4  the data repository from the main server's volume, cloned as on a new laptop
-# prod- names become dev- and the placeholders (<…>) the values of the runner (the
-# instance and port of the step: OPS_INSTANCE and OPS_PORT, casa and 18100 by default); a block
+# prod- names become dev-, prod ports 18xxx the DEV ones 17xxx (R63), and the placeholders (<…>) the values of the runner (the
+# instance and port of the step: OPS_INSTANCE and OPS_PORT, casa and 17100 by default); a block
 # left with a placeholder this script does not know fails, so the manual cannot drift.
 set -Eeuo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -50,10 +50,11 @@ substitute() {
   restic_image=$(sed -n 's/^restic_image: *"\([^"]*\)".*/\1/p' "$images")
   sed -E \
     -e 's/\bprod-/dev-/g' \
+    -e 's/\b18([0-9]{3})\b/17\1/g' \
     -e "s|<base>|$db|g" \
     -e 's|<superusuario>|ci_admin|g' \
     -e "s|<instancia>|${OPS_INSTANCE:-casa}|g" \
-    -e "s|<puerto>|${OPS_PORT:-18100}|g" \
+    -e "s|<puerto>|${OPS_PORT:-17100}|g" \
     -e "s|<imagen_de_restic>|$restic_image|g" \
     -e 's|<instalación>/dev-laptop|ci-site/dev-localhost|g' \
     -e "s|~/infra-podman-datos-restaurados|$work/data-restored|g" \
@@ -140,29 +141,29 @@ case $step in
     run healthy-firefly
     count_is healthy-firefly 'active' 2
     expect healthy-firefly '^sano$'
-    count_is healthy-firefly '8080/tcp -> 127.0.0.1:18100' 1
+    count_is healthy-firefly '8080/tcp -> 127.0.0.1:17100' 1
     expect healthy-firefly '^OK$'
     ;;
   pgadmin)
-    export OPS_INSTANCE=ci OPS_PORT=18102
+    export OPS_INSTANCE=ci OPS_PORT=17110
     run deployed-pgadmin
     expect deployed-pgadmin 'dev-pgadmin-ci'
     expect deployed-pgadmin '\(healthy\)'
     run healthy-pgadmin
     count_is healthy-pgadmin 'active' 1
     expect healthy-pgadmin '^sano$'
-    count_is healthy-pgadmin '8080/tcp -> 127.0.0.1:18102' 1
+    count_is healthy-pgadmin '8080/tcp -> 127.0.0.1:17110' 1
     expect healthy-pgadmin '^PING$'
     ;;
   firefly_importer)
-    export OPS_INSTANCE=ci OPS_PORT=18115
+    export OPS_INSTANCE=ci OPS_PORT=17120
     run deployed-ffimport
     expect deployed-ffimport 'dev-ffimport-ci'
     expect deployed-ffimport '\(healthy\)'
     run healthy-ffimport
     count_is healthy-ffimport 'active' 1
     expect healthy-ffimport '^sano$'
-    count_is healthy-ffimport '8080/tcp -> 127.0.0.1:18115' 1
+    count_is healthy-ffimport '8080/tcp -> 127.0.0.1:17120' 1
     expect healthy-ffimport '^OK$'
     ;;
   obs-agent)

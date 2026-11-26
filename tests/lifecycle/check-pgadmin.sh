@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # pgAdmin 4 on the runner (docs/services/pgadmin.md), the instance ci as deployed by the
-# pgadmin job (tests/lifecycle/pgadmin-vars.yml): 127.0.0.1:18102, administering pg-main.
+# pgadmin job (tests/lifecycle/pgadmin-vars.yml): 127.0.0.1:17110, administering pg-main.
 # Usage: check-pgadmin.sh <step>
-#   running    healthy, published only on 127.0.0.1:18102, /misc/ping and the login page answer
+#   running    healthy, published only on 127.0.0.1:17110, /misc/ping and the login page answer
 #   standard   its user, hardening, read-only root, limits, its one network, the secret as a file
 #   config     config_distro.py in its volume with the settings of the role (written on the
 #              first start, with the root read-only), and nothing of it in the image
@@ -13,7 +13,7 @@
 #              from anywhere else (R37)
 #   no-superuser  pgAdmin no longer declared: that line and the network of the pair are gone
 #   isolation  no way out: not to the internet, not to the host
-#   launcher   the operator's .desktop file is valid and opens 127.0.0.1:18102
+#   launcher   the operator's .desktop file is valid and opens 127.0.0.1:17110
 #   report     playbooks/check.yml shows it running and healthy, only on 127.0.0.1 (the log of
 #              that playbook, the second word)
 #   destroyed  container and launcher gone; volume kept (SPEC 4.2)
@@ -24,7 +24,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 as=$here/as-svc.sh
 step=${1:-}
 instance=ci
-port=18102
+port=17110
 name=dev-pgadmin-$instance
 volume=$name-data
 pg=dev-pg-main

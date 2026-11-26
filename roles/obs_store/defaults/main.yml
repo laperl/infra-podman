@@ -27,15 +27,16 @@ obs_store_logs_retention: 90d
 # VictoriaMetrics listens on 8428 and VictoriaLogs on 9428, their own defaults. The machines
 # send to the tailscale_serve ports; leave tailscale_serve out where there is no Tailscale (the
 # DEV VM, CI). To change it, write the whole value in the data repository.
-# Infrastructure ports, below 18100: docs/ARCHITECTURE.md, section 4.
+# Ports from the port plan (R63, playbooks/group_vars/all/ports.yml): 17010 and 17011 in DEV,
+# 18010 and 18011 in prod.
 obs_store_metrics_networking:
   inbound:
-    publish: ["127.0.0.1:18010:8428"]
-    tailscale_serve: [18010]
+    publish: ["127.0.0.1:{{ infra_port_base | int + infra_port_blocks.obs }}:8428"]
+    tailscale_serve: ["{{ infra_port_base | int + infra_port_blocks.obs }}"]
 obs_store_logs_networking:
   inbound:
-    publish: ["127.0.0.1:18011:9428"]
-    tailscale_serve: [18011]
+    publish: ["127.0.0.1:{{ infra_port_base | int + infra_port_blocks.obs + 1 }}:9428"]
+    tailscale_serve: ["{{ infra_port_base | int + infra_port_blocks.obs + 1 }}"]
 obs_store_metrics_publish: "{{ (obs_store_metrics_networking.inbound | default({})).publish | default([]) }}"
 obs_store_logs_publish: "{{ (obs_store_logs_networking.inbound | default({})).publish | default([]) }}"
 obs_store_tailscale_serve: >-

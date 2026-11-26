@@ -12,10 +12,10 @@ postgres_instances:
           - {name: ff_casa, group: owner}
 firefly_instances:
   - name: casa
-    networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}, connects_to: [pg-main]}
+    networking: {inbound: {publish: ["127.0.0.1:17100:8080"]}, connects_to: [pg-main]}
     pg_hba: [{instance: pg-main, database: ff_casa}]
 firefly_importer_instances:
   - name: ci
-    networking: {inbound: {publish: ["127.0.0.1:18115:8080"]}, connects_to: [ff-casa]}
+    networking: {inbound: {publish: ["127.0.0.1:17120:8080"]}, connects_to: [ff-casa]}
     client_id: 7
     locale: es_ES

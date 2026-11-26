@@ -35,7 +35,7 @@ Cada aplicación tiene un nombre **de código**, que se usa en el repositorio y 
 | Instancia de una aplicación | `name:` de `<app>_instances` | `^[a-z0-9]{1,14}$` | `laptop`, `casa`, `canary` |
 | Superusuario de Postgres | `superuser:` | `^[a-z_][a-z0-9_]{0,62}$`; ni `backup`, ni `public`, ni `pg_*`. Mejor uno tuyo que `postgres` | el tuyo |
 | Base y usuario de otra cosa que no es una aplicación de aquí | `databases:` | `^[a-z][a-z0-9_]*$` | `ai_reader` |
-| Entrada de una instancia | `networking.inbound.publish:` | lista de `<dirección>:<puerto>:<puerto interno>`; puertos desde 18100, uno por instancia | `["127.0.0.1:18100:8080"]` |
+| Entrada de una instancia | `networking.inbound.publish:` | lista de `<dirección>:<puerto>:<puerto interno>`; el puerto, del bloque de su aplicación (apartado 10), uno por instancia | `["127.0.0.1:18100:8080"]` |
 | Instalación | `infra_site` | `^[a-z][a-z0-9-]{1,30}$`, igual en dev y prod | tu nombre de instalación |
 
 ### De dónde sale `<instancia>`
@@ -138,8 +138,30 @@ Documentación y mensajes, en español; código, variables y commits, en inglés
 ## 9. Lista para una pieza nueva
 
 - [ ] Nombre corto nuevo en la tabla del apartado 2.
+- [ ] Su bloque de 10 puertos, el siguiente libre, en `infra_port_blocks` y en la tabla del apartado 10.
 - [ ] El operador solo escribe la instancia; el rol compone los nombres a partir del identificador.
 - [ ] Nombres explícitos y las cuatro etiquetas en cada `.container`, `.network` y `.volume`.
 - [ ] Secretos `<corto>-<instancia>-<qué>`, en `infra_secrets` y en [`SECRETS_INVENTORY.md`](SECRETS_INVENTORY.md).
 - [ ] Si usa Postgres: base y usuario `<corto>_<instancia>`, y en la instancia `connects_to: [pg-<instancia>]` y `pg_hba` con esa base ([`NETWORK.md`](NETWORK.md)).
 - [ ] Ningún entorno en un título de KeePassXC.
+
+## 10. Puertos
+
+Cada puerto de la máquina que publica esta plataforma sigue este plan (R63). Ansible rechaza un puerto fuera de él, y también el mismo puerto en dos instancias de una máquina. La fuente es [`playbooks/group_vars/all/ports.yml`](../playbooks/group_vars/all/ports.yml): esta tabla lo explica.
+
+- **El millar dice el entorno:** `17xxx` en DEV y `18xxx` en prod. Con mirar la URL sabes dónde estás, y DEV y prod no chocan aunque un día coincidan en una máquina.
+- **Infraestructura del x000 al x099; aplicaciones desde el x100.**
+- **Cada nombre corto tiene un bloque de 10 puertos.** Sus instancias van en orden: la primera, en el inicio del bloque; la segunda, el siguiente… Lo eliges tú y lo escribes en el inventario, en `networking.inbound.publish`: Ansible no lo asigna solo.
+- **Un puerto de `tailscale_serve` es el mismo número** que el de la máquina.
+
+| Bloque | Qué | DEV | Prod |
+| --- | --- | --- | --- |
+| x000–x009 | Servidor de copias (`backup`): x000 | 17000 | 18000 |
+| x010–x019 | Almacén de la observabilidad (`obs`): x010 métricas, x011 logs | 17010, 17011 | 18010, 18011 |
+| x020–x099 | Reservado para infraestructura | | |
+| x100–x109 | Firefly III (`ff`) | 17100… | 18100… |
+| x110–x119 | pgAdmin (`pgadmin`) | 17110… | 18110… |
+| x120–x129 | Data Importer de Firefly III (`ffimport`) | 17120… | 18120… |
+| x130… | La siguiente aplicación: el siguiente bloque libre | | |
+
+**Fuera del plan:** Postgres no tiene puerto (solo su socket). `node_exporter` (9100) y `vmagent` (8429) usan sus puertos conocidos, solo en `127.0.0.1` de cada máquina e iguales en DEV y prod. Todos los puertos del plan están por debajo de los que Linux usa para las conexiones salientes (32768 en adelante), así que no chocan con ellas.

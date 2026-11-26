@@ -7,7 +7,7 @@ firefly_instances:
   - name: casa                   # ^[a-z0-9]{1,14}$
     networking:
       inbound:                     # where it listens: <address>:<host port>:<container port>
-        publish: ["127.0.0.1:18100:8080"]   # Firefly listens on 8080 inside the container
+        publish: ["127.0.0.1:17100:8080"]   # Firefly listens on 8080 inside the container
       connects_to: [pg-main]       # whom it talks to on this machine: its PostgreSQL, pg-<instance>
       # egress: ["192.168.1.20"]   # where it may go out of the machine: nothing (default), a list, or true
     pg_hba:                        # which databases of that PostgreSQL it enters: its own
@@ -24,7 +24,7 @@ firefly_instances:
   # - name: canary
   #   networking:
   #     inbound:
-  #       publish: ["127.0.0.1:18101:8080"]
+  #       publish: ["127.0.0.1:17101:8080"]
   #     connects_to: [pg-main]
   #   pg_hba:
   #     - {instance: pg-main, database: ff_canary}

@@ -622,3 +622,37 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
   - **Sin autenticación propia en las dos bases:** las alcanzan las máquinas de tu red de Tailscale, y desde ellas se puede leer y, en VictoriaMetrics, también borrar datos (su API de borrado). Se acepta, porque esa red es solo tuya. Si un día entra otra persona o un agente con más permisos, se protege con las claves que ofrecen (`-deleteAuthKey` y otras).
 - **Aprobada por:** el operador, el 2026-11-24 (datos en el servidor con disco USB, LUKS con TPM y clave de recuperación, retención, VictoriaMetrics y VictoriaLogs sin Postgres; al hacer merge de este PR, el resto).
 - **SPEC:** 2 (servidor principal), 4.8, 6 (fase 3), 7.1, 7.2 y 9. Cómo funciona: [`OBSERVABILITY.md`](OBSERVABILITY.md).
+
+## 2026-11-26
+
+### R63. Plan de puertos: el entorno en el millar y un bloque de 10 por aplicación
+
+- **Decisión:**
+  - **El millar dice el entorno:** todo puerto de la máquina que publica la plataforma es `17xxx` en DEV y `18xxx` en prod.
+  - **Infraestructura y aplicaciones, separadas:** la infraestructura va del x000 al x099; las aplicaciones, desde el x100.
+  - **Un bloque de 10 por nombre corto.** El servidor de copias, x000; el almacén de la observabilidad, x010 y x011; Firefly, x100; pgAdmin, x110; el importador, x120; la siguiente aplicación, x130.
+  - **Escrito a mano y comprobado.** El puerto de cada instancia lo escribe el operador en el inventario. Ansible lo rechaza si cae fuera de su bloque o si otra instancia de la máquina ya lo usa.
+  - **Los de infraestructura salen del entorno** sin escribirlos (`infra_port_base`).
+  - **Fuente única:** [`playbooks/group_vars/all/ports.yml`](../playbooks/group_vars/all/ports.yml); lo explica [`NAMING.md`](NAMING.md), apartado 10.
+- **Motivo:** el operador lo pidió el 2026-11-26: DEV en 17000, prod en 18000, con lógica, y siempre de la misma manera.
+  - El bloque por aplicación, en vez de su idea de «básicas» y «secundarias», es para que el puerto de una instancia se deduzca sin consultar nada, y para que no haya que decidir qué es «básico» con cada aplicación nueva.
+  - Que lo compruebe Ansible sigue su regla de que las reglas no dependan de la memoria.
+- **Escritos y no asignados solos:** el operador preguntó si Ansible debería buscar un puerto libre y sumar 1. Se descartó por lo que se suele recomendar en infraestructura declarada, que el estado deseado esté escrito y no se descubra al aplicar:
+  - **No sería reproducible:** el puerto dependería del orden en que se instalan las cosas, y la misma instancia podría acabar en un puerto distinto en otra máquina o tras reinstalar.
+  - **No sería estable:** cambiaría la dirección guardada en el navegador y la dirección de vuelta de OAuth del importador, que lleva el puerto.
+  - **Calcularlo por la posición de la instancia en la lista** tampoco: quitar una instancia movería las de detrás.
+  - Escrito en el inventario, el puerto se lee en un sitio, se revisa en el commit y sale igual cada vez.
+- **Lo que se acepta:**
+  - **No protege por sí solo.** El número de puerto no protege nada; lo que protege es publicar en `127.0.0.1` (R55).
+  - **Los puertos están dentro de un rango que IANA reserva para registros** (1024 a 49151). En `127.0.0.1` y por Tailscale no choca con nada externo.
+  - **Por debajo del rango de Linux para conexiones salientes** (32768 en adelante), así que no compiten con ellas.
+- **Fuera del plan:** Postgres, que no tiene puerto. `node_exporter` (9100) y `vmagent` (8429) usan sus puertos conocidos, solo en `127.0.0.1`.
+- **Lo que cambia en el inventario del operador** (lista en el PR):
+  - **DEV:**
+    - pgAdmin, de 18110 a 17110.
+    - El importador, de 18115 a 17120.
+    - El servidor de copias, de 18000 a 17000.
+    - El almacén, de 18010/18011 a 17010/17011, si lo escribió.
+  - **Prod:** los importadores, de 18115/18116 a 18120/18121. Cada cliente OAuth de Firefly cambia su dirección de vuelta.
+- **Aprobada por:** el operador, el 2026-11-26.
+- **SPEC:** 4.3 (exposición, R55); [`NAMING.md`](NAMING.md), apartado 10.

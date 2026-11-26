@@ -44,7 +44,7 @@
       Instance {{ firefly_importer_item.name | default('?') }} of firefly_importer_instances
       (roles/firefly_importer/defaults/main.yml): name ^[a-z0-9]{1,14}$; image the name of a variable
       of images.yml (firefly_importer_..._image) pinned by digest (D6); networking.inbound.publish a
-      list like ["127.0.0.1:18115:8080"], each one <address>:<host port>:<container port>;
+      list like ["127.0.0.1:18120:8080"], each one <address>:<host port>:<container port>;
       networking takes only inbound, with only publish, and connects_to: no egress, no bank
       connections (docs/services/firefly_importer.md, section 2); networking.connects_to the Firefly
       instances of this machine it imports into, at least one, like [ff-laptop]
@@ -61,6 +61,19 @@
     quiet: true
 
 # Its home, ids and environment, read in one place (roles/service_user).
+# The port plan (R63, playbooks/group_vars/all/ports.yml, docs/NAMING.md section 10): the
+# environment and the block of the importer decide the host ports.
+- name: Check the ports against the port plan
+  vars:
+    firefly_importer_port_problems: >-
+      {{ (firefly_importer_publish
+          | port_problems(infra_apps.firefly_importer, infra_port_base, infra_port_blocks, infra_port_block_size))
+         + (infra_apps | port_clashes(hostvars[inventory_hostname])) }}
+  ansible.builtin.assert:
+    that: firefly_importer_port_problems | length == 0
+    fail_msg: "{{ firefly_importer_port_problems | join('; ') }}. Nothing was changed."
+    quiet: true
+
 - name: Read the service user
   ansible.builtin.include_role:
     name: service_user

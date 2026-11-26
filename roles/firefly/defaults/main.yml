@@ -37,7 +37,7 @@ firefly_instances: []
 
 # The instance of this call (set by the playbook). The value here only serves to render the
 # templates in CI.
-firefly_item: {name: ci, networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}, connects_to: [pg-main]}, pg_hba: [{instance: pg-main, database: ff_ci}]}
+firefly_item: {name: ci, networking: {inbound: {publish: ["127.0.0.1:17100:8080"]}, connects_to: [pg-main]}, pg_hba: [{instance: pg-main, database: ff_ci}]}
 
 # --retire <name>: the instance to stop and remove, keeping its data (playbook).
 firefly_retire: ""
