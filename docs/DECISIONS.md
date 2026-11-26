@@ -655,4 +655,4 @@ Cada entrada: fecha, decisión, motivo, quién la aprobó y dónde quedó reflej
     - El almacén, de 18010/18011 a 17010/17011, si lo escribió.
   - **Prod:** los importadores, de 18115/18116 a 18120/18121. Cada cliente OAuth de Firefly cambia su dirección de vuelta.
 - **Aprobada por:** el operador, el 2026-11-26.
-- **SPEC:** 4.3 (exposición, R55); [`NAMING.md`](NAMING.md), apartado 10.
+- **SPEC:** 4.4 (exposición y plan de puertos); [`NAMING.md`](NAMING.md), apartado 10.
