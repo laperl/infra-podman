@@ -40,7 +40,7 @@ all:
         localhost: {}
       vars:
         # No tailscale_serve: no Tailscale on the runner, as in DEV.
-        backup_server_networking: {inbound: {publish: ["127.0.0.1:18000:8000"]}}
+        backup_server_networking: {inbound: {publish: ["127.0.0.1:17000:8000"]}}
     # The observability agents (playbook obs-agent, R62), sending to the store of this same
     # machine. Short intervals so the job does not wait; a fake nvidia-smi (the runner has no
     # GPU), installed by the job.
@@ -61,8 +61,8 @@ all:
         localhost: {}
       vars:
         # No tailscale_serve: no Tailscale on the runner, as in DEV.
-        obs_store_metrics_networking: {inbound: {publish: ["127.0.0.1:18010:8428"]}}
-        obs_store_logs_networking: {inbound: {publish: ["127.0.0.1:18011:9428"]}}
+        obs_store_metrics_networking: {inbound: {publish: ["127.0.0.1:17010:8428"]}}
+        obs_store_logs_networking: {inbound: {publish: ["127.0.0.1:17011:9428"]}}
     postgres_hosts:
       hosts:
         localhost: {}
@@ -82,12 +82,12 @@ all:
         firefly_ci_image: "{{ firefly_image }}"
         firefly_instances:
           - name: casa
-            networking: {inbound: {publish: ["127.0.0.1:18100:8080"]}, connects_to: [pg-main]}
+            networking: {inbound: {publish: ["127.0.0.1:17100:8080"]}, connects_to: [pg-main]}
             pg_hba: [{instance: pg-main, database: ff_casa}]
             timezone: Europe/Madrid   # any valid zone; not UTC, to see it applied
             start_timeout: 60         # the wait test takes this long; the default is 300
           - name: canary
-            networking: {inbound: {publish: ["127.0.0.1:18101:8080"]}, connects_to: [pg-main]}
+            networking: {inbound: {publish: ["127.0.0.1:17101:8080"]}, connects_to: [pg-main]}
             pg_hba: [{instance: pg-main, database: ff_canary}, {instance: pg-main, database: ff_casa}]
             image: firefly_ci_image
             memory: 768m

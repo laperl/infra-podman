@@ -1,0 +1,19 @@
+---
+# Port plan (R63, docs/NAMING.md, section 10). Every host port of the platform follows it, and
+# Ansible refuses one outside it:
+#   - the thousand says the environment: 17xxx in DEV, 18xxx in prod;
+#   - the infrastructure lives in x000-x099, the applications from x100 on;
+#   - each short name (group_vars/all/apps.yml, NAMING.md section 2) has a block of 10: its
+#     instances take x<block>, x<block>+1… in the order you choose, written in the inventory.
+# Postgres has no port (only its socket). node_exporter (9100) and vmagent (8429) keep their
+# well-known ports, only on 127.0.0.1 of each machine. A tailscale_serve port is the same
+# number as the host port.
+infra_port_bases: {dev: 17000, prod: 18000}
+infra_port_base: "{{ infra_port_bases[infra_env] }}"
+infra_port_block_size: 10
+infra_port_blocks:
+  backup: 0        # the backup server: x000
+  obs: 10          # the observability store: x010 metrics, x011 logs
+  ff: 100          # Firefly III
+  pgadmin: 110     # pgAdmin
+  ffimport: 120    # Firefly III Data Importer

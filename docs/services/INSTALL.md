@@ -157,7 +157,7 @@ firefly_instances:
   - name: laptop                    # → prod-ff-laptop
     networking:
       inbound:
-        publish: ["127.0.0.1:18100:8080"]   # dirección:puerto:puerto interno; desde 18100, uno distinto por instancia
+        publish: ["127.0.0.1:18100:8080"]   # dirección:puerto:puerto interno; bloque de Firefly: 18100 a 18109 (DEV: 17100…)
       connects_to: [pg-laptop]      # con quién habla en la máquina: su Postgres, prod-pg-laptop
     pg_hba:                         # en qué bases de ese Postgres entra: la suya
       - {instance: pg-laptop, database: ff_laptop}
@@ -183,7 +183,7 @@ git verify-commit HEAD
 | Parámetro | Por defecto | Para qué |
 | --- | --- | --- |
 | `name` | obligatorio | La instancia, sin guiones |
-| `networking.inbound.publish` | obligatorio | Lista de `<dirección>:<puerto>:<puerto interno>` ([`README.md`](README.md), apartado 4). Para Firefly, `127.0.0.1`, un puerto desde 18100 y `8080` |
+| `networking.inbound.publish` | obligatorio | Lista de `<dirección>:<puerto>:<puerto interno>` ([`README.md`](README.md), apartado 4). Para Firefly, `127.0.0.1`, un puerto de su bloque (18100 a 18109 en prod, 17100 a 17109 en DEV; [`NAMING.md`](../NAMING.md), apartado 10) y `8080` |
 | `networking.connects_to` | obligatorio | En qué Postgres está su base, como `[pg-<instancia>]`. Solo esa ([`README.md`](README.md), apartado 4) |
 | `networking.egress` | ninguna | A dónde puede salir, si quieres que salga ([`README.md`](README.md), apartado 4) |
 | `image` | `firefly_image` | Qué imagen de `images.yml` usa (por ejemplo, una canary) |

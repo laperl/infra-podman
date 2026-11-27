@@ -7,7 +7,8 @@
 backup_server_state: present
 
 # Where it listens (docs/services/README.md, section 4; R55). Data: the port also goes into
-# backup_remote_url of the clients. Infrastructure ports: docs/ROADMAP.md (1f).
+# backup_remote_url of the clients. Its port follows the port plan (R63,
+# playbooks/group_vars/all/ports.yml): 17000 in DEV, 18000 in prod.
 #   publish:         a list of <address>:<host port>:<container port>, as Podman and Docker
 #                    write them; rest-server listens on 8000 inside
 #   tailscale_serve: ports to forward from the machine's Tailscale address, as root. Leave
@@ -16,8 +17,8 @@ backup_server_state: present
 # To change it, write the whole value in the data repository.
 backup_server_networking:
   inbound:
-    publish: ["127.0.0.1:18000:8000"]
-    tailscale_serve: [18000]
+    publish: ["127.0.0.1:{{ infra_port_base | int + infra_port_blocks.backup }}:8000"]
+    tailscale_serve: ["{{ infra_port_base | int + infra_port_blocks.backup }}"]
 backup_server_publish: "{{ (backup_server_networking.inbound | default({})).publish | default([]) }}"
 backup_server_tailscale_serve: "{{ (backup_server_networking.inbound | default({})).tailscale_serve | default([]) }}"
 

@@ -9,9 +9,9 @@ obs_agent_state: present
 # Address of the store as seen from this machine. On the machine of the store, 127.0.0.1.
 # Elsewhere its name or address in the Tailscale network, written in the data repository.
 obs_agent_store: "{{ '127.0.0.1' if inventory_hostname in groups.get('obs_store_hosts', []) else '' }}"
-# The ports of the store (roles/obs_store, docs/ARCHITECTURE.md section 4).
-obs_agent_metrics_port: 18010
-obs_agent_logs_port: 18011
+# The ports of the store, from the port plan (R63): 17010/17011 in DEV, 18010/18011 in prod.
+obs_agent_metrics_port: "{{ infra_port_base | int + infra_port_blocks.obs }}"
+obs_agent_logs_port: "{{ infra_port_base | int + infra_port_blocks.obs + 1 }}"
 
 # The name of this machine in the metrics (label machine). The logs carry its host name.
 obs_agent_machine: "{{ inventory_hostname }}"

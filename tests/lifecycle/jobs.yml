@@ -38,6 +38,7 @@ all:
   - roles/host_base/*
   - playbooks/base.yml
   - playbooks/group_vars/all/apps.yml
+  - playbooks/group_vars/all/ports.yml
   - plugins/*
   - ansible.cfg
   - scripts/requirements-lint.txt

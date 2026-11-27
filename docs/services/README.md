@@ -66,10 +66,10 @@ La norma completa está en [`NAMING.md`](../NAMING.md); incluye la tabla de nomb
 
   Cambiar la lista vuelve a crear esa red y reinicia la instancia; quitar `egress` la borra. «Solo internet, sin red local» no se puede con Podman 4.9 ([`COMPATIBILITY.md`](../COMPATIBILITY.md)). El `plan check` enseña a dónde sale cada red, tal como la tiene Podman.
 - **Los puertos los escribes tú** en `networking.inbound.publish`, una lista con el formato de Podman y Docker: `<dirección>:<puerto>:<puerto interno>`, los tres obligatorios (R55). El puerto interno es el de la aplicación dentro del contenedor y lo dice su página (Firefly: `8080`).
-- **Lo habitual: `127.0.0.1` y puertos desde 18100**, uno por instancia: `18100`, `18101`… Con `127.0.0.1` solo se entra desde la propia máquina. Cualquier otra dirección abre la aplicación a esa red: lo decides tú, nada lo impide.
+- **Lo habitual: `127.0.0.1` y el puerto del bloque de la aplicación**, uno por instancia: Firefly en prod, `18100`, `18101`…; en DEV, `17100`… El plan completo y lo que comprueba Ansible: [`NAMING.md`](../NAMING.md), apartado 10 (R63). Con `127.0.0.1` solo se entra desde la propia máquina. Cualquier otra dirección abre la aplicación a esa red: lo decides tú, nada lo impide.
 - **La primera de la lista** es la que abre el lanzador y la que la aplicación da en sus enlaces.
 - El rol se para si dos instancias de la misma máquina repiten nombre, o dirección y puerto.
-- **Desde otra máquina, por Tailscale:** `networking.inbound.tailscale_serve`, una lista de puertos, por ejemplo `[18000]`. Ansible ejecuta `tailscale serve` como root para cada uno (rol `tailscale_serve`); ese puerto tiene que estar publicado en `127.0.0.1`. Hoy lo usa el servidor de copias (`backup_server_networking`); una aplicación lo tendrá cuando su rol lo incluya.
+- **Desde otra máquina, por Tailscale:** `networking.inbound.tailscale_serve`, una lista de puertos, por ejemplo `[18000]`, el mismo número que el de la máquina. Ansible ejecuta `tailscale serve` como root para cada uno (rol `tailscale_serve`); ese puerto tiene que estar publicado en `127.0.0.1`. Hoy lo usa el servidor de copias (`backup_server_networking`); una aplicación lo tendrá cuando su rol lo incluya.
 - Los puertos que ya usa la plataforma están en [`ARCHITECTURE.md`](../ARCHITECTURE.md), apartado 4.
 
 ## 5. Cómo se declara

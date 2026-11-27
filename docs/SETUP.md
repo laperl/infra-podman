@@ -640,7 +640,7 @@ En `~/infra-podman-data`:
    ---
    backup_server_networking:
      inbound:
-       publish: ["127.0.0.1:18000:8000"]
+       publish: ["127.0.0.1:17000:8000"]   # DEV: 17xxx (NAMING.md, apartado 10)
    backup_remote_url: http://127.0.0.1:8000
    backup_remote_network: container:dev-backup-server
    ```

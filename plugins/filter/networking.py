@@ -207,10 +207,60 @@ def admins_of(target, apps, variables, admins) -> list[str]:
             if any(client.startswith(f"{short}-") for short in shorts)]
 
 
+def _host_port(item) -> int | None:
+    """The host port of a publish entry, <address>:<host port>:<container port>."""
+    parts = str(item).split(":")
+    if len(parts) != 3 or not parts[1].isdigit():
+        return None
+    return int(parts[1])
+
+
+def port_problems(publish, short, base, blocks, size=10) -> list[str]:
+    """What is wrong with the host ports of a publish list under the port plan (R63).
+
+    publish: a list of <address>:<host port>:<container port>. short: the short name of the
+    application or infrastructure piece (ff, pgadmin, backup, obs). base: 17000 in DEV, 18000
+    in prod. blocks: short name -> offset of its block of `size` ports
+    (playbooks/group_vars/all/ports.yml). An empty list when every port is inside the block.
+    """
+    if short not in blocks:
+        return [f"{short} has no port block in infra_port_blocks (playbooks/group_vars/all/ports.yml)"]
+    low = int(base) + int(blocks[short])
+    high = low + int(size) - 1
+    problems = []
+    for item in publish or []:
+        port = _host_port(item)
+        if port is None:
+            problems.append(f"{item} is not <address>:<host port>:<container port>")
+        elif not low <= port <= high:
+            problems.append(f"{item}: in this environment the ports of {short} are {low} to {high}"
+                            " (docs/NAMING.md, section 10)")
+    return problems
+
+
+def port_clashes(apps, variables) -> list[str]:
+    """Host ports that two instances of one machine publish (R63); an empty list when none.
+
+    apps: infra_apps (role -> short name). variables: the variables of the machine.
+    """
+    users: dict[int, list[str]] = {}
+    for role, short in apps.items():
+        for instance in variables.get(f"{role}_instances") or []:
+            inbound = ((instance.get("networking") or {}).get("inbound")) or {}
+            for item in inbound.get("publish") or []:
+                port = _host_port(item)
+                if port is not None:
+                    users.setdefault(port, []).append(f"{short}-{instance.get('name')}")
+    return [f"port {port} is published by {' and '.join(sorted(set(who)))}"
+            for port, who in sorted(users.items()) if len(who) > 1]
+
+
 class FilterModule:
     def filters(self):
-        return {"egress_problems": egress_problems, "instance_ids": instance_ids,
+        return {
+            "egress_problems": egress_problems, "instance_ids": instance_ids,
                 "clients_of": clients_of, "connects_to_problems": connects_to_problems,
                 "is_postgres": is_postgres, "pairs_of": pairs_of, "pair_network": pair_network,
                 "pair_units": pair_units, "databases_of": databases_of,
-                "pg_hba_problems": pg_hba_problems, "hba_of": hba_of, "admins_of": admins_of}
+                "pg_hba_problems": pg_hba_problems, "hba_of": hba_of, "admins_of": admins_of,
+                "port_problems": port_problems, "port_clashes": port_clashes}

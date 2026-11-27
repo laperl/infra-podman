@@ -11,7 +11,7 @@
 #     (SPEC 4.12). Every unit template under roles/ must be declared somewhere.
 #     ansible-playbook scripts/render-quadlets.yml \
 #       -e quadlet_roles_dir="$PWD/roles" -e quadlet_dest_dir=/tmp/out -e @tests/quadlet/ci_vars.yml \
-#       -e @playbooks/group_vars/all/images.yml -e @playbooks/group_vars/all/apps.yml
+#       -e @playbooks/group_vars/all/images.yml -e @playbooks/group_vars/all/apps.yml -e @playbooks/group_vars/all/ports.yml
 #
 # Every Quadlet unit type is looked for, including the forbidden ones (.pod, .kube, .image,
 # .build), so that the policy check can reject them.

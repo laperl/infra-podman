@@ -1,5 +1,5 @@
 ---
 # EXAMPLE (SPEC 4.13). The observability store in DEV (roles/obs_store/defaults/main.yml, R62).
 # The VM has no Tailscale: only 127.0.0.1, without tailscale_serve.
-obs_store_metrics_networking: {inbound: {publish: ["127.0.0.1:18010:8428"]}}
-obs_store_logs_networking: {inbound: {publish: ["127.0.0.1:18011:9428"]}}
+obs_store_metrics_networking: {inbound: {publish: ["127.0.0.1:17010:8428"]}}
+obs_store_logs_networking: {inbound: {publish: ["127.0.0.1:17011:9428"]}}

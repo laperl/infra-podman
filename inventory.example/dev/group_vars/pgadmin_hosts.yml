@@ -9,7 +9,7 @@ pgadmin_instances:
     email: admin@example.com     # its only user; yours goes only in the data repository
     networking:
       inbound:                   # where it listens: <address>:<host port>:<container port>
-        publish: ["127.0.0.1:18110:8080"]   # pgAdmin listens on 8080 inside the container
+        publish: ["127.0.0.1:17110:8080"]   # pgAdmin listens on 8080 inside the container
       connects_to: [pg-main]     # the PostgreSQL instances it administers; no pg_hba, no egress
     # backup: [data]             # copy its volume (its user, servers and preferences)
     # log_level: 30              # 10 debug, 20 info, 30 warning, 40 error, 50 critical

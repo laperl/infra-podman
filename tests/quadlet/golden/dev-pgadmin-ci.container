@@ -25,7 +25,7 @@ Volume=dev-pgadmin-ci-data.volume:/var/lib/pgadmin:Z
 # and one per other pair (docs/NETWORK.md). No way out (SPEC 4.4). It is published where the
 # operator wrote in inbound.publish (R55), from those internal networks.
 Network=dev-pgadmin-ci-pg-main-net.network
-PublishPort=127.0.0.1:18102:8080
+PublishPort=127.0.0.1:17110:8080
 
 # The password of its user, as a file readable only by the user of the image (SPEC 4.5).
 # Read only on the first start, when its database is created; the image requires it at

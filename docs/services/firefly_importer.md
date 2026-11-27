@@ -111,7 +111,7 @@ Así se usa, banco a banco. Las pantallas son las del importer v2.3.5 y la [guí
 
 1. Abre Firefly (`127.0.0.1:18100`) y, en tu perfil, la sección OAuth. Crea un cliente nuevo:
    - **Nombre:** el que quieras, por ejemplo `ffimport-laptop`.
-   - **Dirección de vuelta (redirect URL):** `http://127.0.0.1:<puerto del importer>/callback`. En el portátil, `http://127.0.0.1:18115/callback`.
+   - **Dirección de vuelta (redirect URL):** `http://127.0.0.1:<puerto del importer>/callback`. En el portátil, `http://127.0.0.1:18120/callback` (en DEV, `17120`). **Si cambias su puerto,** cambia también esta dirección: en Firefly, edita el cliente o, si tu versión no deja, crea uno nuevo y pon su número en `client_id`.
    - **«Confidential»: desmarcado.** Si se queda marcado, Firefly devuelve una página que solo dice «Empty» (FAQ oficial).
 2. Copia el **Client ID** (un número) en tu instancia: `client_id: <número>`. Aplica (apartado 8).
 
@@ -199,7 +199,7 @@ El orden general está en [`INSTALL.md`](INSTALL.md). Lo del importer, cuando ll
      - name: laptop
        networking:
          inbound:
-           publish: ["127.0.0.1:18115:8080"]   # Firefly usa el 18100 y pgAdmin el 18110
+           publish: ["127.0.0.1:18120:8080"]   # su bloque: 18120 a 18129 (NAMING.md, apartado 10)
          connects_to: [ff-laptop]              # uno o varios Firefly de esta máquina
        client_id: 2                            # el de tu cliente OAuth (un número; no es secreto)
        locale: es_ES

@@ -23,7 +23,7 @@ Volume=/home/svc_runner/.local/share/infra-podman/dev-obs/metrics:/storage:Z
 Exec=-storageDataPath=/storage -retentionPeriod=1y -httpListenAddr=:8428
 # Its own internal network: no way out (R58). The ports are published from it.
 Network=dev-obs-metrics-net.network
-PublishPort=127.0.0.1:18010:8428
+PublishPort=127.0.0.1:17010:8428
 
 # Resource limits (R46): the only place they are written.
 PodmanArgs=--memory=1g --cpus=2

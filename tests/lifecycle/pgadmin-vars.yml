@@ -10,4 +10,4 @@ postgres_instances:
 pgadmin_instances:
   - name: ci
     email: admin@example.com
-    networking: {inbound: {publish: ["127.0.0.1:18102:8080"]}, connects_to: [pg-main]}
+    networking: {inbound: {publish: ["127.0.0.1:17110:8080"]}, connects_to: [pg-main]}

@@ -16,5 +16,5 @@ postgres_instances:
       - name: demo3
 firefly_instances:
   - name: demo
-    networking: {inbound: {publish: ["127.0.0.1:18110:8080"]}, connects_to: [pg-main]}
+    networking: {inbound: {publish: ["127.0.0.1:17102:8080"]}, connects_to: [pg-main]}
     pg_hba: [{instance: pg-main, database: demo}, {instance: pg-main, database: demo2}]

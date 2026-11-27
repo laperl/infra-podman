@@ -29,6 +29,18 @@
     quiet: true
 
 # Its home, ids and environment, read in one place (roles/service_user).
+# The port plan (R63, playbooks/group_vars/all/ports.yml, docs/NAMING.md section 10): the
+# environment and the block of the observability store decide the host ports.
+- name: Check the ports against the port plan
+  vars:
+    obs_store_port_problems: >-
+      {{ ((obs_store_metrics_publish + obs_store_logs_publish)
+          | port_problems('obs', infra_port_base, infra_port_blocks, infra_port_block_size)) }}
+  ansible.builtin.assert:
+    that: obs_store_port_problems | length == 0
+    fail_msg: "{{ obs_store_port_problems | join('; ') }}. Nothing was changed."
+    quiet: true
+
 - name: Read the service user
   ansible.builtin.include_role:
     name: service_user

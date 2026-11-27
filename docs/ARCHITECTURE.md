@@ -120,13 +120,13 @@ Las flechas de puntos son lecturas locales, sin red. Firefly, pgAdmin y el Data 
 
 ## 4. Puertos
 
-Solo los de la infraestructura; los de cada aplicación se añadirán con ella.
+Todos siguen el plan de puertos: `17xxx` en DEV, `18xxx` en prod, y un bloque de 10 por aplicación ([`NAMING.md`](NAMING.md), apartado 10; R63). Aquí, los de prod salvo en las filas de la VM DEV.
 
 | Máquina | Escucha en | Qué | Quién llega |
 | --- | --- | --- | --- |
 | Portátil | `127.0.0.1:22` | sshd, solo con clave (R23) | El contenedor de Ansible, desde el propio portátil |
 | Servidor principal | `:22` | sshd | Ansible desde el portátil, por Tailscale. Lo que escucha hoy fuera de Tailscale lo revisa la fase 1b (cortafuegos) |
-| Portátil | Lo que diga `networking.inbound.publish` de cada instancia; lo habitual, `127.0.0.1:<puerto>` desde el 18100 (R55) | `prod-ff-<instancia>` (dentro del contenedor, el 8080) | Tu navegador, en el portátil |
+| Portátil | Lo que diga `networking.inbound.publish` de cada instancia; lo habitual, `127.0.0.1:<puerto>` del bloque de Firefly, 18100 a 18109 (R55, R63) | `prod-ff-<instancia>` (dentro del contenedor, el 8080) | Tu navegador, en el portátil |
 | Portátil | Lo que diga `networking.inbound.publish`; lo habitual, `127.0.0.1:<puerto>` | `prod-pgadmin-<instancia>` (dentro, el 8080) | Tu navegador, en el portátil |
 | Portátil | Lo que diga `networking.inbound.publish`; lo habitual, `127.0.0.1:<puerto>` | `prod-ffimport-<instancia>` (dentro, el 8080) | Tu navegador, en el portátil |
 | Servidor principal | `127.0.0.1:18000` | `prod-backup-server` (dentro del contenedor, el 8000) | Solo `tailscale serve` |
@@ -135,8 +135,8 @@ Solo los de la infraestructura; los de cada aplicación se añadirán con ella.
 | Cada máquina de `obs_agent_hosts` | `127.0.0.1:9100` y `127.0.0.1:8429` | `node_exporter` (paquete) y `prod-obs-agent` (`vmagent`, con la red del host, R62) | Solo `vmagent`, en la misma máquina |
 | Servidor principal | `:18010` y `:18011` en la red de Tailscale | `tailscale serve --tcp` | Los agentes de cada máquina (fase 3a, siguiente PR) y tu navegador |
 | VM DEV | `:22` en la red de la VM | sshd | Ansible desde el portátil |
-| VM DEV | `127.0.0.1:<puerto>`, desde el 18100 | `dev-ff-<instancia>` | Tú, a mano, en la VM |
-| VM DEV | `127.0.0.1:18000` | `dev-backup-server` | Tú, a mano. `dev-backup-copy` entra directo por la red del servidor (`Network=container:dev-backup-server`) |
+| VM DEV | `127.0.0.1:<puerto>` de cada bloque: 17100… Firefly, 17110… pgAdmin, 17120… importador | `dev-ff-<instancia>` y las demás | Tú, a mano, en la VM |
+| VM DEV | `127.0.0.1:17000` (y `17010`, `17011` del almacén) | `dev-backup-server` | Tú, a mano. `dev-backup-copy` entra directo por la red del servidor (`Network=container:dev-backup-server`) |
 
 - **Postgres no tiene puerto:** ni en `127.0.0.1` ni en ninguna red. Solo su socket, dentro del contenedor.
 - **Nada abierto a internet** ni a la red de casa por esta plataforma.

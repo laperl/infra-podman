@@ -12,7 +12,7 @@
 #             data: only in the data repository, never in this one (SPEC 5.2)
 #   networking:  its network (docs/services/README.md, section 4):
 #               networking:
-#                 inbound: {publish: ["127.0.0.1:18101:8080"]}   # required: where it listens
+#                 inbound: {publish: ["127.0.0.1:18110:8080"]}   # required: where it listens
 #                 connects_to: [pg-main]                         # required: one or more PostgreSQL
 #             connects_to: the PostgreSQL instances of this machine it administers, as
 #             pg-<instance>, at least one. Their superuser may log in over TCP only from
@@ -36,7 +36,7 @@ pgadmin_instances: []
 
 # The instance of this call (set by the playbook). The value here only serves to render the
 # templates in CI.
-pgadmin_item: {name: ci, email: admin@example.com, networking: {inbound: {publish: ["127.0.0.1:18102:8080"]}, connects_to: [pg-main]}}
+pgadmin_item: {name: ci, email: admin@example.com, networking: {inbound: {publish: ["127.0.0.1:17110:8080"]}, connects_to: [pg-main]}}
 
 # --retire <name>: the instance to stop and remove, keeping its data (playbook).
 pgadmin_retire: ""
@@ -62,7 +62,7 @@ pgadmin_instance: "{{ pgadmin_item.name }}"
 pgadmin_email: "{{ pgadmin_item.email | default('') }}"
 pgadmin_networking: "{{ pgadmin_item.networking | default({}) }}"
 pgadmin_publish: "{{ (pgadmin_networking.inbound | default({})).publish | default([]) }}"
-# Address and host port of the first one: http://127.0.0.1:18101
+# Address and host port of the first one: http://127.0.0.1:18110
 pgadmin_url: "http://{{ pgadmin_publish[0] | regex_replace(':[0-9]+$', '') }}"
 pgadmin_connects_to: "{{ pgadmin_networking.connects_to | default([]) }}"
 pgadmin_pg_targets: "{{ pgadmin_connects_to | map('string') | select('match', '^pg-') | list }}"

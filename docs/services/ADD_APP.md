@@ -14,8 +14,8 @@ El procedimiento para que una persona o una IA, la que sea, añada una aplicaci�
 
 ```text
 Ejemplo de pregunta bien hecha:
-¿Puerto en tu portátil? Propongo 127.0.0.1:18200 (Firefly usa el 18100).
-  Quedaría:  inbound: {publish: ["127.0.0.1:18200:8080"]}
+¿Puerto en tu portátil? Su bloque nuevo es el 18130 (DEV 17130): NAMING.md, apartado 10.
+  Quedaría:  inbound: {publish: ["127.0.0.1:18130:8080"]}
 ```
 
 ## 1. Antes de escribir nada: la ficha

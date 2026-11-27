@@ -11,8 +11,8 @@ set -Eeuo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 as=$here/as-svc.sh
 agent=dev-obs-agent
-vm=http://127.0.0.1:18010
-vl=http://127.0.0.1:18011
+vm=http://127.0.0.1:17010
+vl=http://127.0.0.1:17011
 exec 3>&1
 fail() { echo "::error title=check-obs_agent::$*" >&3; exit 1; }
 errlog=$(mktemp)

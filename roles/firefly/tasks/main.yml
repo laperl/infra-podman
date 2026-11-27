@@ -63,6 +63,19 @@
     firefly_hba_problems: "{{ firefly_pg_hba | pg_hba_problems(firefly_id, firefly_connects_to, infra_apps, hostvars[inventory_hostname]) }}"
 
 # Its home, ids and environment, read in one place (roles/service_user).
+# The port plan (R63, playbooks/group_vars/all/ports.yml, docs/NAMING.md section 10): the
+# environment and the block of Firefly decide the host ports.
+- name: Check the ports against the port plan
+  vars:
+    firefly_port_problems: >-
+      {{ (firefly_publish
+          | port_problems(infra_apps.firefly, infra_port_base, infra_port_blocks, infra_port_block_size))
+         + (infra_apps | port_clashes(hostvars[inventory_hostname])) }}
+  ansible.builtin.assert:
+    that: firefly_port_problems | length == 0
+    fail_msg: "{{ firefly_port_problems | join('; ') }}. Nothing was changed."
+    quiet: true
+
 - name: Read the service user
   ansible.builtin.include_role:
     name: service_user
