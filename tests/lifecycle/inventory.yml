@@ -41,6 +41,19 @@ all:
       vars:
         # No tailscale_serve: no Tailscale on the runner, as in DEV.
         backup_server_networking: {inbound: {publish: ["127.0.0.1:18000:8000"]}}
+    # The observability agents (playbook obs-agent, R62), sending to the store of this same
+    # machine. Short intervals so the job does not wait; a fake nvidia-smi (the runner has no
+    # GPU), installed by the job.
+    obs_agent_hosts:
+      hosts:
+        localhost: {}
+      vars:
+        obs_agent_machine: ci
+        obs_agent_scrape_interval: 10s
+        obs_agent_gpu: true
+        obs_agent_nvidia_smi: /usr/local/bin/fake-nvidia-smi
+        obs_agent_gpu_interval: 10s
+        obs_agent_upload_retry: 10s
     # The observability store (playbook obs-store, R62): its own data folder in the home of
     # svc_runner, unencrypted (obs_store_encrypted false), as on the main server before the disk.
     obs_store_hosts:

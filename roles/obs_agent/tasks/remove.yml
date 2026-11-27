@@ -1,0 +1,37 @@
+---
+# Stop sending. The packages and their own data stay; only what this role added goes.
+- name: Remove vmagent with quadlet_deploy
+  ansible.builtin.include_role:
+    name: quadlet_deploy
+  vars:
+    quadlet_deploy_units: "{{ obs_agent_quadlet_units }}"
+    quadlet_deploy_state: absent
+
+- name: Stop the GPU timer and systemd-journal-upload
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: false
+    state: stopped
+  loop:
+    - "{{ obs_agent_gpu_unit }}.timer"
+    - systemd-journal-upload.service
+  become: true
+  failed_when: false
+
+- name: Remove what the role added
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/etc/systemd/system/{{ obs_agent_gpu_unit }}.timer"
+    - "/etc/systemd/system/{{ obs_agent_gpu_unit }}.service"
+    - "{{ obs_agent_gpu_script }}"
+    - /etc/systemd/journal-upload.conf.d/infra-podman.conf
+    - /etc/systemd/system/systemd-journal-upload.service.d/infra-podman.conf
+  become: true
+
+- name: Say what stays
+  ansible.builtin.debug:
+    msg: >-
+      vmagent, the GPU timer and systemd-journal-upload are stopped. node_exporter stays
+      installed and on 127.0.0.1; to remove it: sudo apt remove prometheus-node-exporter.

@@ -248,3 +248,17 @@ Cómo funciona: [`OBSERVABILITY.md`](OBSERVABILITY.md). Sus logs, en el servidor
 | `tailscale serve already uses port 18010 …` | Ese puerto ya lo usa otra cosa en `tailscale serve` | Como en el apartado 8: libéralo o cambia el puerto en `obs_store_metrics_networking` (y `obs_store_logs_networking`) |
 | La web no carga desde el portátil | No llega por Tailscale | En el servidor principal: `sudo tailscale serve status` debe mostrar 18010 y 18011, y `curl -s http://127.0.0.1:18010/health` debe decir `OK` |
 | Quieres quitarlo sin perder los datos | — | `deploy.sh` aún no tiene opción para esto: escribe `obs_store_state: absent` en `group_vars/obs_store_hosts.yml` del repo de datos y `./deploy.sh apply obs-store --limit servidor`. Para los dos contenedores y deja la carpeta. Borrar la historia se hace a mano: es irreversible |
+
+## 15. Agentes de la observabilidad
+
+Cómo funcionan: [`OBSERVABILITY.md`](OBSERVABILITY.md). Sus logs: `sudo journalctl -u prometheus-node-exporter`, `-u systemd-journal-upload` o `-u infra-podman-obs-gpu`, y `sudo journalctl _SYSTEMD_USER_UNIT=prod-obs-agent.service` (`vmagent`).
+
+| Lo que ves | Por qué | Qué hacer |
+| --- | --- | --- |
+| `Port 9100 is taken by another program` | Otro `node_exporter`, casi siempre el viejo de Docker | Apágalo (`docker ps`, `docker stop`) y vuelve a aplicar. No se ha cambiado nada |
+| `This machine is not the one of the store, and the store is not on an encrypted disk` | Has puesto en `obs_agent_hosts` una máquina distinta de la del almacén antes de la 3b | Quítala del grupo hasta que el almacén esté en el disco cifrado (SPEC 4.8) |
+| `The agents install Ubuntu packages` | La máquina no es Ubuntu (el portátil) | Llega en la 3b |
+| No llegan métricas de la máquina | `vmagent` no alcanza el almacén | `curl -s http://127.0.0.1:8429/metrics \| grep vmagent_remotewrite_pending` muestra lo que espera en cola; `curl -s http://<almacén>:18010/health` desde esa máquina debe decir `OK` |
+| No llegan logs | `systemd-journal-upload` no alcanza el almacén | `systemctl status systemd-journal-upload`: si dice `activating (auto-restart)`, espera al almacén y lo reintenta cada minuto. Lo pendiente sigue en el journal |
+| La GPU no sale (`obs_gpu_up 0`) | `nvidia-smi` no respondió | `nvidia-smi` a mano; `systemctl status infra-podman-obs-gpu` |
+| El primer envío de logs tarda | La primera vez envía todo el journal de la máquina | Espera; `systemctl status systemd-journal-upload` muestra que sigue |

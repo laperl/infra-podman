@@ -1,0 +1,4 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+# Where systemd-journal-upload sends the journal: the store (roles/obs_agent, R62).
+[Upload]
+URL=http://{{ obs_agent_store }}:{{ obs_agent_logs_port }}/insert/journald

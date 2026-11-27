@@ -12,6 +12,7 @@
 #   firefly_importer 1, 4 the Data Importer, its instance ci: deployed and healthy
 #                   (firefly_importer job)
 #   obs-store       4    the observability store looks healthy (obs-store job)
+#   obs-agent       4    the observability agents look healthy (obs-agent job)
 #   restore-local   5.1  a broken database restored under another name, checked, swapped
 #   restore-server    5.2  a database restored from the main server's volume, with only the restic key
 #   data-repo       5.3  the data repository from the local copy
@@ -163,6 +164,11 @@ case $step in
     expect healthy-ffimport '^sano$'
     count_is healthy-ffimport '8080/tcp -> 127.0.0.1:18115' 1
     expect healthy-ffimport '^OK$'
+    ;;
+  obs-agent)
+    run healthy-obs-agent
+    count_is healthy-obs-agent 'active' 4
+    count_is healthy-obs-agent 'OK' 1
     ;;
   obs-store)
     run healthy-obs

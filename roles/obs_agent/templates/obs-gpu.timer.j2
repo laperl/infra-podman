@@ -1,0 +1,11 @@
+# {{ ansible_managed | default('Managed by infra-podman') }}
+[Unit]
+Description=NVIDIA GPU values for node_exporter, every {{ obs_agent_gpu_interval }} (infra-podman)
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec={{ obs_agent_gpu_interval }}
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

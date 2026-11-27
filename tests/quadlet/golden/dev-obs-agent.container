@@ -1,0 +1,43 @@
+# Ansible managed
+# Observability agent (SPEC 4.8, R62): vmagent reads the metrics of this machine on
+# 127.0.0.1 and sends them to the store. While the store is unreachable it keeps them in its
+# queue on disk and sends them when the connection comes back.
+# Scrape configuration: rendered-in-ci
+# (its hash: a new configuration changes this unit, so the container restarts with it.)
+[Unit]
+Description=Observability agent, vmagent (dev)
+
+[Container]
+ContainerName=dev-obs-agent
+Image=docker.io/victoriametrics/vmagent@sha256:cd0b125ac86821cbd6a020fc048908b2fc138d2ac121485c621a40ee63c93070
+Label=infra.env=dev
+Label=infra.app=obs
+Label=infra.component=agent
+Label=infra.managed-by=infra-podman
+# Logs to the journal of the service user (SPEC 4.8, R60).
+LogDriver=journald
+
+# A rootless container does not reach the 127.0.0.1 of the machine, where the exporters
+# listen, without slirp4netns or pasta options, which are forbidden. Approved exception: it
+# listens only on 127.0.0.1, has no secrets and only connects to the store (R62).
+# policy-exception: host-network (R62)
+Network=host
+Volume=/home/svc_runner/.config/infra-podman/dev-obs-agent/scrape.yml:/etc/vmagent/scrape.yml:ro,Z
+Volume=/home/svc_runner/.local/share/infra-podman/dev-obs-agent:/queue:Z
+# The arguments of /vmagent-prod, the image's entrypoint.
+Exec=-promscrape.config=/etc/vmagent/scrape.yml -remoteWrite.url=http://obs-store.example.ts.net:18010/api/v1/write -remoteWrite.label=machine=ci -remoteWrite.tmpDataPath=/queue -remoteWrite.maxDiskUsagePerURL=1GB -httpListenAddr=127.0.0.1:8429
+
+# Resource limits (R46): the only place they are written.
+PodmanArgs=--memory=256m --cpus=1
+PidsLimit=200
+ReadOnly=true
+Tmpfs=/tmp
+DropCapability=all
+NoNewPrivileges=true
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

@@ -20,7 +20,9 @@ LogDriver=journald
 
 Volume={{ obs_store_logs_dir }}:/storage:Z
 # The arguments of /victoria-logs-prod, the image's entrypoint.
-Exec=-storageDataPath=/storage -retentionPeriod={{ obs_store_logs_retention }} -httpListenAddr=:9428
+# Each container runs as a user unit of svc_runner: with the default stream fields
+# (_MACHINE_ID, _HOSTNAME, _SYSTEMD_UNIT) they would all be one stream, user@<uid>.service.
+Exec=-storageDataPath=/storage -retentionPeriod={{ obs_store_logs_retention }} -httpListenAddr=:9428 -journald.streamFields=_MACHINE_ID,_HOSTNAME,_SYSTEMD_UNIT,_SYSTEMD_USER_UNIT
 # Its own internal network: no way out (R58). The ports are published from it.
 Network={{ obs_store_logs_name }}-net.network
 {% for obs_store_published in obs_store_logs_publish %}

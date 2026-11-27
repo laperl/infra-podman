@@ -23,7 +23,7 @@ Cada aplicación tiene un nombre **de código**, que se usa en el repositorio y 
 | pgAdmin 4 | `pgadmin` | **`pgadmin`** | `pgadmin_short` |
 | Firefly III Data Importer | `firefly_importer` | **`ffimport`** | `firefly_importer_short` |
 | Backup local y servidor de copias | `backup`, `backup_server` | `backup`, `backup-server` | fijos en sus roles (no van por instancias) |
-| Observabilidad: almacén y agentes (R62) | `obs_store` | `obs` | fijo en su rol (no va por instancias): `<entorno>-obs-metrics`, `<entorno>-obs-logs` |
+| Observabilidad: almacén y agentes (R62) | `obs_store`, `obs_agent` | `obs` | fijo en su rol (no va por instancias): `<entorno>-obs-metrics`, `<entorno>-obs-logs`, `<entorno>-obs-agent`. Unidades del sistema: `infra-podman-obs-gpu.service` y `.timer` |
 
 **Una aplicación nueva** escoge su nombre corto con dos condiciones: que no esté ya en esta tabla y que sea de 2 a 8 letras, su nombre real si cabe (`rotki`, `litellm`; R52). Se añade aquí **en el mismo PR** que la aplicación.
 

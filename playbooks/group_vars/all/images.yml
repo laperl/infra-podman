@@ -47,3 +47,6 @@ firefly_importer_image: "docker.io/fireflyiii/data-importer@sha256:59f2f26ddf6eb
 # VictoriaMetrics' storage format only moves forward: read the release notes before updating.
 victoriametrics_image: "docker.io/victoriametrics/victoria-metrics@sha256:322a7a92fdcc269280e9c38af94c83bc76827a31b792acbc60e44394e7f29c20"  # track: v1.157.0
 victorialogs_image: "docker.io/victoriametrics/victoria-logs@sha256:ee4e820cac3721f5f5d91641b950c22439593adc4224f9655e5333d5a84c1dfe"  # track: v1.54.0
+# The agent of every machine (phase 3a, R62): same version as VictoriaMetrics, computed and
+# checked (linux/arm64) by the operator on 2026-11-24.
+vmagent_image: "docker.io/victoriametrics/vmagent@sha256:cd0b125ac86821cbd6a020fc048908b2fc138d2ac121485c621a40ee63c93070"  # track: v1.157.0

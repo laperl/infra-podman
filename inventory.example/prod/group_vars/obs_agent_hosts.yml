@@ -1,0 +1,10 @@
+---
+# EXAMPLE (SPEC 4.13). The observability agents (roles/obs_agent/defaults/main.yml, R62,
+# docs/OBSERVABILITY.md, section 9). Everything has a default: write only what you change.
+
+# The main server has an NVIDIA GPU. If other machines join this group, write this in the
+# host_vars of the server instead.
+obs_agent_gpu: true
+
+# On a machine that is not the store's: the name of the store in the Tailscale network.
+# obs_agent_store: <server>.<tailnet>.ts.net
